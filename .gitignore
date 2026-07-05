@@ -42,6 +42,7 @@ application-local.yaml
 # 仓库数据目录（不进 Git）
 gitnova-repos/
 data/
+*.gitlet
 
 # 环境变量文件（如果用 .env）
 .env
