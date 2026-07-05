@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(ssh-keygen *)",
+      "PowerShell(New-Item *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(ssh-keyscan *)",
+      "PowerShell(ssh -T git@github.com 2>&1)",
+      "PowerShell(git config *)",
+      "PowerShell(ssh -T -i \"$env:USERPROFILE\\\\.ssh\\\\id_ed25519\" -o IdentitiesOnly=yes git@github.com 2>&1)",
+      "PowerShell(ssh -vT -i \"$env:USERPROFILE\\\\.ssh\\\\id_ed25519\" -o IdentitiesOnly=yes git@github.com 2>&1 | Select-Object -Last 30)",
+      "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -pgitnova123 -e \"SHOW DATABASES;\" 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -p123456 -e \"SHOW DATABASES;\" 2>&1)",
+      "PowerShell(Get-Content \"D:\\\\GitNova\\\\src\\\\main\\\\resources\\\\sql\\\\init.sql\" | & \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -p123456 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -p123456 -e \"USE gitnova; SHOW TABLES;\" 2>&1)"
+    ]
+  }
+}

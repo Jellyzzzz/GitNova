@@ -9,7 +9,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/gitnova?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
     username: root
-    password: ${DB_PASSWORD:123456}
+    password: ${DB_PASSWORD:gitnova123}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 10
@@ -68,7 +68,7 @@ gitnova:
 
   # 仓库存储根目录（两台机器通过环境变量设不同路径）
   repo:
-    base-path: ${REPO_BASE_PATH:D:/gitnova-repos}
+    base-path: ${REPO_BASE_PATH:./gitnova-repos}
 
   # LLM API配置（Phase 4 Agent使用）
   llm:
