@@ -12,7 +12,8 @@
       "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -pgitnova123 -e \"SHOW DATABASES;\" 2>&1)",
       "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -p123456 -e \"SHOW DATABASES;\" 2>&1)",
       "PowerShell(Get-Content \"D:\\\\GitNova\\\\src\\\\main\\\\resources\\\\sql\\\\init.sql\" | & \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -p123456 2>&1)",
-      "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -p123456 -e \"USE gitnova; SHOW TABLES;\" 2>&1)"
+      "PowerShell(& \"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -p123456 -e \"USE gitnova; SHOW TABLES;\" 2>&1)",
+      "PowerShell(ssh -T -i \"C:/Users/lenovo/.ssh/id_ed25519\" -o IdentitiesOnly=yes -o ConnectTimeout=10 git@github.com 2>&1)"
     ]
   }
 }

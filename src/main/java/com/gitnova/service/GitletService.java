@@ -1,10 +1,9 @@
 package com.gitnova.service;
 
 import com.gitnova.gitlet.Repository;
+import com.gitnova.gitlet.Utils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
-import java.io.File;
 
 /**
  * Gitlet 核心引擎包装服务
@@ -22,13 +21,19 @@ public class GitletService {
     private String basePath;
 
     /**
+     * 拼接仓库绝对路径，复用 Gitlet 内置的跨平台 join
+     */
+    private String resolvePath(String repoPath) {
+        return Utils.join(basePath, repoPath).getPath();
+    }
+
+    /**
      * 初始化仓库 — 在磁盘上创建 .gitlet 目录结构
      *
      * @param repoPath 仓库路径 key = "{ownerId}/{repoName}"
      */
     public void init(String repoPath) {
-        String fullPath = basePath + File.separator + repoPath;
-        Repository repo = new Repository(fullPath);
+        Repository repo = new Repository(resolvePath(repoPath));
         repo.init();
     }
 
@@ -40,8 +45,7 @@ public class GitletService {
      * @return 新 commit 的 SHA-1
      */
     public String commit(String repoPath, String message) {
-        String fullPath = basePath + File.separator + repoPath;
-        Repository repo = new Repository(fullPath);
+        Repository repo = new Repository(resolvePath(repoPath));
         return repo.commit(message);
     }
 
@@ -52,16 +56,14 @@ public class GitletService {
      * @return Repository 实例
      */
     public Repository getRepository(String repoPath) {
-        String fullPath = basePath + File.separator + repoPath;
-        return new Repository(fullPath);
+        return new Repository(resolvePath(repoPath));
     }
 
     /**
      * 获取仓库当前 HEAD commit SHA-1
      */
     public String getHeadSha1(String repoPath) {
-        String fullPath = basePath + File.separator + repoPath;
-        Repository repo = new Repository(fullPath);
+        Repository repo = new Repository(resolvePath(repoPath));
         return repo.getHeadSha1();
     }
 
@@ -73,8 +75,7 @@ public class GitletService {
      * @return 是否存在
      */
     public boolean objectExists(String repoPath, String sha1) {
-        String fullPath = basePath + File.separator + repoPath;
-        Repository repo = new Repository(fullPath);
+        Repository repo = new Repository(resolvePath(repoPath));
         return repo.blobExists(sha1) || repo.commitExists(sha1);
     }
 

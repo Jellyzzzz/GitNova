@@ -74,19 +74,19 @@ public class Repository {
             throw new GitletException(
                 "A Gitlet version-control system already exists in the current directory.");
         } else {
-            gitletDir.mkdir();
+            gitletDir.mkdirs();
         }
         if (!objectsDir.exists()) {
-            objectsDir.mkdir();
+            objectsDir.mkdirs();
         }
         if (!commitsDir.exists()) {
-            commitsDir.mkdir();
+            commitsDir.mkdirs();
         }
         if (!blobsDir.exists()) {
-            blobsDir.mkdir();
+            blobsDir.mkdirs();
         }
         if (!branchesDir.exists()) {
-            branchesDir.mkdir();
+            branchesDir.mkdirs();
         }
         StagingArea stagingArea = new StagingArea(indexFile);
         writeObject(indexFile, stagingArea);
