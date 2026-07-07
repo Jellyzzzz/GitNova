@@ -12,8 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Map;
-
+import java.util.*;
 /**
  * 仓库服务 — CRUD + 权限校验
  */
@@ -87,7 +86,9 @@ public class RepoService {
      */
     public ApiResponse<?> listUserRepos() {
         // TODO: Phase 1
-        throw new UnsupportedOperationException("Phase 1: 待实现");
+        Long userId=UserContext.getUserId();
+        List<Repository> repoList=repoMemberMapper.selectByReposUserId(userId);
+        return ApiResponse.success(repoList);
     }
 
     /**
@@ -95,7 +96,19 @@ public class RepoService {
      */
     public ApiResponse<?> getRepoDetail(Long repoId) {
         // TODO: Phase 1
-        throw new UnsupportedOperationException("Phase 1: 待实现");
+        Long userId=UserContext.getUserId();
+        Repository repo=repositoryMapper.selectById(repoId);
+        if(repo==null) return ApiResponse.error(404,"仓库不存在");
+
+        if((repo.getIsPrivate()==1)){
+            LambdaQueryWrapper<RepoMember>wrapper=new LambdaQueryWrapper<>();
+            wrapper.eq(RepoMember::getRepoId,repo.getId())
+                    .eq(RepoMember::getUserId,userId);
+            RepoMember member=repoMemberMapper.selectOne(wrapper);
+            if(member==null) return ApiResponse.error(403,"权限不足");
+        }
+
+        return ApiResponse.success(repo);
     }
 
     /**
