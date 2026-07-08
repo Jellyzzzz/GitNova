@@ -5,6 +5,7 @@ import com.gitnova.common.UserContext;
 import com.gitnova.dto.ApiResponse;
 import com.gitnova.entity.RepoMember;
 import com.gitnova.entity.Repository;
+import com.gitnova.entity.User;
 import com.gitnova.gitlet.Utils;
 import com.gitnova.mapper.RepoMemberMapper;
 import com.gitnova.mapper.RepositoryMapper;
@@ -114,8 +115,21 @@ public class RepoService {
     /**
      * 删除仓库（仅 owner）
      */
+    @Transactional(rollbackFor = Exception.class)
     public ApiResponse<?> deleteRepo(Long repoId) {
         // TODO: Phase 1
-        throw new UnsupportedOperationException("Phase 1: 待实现");
+        Long userId=UserContext.getUserId();
+
+        Repository repo=repositoryMapper.selectById(repoId);
+        if(repo==null) return ApiResponse.error(404,"仓库不存在");
+
+        LambdaQueryWrapper<RepoMember>wrapper=new LambdaQueryWrapper<>();
+        wrapper.eq(RepoMember::getRepoId,repoId).eq(RepoMember::getUserId,userId);
+        RepoMember member=repoMemberMapper.selectOne(wrapper);
+        if(member==null||!"owner".equals(member.getRole())) return ApiResponse.error(403,"仅仓库所有者可删除");
+
+        repoMemberMapper.delete(new LambdaQueryWrapper<RepoMember>().eq(RepoMember::getRepoId,repoId));
+        repositoryMapper.deleteById(repoId);
+        return ApiResponse.success(null);
     }
 }
