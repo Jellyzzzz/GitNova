@@ -1,6 +1,7 @@
 package com.gitnova.service;
 
 import com.gitnova.dto.PushRequest;
+import com.gitnova.storage.ObjectStorage;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -20,8 +21,9 @@ import java.util.Map;
 public class ObjectNegotiationService {
 
     private final GitletService gitletService;
-
-    public ObjectNegotiationService(GitletService gitletService) {
+    private final ObjectStorage objectStorage;
+    public ObjectNegotiationService(GitletService gitletService,ObjectStorage objectStorage) {
+        this.objectStorage=objectStorage;
         this.gitletService = gitletService;
     }
 

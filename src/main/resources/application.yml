@@ -77,6 +77,11 @@ gitnova:
     model: ${LLM_MODEL:deepseek-chat}
     timeout: 60                   # 秒，LLM响应可能较慢
 
+  # 存储策略（Phase 1 接口，Phase 2 起用）
+  storage:
+    type: local                    # local | minio（未来扩展）
+    max-object-size: 104857600     # 单个对象最大 100 MB
+
   # 对象传输配置（Phase 2）
   transfer:
     max-objects-per-push: 10000   # 单次push最大对象数，防止恶意大push
