@@ -415,6 +415,19 @@ negotiate(repoKey, request)
            return new NegotiationResponse(remoteHead, missing);
 ```
 
+**返回类型设计**：
+
+| 层 | 返回类型 | 说明 |
+|----|----------|------|
+| `ObjectNegotiationService.negotiate()` | `NegotiationResponse` | 类型安全，只关心数据 |
+| `TransferController.negotiate()` | `ApiResponse<NegotiationResponse>` | 包装 code/message，统一 API 格式 |
+
+Controller 用 `ApiResponse.success(negotiationResponse)` 包裹，客户端最终收到：
+
+```json
+{ "code": 200, "message": "success", "data": { "remoteHeadSha1": "...", "missingObjects": [...] } }
+```
+
 **响应格式**：
 
 ```json

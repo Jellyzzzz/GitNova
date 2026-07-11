@@ -15,34 +15,33 @@ import java.util.*;
 public class LocalObjectStorage implements ObjectStorage{
     @Value("${gitnova.repo.base-path}")
     private String basePath;
-    private File resolvePath(String repoKey,String sha1){
+    private File resolveObjectFile(String repoKey, String sha1) {
         return Utils.join(basePath, repoKey, ".gitlet", "objects", sha1);
     }
 
     @Override
     public void writeObject(String repoKey, String sha1, byte[] content) {
-        File file=resolvePath(repoKey,sha1);
+        File file=resolveObjectFile(repoKey,sha1);
         if(!file.getParentFile().exists()) file.getParentFile().mkdirs();
         Utils.writeContents(file, (Object) content);
     }
 
     @Override
     public byte[] readObject(String repoKey, String sha1) {
-        File file=resolvePath(repoKey,sha1);
+        File file=resolveObjectFile(repoKey,sha1);
         if(!file.exists()) throw new GitletException("Object not found: "+sha1);
         return Utils.readContents(file);
     }
 
     @Override
     public boolean existsObject(String repoKey, String sha1) {
-        return resolvePath(repoKey,sha1).exists();
+        return resolveObjectFile(repoKey,sha1).exists();
     }
 
     @Override
     public Set<String> listObjects(String repoKey) {
-        File dirs=Utils.join(".gitlet","objects",repoKey);
-        if(dirs==null) return Collections.EMPTY_SET;
-        List<String> files=Utils.plainFilenamesIn(dirs);
-        return new HashSet<>(files);
+        File dir = Utils.join(basePath, repoKey, ".gitlet", "objects");
+        List<String> files = Utils.plainFilenamesIn(dir);
+        return files != null ? new HashSet<>(files) : Collections.emptySet();
     }
 }

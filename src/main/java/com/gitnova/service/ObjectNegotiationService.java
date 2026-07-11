@@ -1,11 +1,12 @@
 package com.gitnova.service;
 
+import com.gitnova.dto.NegotiationResponse;
 import com.gitnova.dto.PushRequest;
 import com.gitnova.storage.ObjectStorage;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 对象协商服务 — Phase 2 核心
@@ -30,15 +31,24 @@ public class ObjectNegotiationService {
     /**
      * 执行对象协商
      *
-     * @param repoPath 仓库路径
+     * @param repoKey 仓库路径
      * @param request  客户端上报的 HEAD 和对象列表
      * @return { "remoteHeadSha1": "...", "missingObjects": [...] }
      */
-    public Map<String, Object> negotiate(String repoPath, PushRequest request) {
+    public NegotiationResponse negotiate(String repoKey, PushRequest request) {
         // TODO: Phase 2 — 协商逻辑
-        // 1. 获取服务端当前 HEAD
-        // 2. 遍历 request.getLocalObjects()，检查每个 SHA-1 在服务端是否存在
+        // 1. 获取服务端当前 HEAD：gitletService.getHeadSha1(repoKey)
+        // 2. 遍历 request.getLocalObjects()，用 objectStorage.existsObject(repoKey, sha1) 检查
         // 3. 返回 remoteHeadSha1 + missingObjects
-        throw new UnsupportedOperationException("Phase 2: 待实现");
+        String remoteHead=gitletService.getHeadSha1(repoKey);
+        if(request.getLocalObjects()==null||request.getLocalObjects().isEmpty()) return new NegotiationResponse(remoteHead,new ArrayList<>());
+        List<String> missing=new ArrayList<>();
+        if(remoteHead==null) return new NegotiationResponse(null,request.getLocalObjects());
+        for(String sha1:request.getLocalObjects()){
+            if(!objectStorage.existsObject(repoKey,sha1)){
+                missing.add(sha1);
+            }
+        }
+        return new NegotiationResponse(remoteHead,missing);
     }
 }

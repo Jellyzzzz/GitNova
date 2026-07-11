@@ -1,7 +1,15 @@
 package com.gitnova.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.gitnova.common.UserContext;
 import com.gitnova.dto.ApiResponse;
+import com.gitnova.dto.NegotiationResponse;
 import com.gitnova.dto.PushRequest;
+import com.gitnova.entity.RepoMember;
+import com.gitnova.entity.Repository;
+import com.gitnova.gitlet.Utils;
+import com.gitnova.mapper.RepoMemberMapper;
+import com.gitnova.mapper.RepositoryMapper;
 import com.gitnova.service.ObjectNegotiationService;
 import com.gitnova.service.TransferService;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,11 +33,17 @@ public class TransferController {
 
     private final ObjectNegotiationService negotiationService;
     private final TransferService transferService;
+    private final RepositoryMapper repositoryMapper;
+    private final RepoMemberMapper repoMemberMapper;
 
     public TransferController(ObjectNegotiationService negotiationService,
-                              TransferService transferService) {
+                              TransferService transferService,
+                              RepositoryMapper repositoryMapper,
+                              RepoMemberMapper repoMemberMapper) {
         this.negotiationService = negotiationService;
         this.transferService = transferService;
+        this.repositoryMapper = repositoryMapper;
+        this.repoMemberMapper = repoMemberMapper;
     }
 
     /**
@@ -39,13 +53,23 @@ public class TransferController {
      * 服务端返回缺失的对象列表。
      */
     @PostMapping("/negotiate")
-    public ApiResponse<Map<String, Object>> negotiate(@PathVariable Long repoId,
-                                                       @RequestBody PushRequest request) {
+    public ApiResponse<NegotiationResponse> negotiate(@PathVariable Long repoId,
+                                                        @RequestBody PushRequest request) {
         // TODO: Phase 2
-        // String repoPath = getRepoPath(repoId);
-        // Map<String, Object> result = negotiationService.negotiate(repoPath, request);
-        // return ApiResponse.success(result);
-        throw new UnsupportedOperationException("Phase 2: 待实现");
+        // 1. 校验 repoId 存在 + 当前用户是仓库成员（用 repositoryMapper / repoMemberMapper）
+        // 2. 拼接 repoKey = ownerId + "/" + repoId
+        // 3. NegotiationResponse result = negotiationService.negotiate(repoKey, request);
+        // 4. return ApiResponse.success(result);
+        long userId= UserContext.getUserId();
+        if(repoId==null) return ApiResponse.error(404,"仓库不存在");
+        Repository repo=repositoryMapper.selectById(repoId);
+        LambdaQueryWrapper<RepoMember>wrapper=new LambdaQueryWrapper<>();
+        wrapper.eq(RepoMember::getUserId,userId);
+        RepoMember member=repoMemberMapper.selectOne(wrapper);
+        if(member==null) return ApiResponse.error(403,"无权访问该仓库");
+        String repoKey= Utils.join(String.valueOf(repo.getOwnerId()),String.valueOf(repoId)).getPath();
+        NegotiationResponse res=negotiationService.negotiate(repoKey,request);
+        return ApiResponse.success(res);
     }
 
     /**
@@ -59,10 +83,12 @@ public class TransferController {
                                    @RequestParam("metadata") String metadataJson,
                                    @RequestParam("objects") MultipartFile objectsFile) {
         // TODO: Phase 2/3
-        // 1. 解析 metadata：newHeadSha1, baseHeadSha1, branchName, commitMessage
-        // 2. 调用 transferService.unpackAndStore(repoPath, objectsFile.getBytes())
-        // 3. 调用 transferService.updateHead(repoId, baseHeadSha1, newHeadSha1, ...)
-        // 4. 返回成功
+        // 1. 校验 repoId 存在 + 当前用户是仓库成员
+        // 2. 解析 metadata → TransferMetadata meta
+        // 3. 拼接 repoKey = ownerId + "/" + repoId
+        // 4. int count = transferService.unpackAndStore(repoKey, objectsFile.getBytes())
+        // 5. transferService.updateHead(repoId, meta.getBaseHeadSha1(), meta.getNewHeadSha1(), ...)
+        // 6. return ApiResponse.success(Map.of("newHeadSha1", ..., "objectsStored", count))
         throw new UnsupportedOperationException("Phase 2/3: 待实现");
     }
 }

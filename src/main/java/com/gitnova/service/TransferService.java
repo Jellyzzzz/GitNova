@@ -4,6 +4,7 @@ import com.gitnova.event.PostReceiveEvent;
 import com.gitnova.mapper.BranchMapper;
 import com.gitnova.mapper.CommitRecordMapper;
 import com.gitnova.mapper.RepositoryMapper;
+import com.gitnova.storage.ObjectStorage;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,17 +21,20 @@ public class TransferService {
     private final CommitRecordMapper commitRecordMapper;
     private final BranchMapper branchMapper;
     private final GitletService gitletService;
+    private final ObjectStorage objectStorage;
     private final ApplicationEventPublisher eventPublisher;
 
     public TransferService(RepositoryMapper repositoryMapper,
                            CommitRecordMapper commitRecordMapper,
                            BranchMapper branchMapper,
                            GitletService gitletService,
+                           ObjectStorage objectStorage,
                            ApplicationEventPublisher eventPublisher) {
         this.repositoryMapper = repositoryMapper;
         this.commitRecordMapper = commitRecordMapper;
         this.branchMapper = branchMapper;
         this.gitletService = gitletService;
+        this.objectStorage = objectStorage;
         this.eventPublisher = eventPublisher;
     }
 
@@ -40,7 +44,7 @@ public class TransferService {
      * ⚠️ 解包时对每个对象重新计算 SHA-1，与包头声明的 SHA-1 比对，
      * 不一致则拒绝整次 push，返回 400 + 具体错误对象。
      */
-    public void unpackAndStore(String repoPath, byte[] objectsPack) {
+    public int unpackAndStore(String repoKey, byte[] objectsPack) {
         // TODO: Phase 2 — 解包逻辑
         // 1. 解析打包格式：[4 bytes N] + for each: [40 bytes SHA-1][8 bytes length][L bytes content]
         // 2. 对每个对象重新计算 SHA-1
