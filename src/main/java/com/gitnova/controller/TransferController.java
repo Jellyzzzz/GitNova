@@ -1,10 +1,13 @@
 package com.gitnova.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gitnova.common.UserContext;
 import com.gitnova.dto.ApiResponse;
 import com.gitnova.dto.NegotiationResponse;
 import com.gitnova.dto.PushRequest;
+import com.gitnova.dto.TransferMetadata;
 import com.gitnova.entity.RepoMember;
 import com.gitnova.entity.Repository;
 import com.gitnova.gitlet.Utils;
@@ -35,15 +38,17 @@ public class TransferController {
     private final TransferService transferService;
     private final RepositoryMapper repositoryMapper;
     private final RepoMemberMapper repoMemberMapper;
+    private final ObjectMapper objectMapper;
 
     public TransferController(ObjectNegotiationService negotiationService,
                               TransferService transferService,
                               RepositoryMapper repositoryMapper,
-                              RepoMemberMapper repoMemberMapper) {
+                              RepoMemberMapper repoMemberMapper, ObjectMapper objectMapper) {
         this.negotiationService = negotiationService;
         this.transferService = transferService;
         this.repositoryMapper = repositoryMapper;
         this.repoMemberMapper = repoMemberMapper;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -81,7 +86,7 @@ public class TransferController {
     @PostMapping("/transfer")
     public ApiResponse<?> transfer(@PathVariable Long repoId,
                                    @RequestParam("metadata") String metadataJson,
-                                   @RequestParam("objects") MultipartFile objectsFile) {
+                                   @RequestParam("objects") MultipartFile objectsFile){
         // TODO: Phase 2/3
         // 1. 校验 repoId 存在 + 当前用户是仓库成员
         // 2. 解析 metadata → TransferMetadata meta
@@ -89,6 +94,20 @@ public class TransferController {
         // 4. int count = transferService.unpackAndStore(repoKey, objectsFile.getBytes())
         // 5. transferService.updateHead(repoId, meta.getBaseHeadSha1(), meta.getNewHeadSha1(), ...)
         // 6. return ApiResponse.success(Map.of("newHeadSha1", ..., "objectsStored", count))
+        try {
+            long userId = UserContext.getUserId();
+            Repository repo = repositoryMapper.selectById(repoId);
+            if (repo == null) return ApiResponse.error(404, "仓库不存在");
+            LambdaQueryWrapper<RepoMember> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(RepoMember::getRepoId, repoId).eq(RepoMember::getUserId, userId);
+            RepoMember member = repoMemberMapper.selectOne(wrapper);
+            if (member == null) return ApiResponse.error(403, "用户权限不足");
+            TransferMetadata metadata = objectMapper.readValue(metadataJson, TransferMetadata.class);
+            String repoKey=Utils.join(String.valueOf(repo.getOwnerId()),String.valueOf(repoId)).getPath();
+        }catch(Exception e){
+            e.printStackTrace();
+            return ApiResponse.error(500, "传输解析失败: " + e.getMessage());
+        };
         throw new UnsupportedOperationException("Phase 2/3: 待实现");
     }
 }
