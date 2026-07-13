@@ -621,7 +621,7 @@ public class TransferMetadata {
 gitnova:
   storage:
     type: local               # local | minio（未来扩展）
-    max-object-size: 104857600  # 100 MB
+    max-object-size: 524288000  # 500 MB
   transfer:
     max-objects-per-push: 10000
     chunk-size: 4096

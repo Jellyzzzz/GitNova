@@ -105,6 +105,6 @@ public class TransferController {
             TransferMetadata metadata = objectMapper.readValue(metadataJson, TransferMetadata.class);
             String repoKey=Utils.join(String.valueOf(repo.getOwnerId()),String.valueOf(repoId)).getPath();
             int count=transferService.unpackAndStore(repoKey, objectsFile.getBytes());
-        throw new UnsupportedOperationException("Phase 2/3: 待实现");
+            return ApiResponse.success(Map.of("newHeadSha1",metadata.getBaseHeadSha1(),"objectsStored",count));
     }
 }

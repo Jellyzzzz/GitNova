@@ -54,22 +54,22 @@ public class TransferService {
         // 2. 对每个对象重新计算 SHA-1
         // 3. 与包头 SHA-1 比对，不一致则拒绝
         // 4. 写入 .gitlet/objects/
-        if(objectsPack==null) throw new IllegalArgumentException("传入空包");
+        if(objectsPack==null) throw new GitletException("传入空包");
         ByteBuffer buffer= ByteBuffer.wrap(objectsPack);
         int objectCount=buffer.getInt();
         if(objectCount==0) return 0;
-        if(objectCount>10000) throw new IllegalArgumentException("传入数量过多");
+        if(objectCount>10000) throw new GitletException("传入数量过多");
         for(int i=0;i<objectCount;i++){
             byte[] sha1Bytes =new byte[40];
             buffer.get(sha1Bytes);
             long length=buffer.getLong();
-            if(length>200*1024*1024) throw new IllegalArgumentException("对象大小异常，单文件不可超过200MB");
+            if(length>500*1024*1024) throw new GitletException("对象大小异常，单文件不可超过500MB");
             byte[] contentsBytes=new byte[(int)length];
             buffer.get(contentsBytes);
 
             String declared = new String(sha1Bytes, StandardCharsets.UTF_8);
             String actual= Utils.sha1(contentsBytes);
-            if(!actual.equals(declared)) throw new IllegalArgumentException("SHA-1 校验失败！声明值: " + declared + "，实际计算值: " + actual);
+            if(!actual.equals(declared)) throw new GitletException("SHA-1 校验失败！声明值: " + declared + "，实际计算值: " + actual);
         }
         buffer.rewind();
         buffer.getInt();

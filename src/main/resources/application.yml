@@ -80,7 +80,7 @@ gitnova:
   # 存储策略（Phase 1 接口，Phase 2 起用）
   storage:
     type: local                    # local | minio（未来扩展）
-    max-object-size: 104857600     # 单个对象最大 100 MB
+    max-object-size: 524288000     # 单个对象最大 500 MB（与 multipart 限制对齐）
 
   # 对象传输配置（Phase 2）
   transfer:
