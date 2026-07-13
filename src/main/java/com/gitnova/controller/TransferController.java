@@ -86,7 +86,7 @@ public class TransferController {
     @PostMapping("/transfer")
     public ApiResponse<?> transfer(@PathVariable Long repoId,
                                    @RequestParam("metadata") String metadataJson,
-                                   @RequestParam("objects") MultipartFile objectsFile){
+                                   @RequestParam("objects") MultipartFile objectsFile)throws Exception{
         // TODO: Phase 2/3
         // 1. 校验 repoId 存在 + 当前用户是仓库成员
         // 2. 解析 metadata → TransferMetadata meta
@@ -94,7 +94,7 @@ public class TransferController {
         // 4. int count = transferService.unpackAndStore(repoKey, objectsFile.getBytes())
         // 5. transferService.updateHead(repoId, meta.getBaseHeadSha1(), meta.getNewHeadSha1(), ...)
         // 6. return ApiResponse.success(Map.of("newHeadSha1", ..., "objectsStored", count))
-        try {
+
             long userId = UserContext.getUserId();
             Repository repo = repositoryMapper.selectById(repoId);
             if (repo == null) return ApiResponse.error(404, "仓库不存在");
@@ -104,10 +104,7 @@ public class TransferController {
             if (member == null) return ApiResponse.error(403, "用户权限不足");
             TransferMetadata metadata = objectMapper.readValue(metadataJson, TransferMetadata.class);
             String repoKey=Utils.join(String.valueOf(repo.getOwnerId()),String.valueOf(repoId)).getPath();
-        }catch(Exception e){
-            e.printStackTrace();
-            return ApiResponse.error(500, "传输解析失败: " + e.getMessage());
-        };
+            int count=transferService.unpackAndStore(repoKey, objectsFile.getBytes());
         throw new UnsupportedOperationException("Phase 2/3: 待实现");
     }
 }

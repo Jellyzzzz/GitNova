@@ -1,6 +1,7 @@
 package com.gitnova.service;
 
-import com.gitnova.event.PostReceiveEvent;
+import com.gitnova.gitlet.GitletException;
+import com.gitnova.gitlet.Utils;
 import com.gitnova.mapper.BranchMapper;
 import com.gitnova.mapper.CommitRecordMapper;
 import com.gitnova.mapper.RepositoryMapper;
@@ -8,6 +9,9 @@ import com.gitnova.storage.ObjectStorage;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 传输服务 — Phase 2/3 核心
@@ -50,7 +54,35 @@ public class TransferService {
         // 2. 对每个对象重新计算 SHA-1
         // 3. 与包头 SHA-1 比对，不一致则拒绝
         // 4. 写入 .gitlet/objects/
-        throw new UnsupportedOperationException("Phase 2: 待实现");
+        if(objectsPack==null) throw new IllegalArgumentException("传入空包");
+        ByteBuffer buffer= ByteBuffer.wrap(objectsPack);
+        int objectCount=buffer.getInt();
+        if(objectCount==0) return 0;
+        if(objectCount>10000) throw new IllegalArgumentException("传入数量过多");
+        for(int i=0;i<objectCount;i++){
+            byte[] sha1Bytes =new byte[40];
+            buffer.get(sha1Bytes);
+            long length=buffer.getLong();
+            if(length>200*1024*1024) throw new IllegalArgumentException("对象大小异常，单文件不可超过200MB");
+            byte[] contentsBytes=new byte[(int)length];
+            buffer.get(contentsBytes);
+
+            String declared = new String(sha1Bytes, StandardCharsets.UTF_8);
+            String actual= Utils.sha1(contentsBytes);
+            if(!actual.equals(declared)) throw new IllegalArgumentException("SHA-1 校验失败！声明值: " + declared + "，实际计算值: " + actual);
+        }
+        buffer.rewind();
+        buffer.getInt();
+        for(int i=0;i<objectCount;i++){
+            byte[] sha1Bytes=new byte[40];
+            buffer.get(sha1Bytes);
+            long length=buffer.getLong();
+            byte[] contentsBytes=new byte[(int)length];
+            buffer.get(contentsBytes);
+            String declared=new String(sha1Bytes, StandardCharsets.UTF_8);
+            objectStorage.writeObject(repoKey,declared,contentsBytes);
+        }
+        return objectCount;
     }
 
     /**

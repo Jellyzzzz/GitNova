@@ -39,4 +39,13 @@ public class GlobalExceptionHandler {
         log.error("Unexpected error", ex);
         return ApiResponse.error(500, "Internal server error: " + ex.getMessage());
     }
+    /**
+     * 参数与业务校验异常 → 400 Bad Request
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<?> handleIllegalArgumentException(IllegalArgumentException ex) {
+        log.warn("Validation error: {}", ex.getMessage());
+        return ApiResponse.error(400, ex.getMessage());
+    }
 }
