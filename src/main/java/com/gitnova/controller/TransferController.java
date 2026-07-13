@@ -66,10 +66,10 @@ public class TransferController {
         // 3. NegotiationResponse result = negotiationService.negotiate(repoKey, request);
         // 4. return ApiResponse.success(result);
         long userId= UserContext.getUserId();
-        if(repoId==null) return ApiResponse.error(404,"仓库不存在");
         Repository repo=repositoryMapper.selectById(repoId);
+        if(repo==null) return ApiResponse.error(404,"仓库不存在");
         LambdaQueryWrapper<RepoMember>wrapper=new LambdaQueryWrapper<>();
-        wrapper.eq(RepoMember::getUserId,userId);
+        wrapper.eq(RepoMember::getUserId,userId).eq(RepoMember::getRepoId,repoId);
         RepoMember member=repoMemberMapper.selectOne(wrapper);
         if(member==null) return ApiResponse.error(403,"无权访问该仓库");
         String repoKey= Utils.join(String.valueOf(repo.getOwnerId()),String.valueOf(repoId)).getPath();
