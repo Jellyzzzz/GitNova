@@ -105,6 +105,7 @@ public class TransferController {
             TransferMetadata metadata = objectMapper.readValue(metadataJson, TransferMetadata.class);
             String repoKey=Utils.join(String.valueOf(repo.getOwnerId()),String.valueOf(repoId)).getPath();
             int count=transferService.unpackAndStore(repoKey, objectsFile.getBytes());
-            return ApiResponse.success(Map.of("newHeadSha1",metadata.getBaseHeadSha1(),"objectsStored",count));
+            transferService.updateHead(repoId, repoKey, metadata.getBaseHeadSha1(), metadata.getNewHeadSha1(), metadata.getBranchName(), metadata.getCommitMessage(), userId);
+            return ApiResponse.success(Map.of("newHeadSha1", metadata.getNewHeadSha1(), "objectsStored", count));
     }
 }

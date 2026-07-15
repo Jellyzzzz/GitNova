@@ -42,6 +42,10 @@ public class Commit implements Serializable {
         return this.parentCommit;
     }
 
+    public String getTimestamp() {
+        return this.timestamp;
+    }
+
     public Map<String, String> getMapping() {
         return mapping;
     }

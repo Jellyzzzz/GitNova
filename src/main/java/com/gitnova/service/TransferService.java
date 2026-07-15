@@ -1,6 +1,8 @@
 package com.gitnova.service;
 
-import com.gitnova.gitlet.GitletException;
+import com.gitnova.entity.CommitRecord;
+import com.gitnova.event.PostReceiveEvent;
+import com.gitnova.gitlet.Commit;
 import com.gitnova.gitlet.Utils;
 import com.gitnova.mapper.BranchMapper;
 import com.gitnova.mapper.CommitRecordMapper;
@@ -89,6 +91,8 @@ public class TransferService {
      * CAS 更新 HEAD 指针 — Phase 3 核心
      *
      * @param repoId        仓库 ID
+     * @param repoKey       仓库路径标识（"{ownerId}/{repoId}"），由 Controller 鉴权时拼接，
+     *                      传入 Service 避免重复查库拼路径
      * @param baseHeadSha1  客户端认为的当前 HEAD（CAS 基准值）
      * @param newHeadSha1   新的 HEAD
      * @param branchName    分支名
@@ -96,7 +100,7 @@ public class TransferService {
      * @param authorId      作者用户 ID
      */
     @Transactional
-    public void updateHead(Long repoId, String baseHeadSha1, String newHeadSha1,
+    public void updateHead(Long repoId, String repoKey,String baseHeadSha1, String newHeadSha1,
                            String branchName, String commitMessage, Long authorId) {
         // TODO: Phase 3 — CAS 并发控制
         // 1. CAS 更新 repository.head_commit_sha1
@@ -106,6 +110,24 @@ public class TransferService {
         // 3. 同步写入 commit_record 表
         // 4. 更新 branch 表 HEAD
         // 5. 发布 PostReceiveEvent（触发异步 Agent review）
-        throw new UnsupportedOperationException("Phase 3: 待实现");
+        int affected=repositoryMapper.casUpdateHead(repoId,baseHeadSha1,newHeadSha1);
+        if(affected==0) throw new IllegalArgumentException("non-fast-forward: 远程仓库包含冲突提交，请先 pull 拉取最新代码。");
+
+        CommitRecord record=new CommitRecord();
+        byte[] commitbytes= objectStorage.readObject(repoKey,newHeadSha1);
+        Commit commit=Utils.deserialize(commitbytes,Commit.class);
+        String timestamp =commit.getTimestamp();
+        record.setAuthorId(authorId);
+        record.setMessage(commitMessage);
+        record.setRepoId(repoId);
+        record.setSha1(newHeadSha1);
+        record.setBranchName(branchName);
+        record.setParentSha1(baseHeadSha1);
+        record.setCreatedAt(Utils.parseTimestamp(timestamp));
+        commitRecordMapper.insert(record);
+
+        branchMapper.updateHead(repoId,branchName,newHeadSha1);
+
+        eventPublisher.publishEvent(new PostReceiveEvent(this,repoId,newHeadSha1,authorId));
     }
 }

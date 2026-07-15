@@ -1,6 +1,7 @@
 package com.gitnova.gitlet;
 
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -222,6 +223,19 @@ public class Utils {
         }
     }
 
+    /** Reconstitutes OBJ from a byte array produced by {@link #serialize}. */
+    @SuppressWarnings("unchecked")
+    public static <T extends Serializable> T deserialize(byte[] data, Class<T> expectedClass) {
+        try {
+            ByteArrayInputStream stream = new ByteArrayInputStream(data);
+            ObjectInputStream objectStream = new ObjectInputStream(stream);
+            T result = expectedClass.cast(objectStream.readObject());
+            objectStream.close();
+            return result;
+        } catch (IOException | ClassNotFoundException excp) {
+            throw error("Internal error deserializing object.");
+        }
+    }
 
 
     /* MESSAGES AND ERROR REPORTING */
@@ -242,5 +256,10 @@ public class Utils {
     static String timeConvert(Instant instant){
         ZonedDateTime zonedDateTime = instant.atZone(ZoneOffset.UTC);
         return zonedDateTime.format(DATE_FORMATTER);
+    }
+
+    /** 将 {@link #timeConvert} 产生的字符串解析回 {@link LocalDateTime}。 */
+    public static LocalDateTime parseTimestamp(String timestamp) {
+        return ZonedDateTime.parse(timestamp, DATE_FORMATTER).toLocalDateTime();
     }
 }
