@@ -3,6 +3,7 @@ package com.gitnova.service;
 import com.gitnova.entity.CommitRecord;
 import com.gitnova.event.PostReceiveEvent;
 import com.gitnova.gitlet.Commit;
+import com.gitnova.gitlet.GitletException;
 import com.gitnova.gitlet.Utils;
 import com.gitnova.mapper.BranchMapper;
 import com.gitnova.mapper.CommitRecordMapper;
@@ -111,7 +112,7 @@ public class TransferService {
         // 4. 更新 branch 表 HEAD
         // 5. 发布 PostReceiveEvent（触发异步 Agent review）
         int affected=repositoryMapper.casUpdateHead(repoId,baseHeadSha1,newHeadSha1);
-        if(affected==0) throw new IllegalArgumentException("non-fast-forward: 远程仓库包含冲突提交，请先 pull 拉取最新代码。");
+        if (affected == 0) throw new GitletException("non-fast-forward: 远程仓库包含冲突提交，请先 pull 拉取最新代码。");
 
         CommitRecord record=new CommitRecord();
         byte[] commitbytes= objectStorage.readObject(repoKey,newHeadSha1);
