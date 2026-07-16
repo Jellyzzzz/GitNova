@@ -1,8 +1,8 @@
 package com.gitnova.controller;
 
 import com.gitnova.dto.ApiResponse;
-import com.gitnova.service.agent.CommitMessageAgent;
-import com.gitnova.service.agent.RepoQAAgent;
+import com.gitnova.service.agent.CommitMessageService;
+import com.gitnova.service.agent.RepoQAService;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,13 +16,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/repos/{repoId}")
 public class AgentController {
 
-    private final CommitMessageAgent commitMessageAgent;
-    private final RepoQAAgent repoQAAgent;
+    private final CommitMessageService commitMessageService;
+    private final RepoQAService repoQAService;
 
-    public AgentController(CommitMessageAgent commitMessageAgent,
-                           RepoQAAgent repoQAAgent) {
-        this.commitMessageAgent = commitMessageAgent;
-        this.repoQAAgent = repoQAAgent;
+    public AgentController(CommitMessageService commitMessageService,
+                           RepoQAService repoQAService) {
+        this.commitMessageService = commitMessageService;
+        this.repoQAService = repoQAService;
     }
 
     /**
@@ -34,7 +34,7 @@ public class AgentController {
     @PostMapping("/suggest-message")
     public ApiResponse<String> suggestMessage(@PathVariable Long repoId,
                                                @RequestParam String diff) {
-        String suggested = commitMessageAgent.suggest(diff);
+        String suggested = commitMessageService.suggest(diff);
         return ApiResponse.success(suggested);
     }
 
@@ -47,7 +47,7 @@ public class AgentController {
     @PostMapping("/chat")
     public ApiResponse<String> chat(@PathVariable Long repoId,
                                      @RequestParam String question) {
-        String answer = repoQAAgent.chat(repoId, question);
+        String answer = repoQAService.chat(repoId, question);
         return ApiResponse.success(answer);
     }
 }

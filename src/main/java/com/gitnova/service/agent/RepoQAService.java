@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
  * 实现思路：代码文件分块 → Embedding → VectorStore（本地 Chroma）→ RAG
  */
 @Service
-public class RepoQAAgent {
+public class RepoQAService {
 
     @Value("${gitnova.llm.api-key:}")
     private String apiKey;

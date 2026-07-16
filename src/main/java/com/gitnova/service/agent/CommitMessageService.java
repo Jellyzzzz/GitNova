@@ -14,7 +14,7 @@ import org.springframework.stereotype.Service;
  * 7-B 半天能跑通，建立信心；7-A 是简历主打；7-C 是演示彩蛋。
  */
 @Service
-public class CommitMessageAgent {
+public class CommitMessageService {
 
     @Value("${gitnova.llm.api-key:}")
     private String apiKey;
