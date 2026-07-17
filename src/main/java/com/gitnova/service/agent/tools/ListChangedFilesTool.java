@@ -4,7 +4,7 @@ import com.gitnova.service.GitletService;
 import com.gitnova.service.agent.AgentTool;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
+import java.util.*;
 
 /**
  * 工具 3 — 列出 commit 涉及的所有变更文件
@@ -27,7 +27,19 @@ public class ListChangedFilesTool implements AgentTool {
 
     @Override
     public String description() {
-        return "列出指定 commit 中所有变更的文件路径及其变更类型（新增/修改/删除）。参数: repoId(仓库ID), commitSha1(commit的SHA-1)";
+        return "列出指定 commit 中所有变更的文件路径及其变更类型（新增/修改/删除）";
+    }
+
+    @Override
+    public Map<String, Object> parametersSchema() {
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("type", "object");
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("repoId", Map.of("type", "string", "description", "仓库ID"));
+        props.put("commitSha1", Map.of("type", "string", "description", "commit的SHA-1"));
+        schema.put("properties", props);
+        schema.put("required", List.of("repoId", "commitSha1"));
+        return schema;
     }
 
     @Override

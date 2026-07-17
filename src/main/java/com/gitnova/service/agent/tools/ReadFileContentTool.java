@@ -4,7 +4,7 @@ import com.gitnova.service.agent.AgentTool;
 import com.gitnova.storage.ObjectStorage;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
+import java.util.*;
 
 /**
  * 工具 2 — 读取指定文件的完整内容
@@ -28,7 +28,20 @@ public class ReadFileContentTool implements AgentTool {
 
     @Override
     public String description() {
-        return "读取指定文件在某个 commit 下的完整内容。参数: repoId(仓库ID), filePath(文件路径), commitSha1(commit的SHA-1)";
+        return "读取指定文件在某个 commit 下的完整内容";
+    }
+
+    @Override
+    public Map<String, Object> parametersSchema() {
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("type", "object");
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("repoId", Map.of("type", "string", "description", "仓库ID"));
+        props.put("filePath", Map.of("type", "string", "description", "文件路径"));
+        props.put("commitSha1", Map.of("type", "string", "description", "commit的SHA-1"));
+        schema.put("properties", props);
+        schema.put("required", List.of("repoId", "filePath", "commitSha1"));
+        return schema;
     }
 
     @Override

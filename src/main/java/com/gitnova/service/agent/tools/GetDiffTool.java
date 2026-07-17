@@ -4,6 +4,8 @@ import com.gitnova.service.GitletService;
 import com.gitnova.service.agent.AgentTool;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -27,7 +29,19 @@ public class GetDiffTool implements AgentTool {
 
     @Override
     public String description() {
-        return "获取指定 commit 的 diff 文本。参数: repoId(仓库ID), commitSha1(commit的SHA-1)";
+        return "获取指定 commit 的 diff 文本";
+    }
+
+    @Override
+    public Map<String, Object> parametersSchema() {
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("type", "object");
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("repoId", Map.of("type", "string", "description", "仓库ID"));
+        props.put("commitSha1", Map.of("type", "string", "description", "commit的SHA-1"));
+        schema.put("properties", props);
+        schema.put("required", List.of("repoId", "commitSha1"));
+        return schema;
     }
 
     @Override
