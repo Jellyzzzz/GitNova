@@ -1,5 +1,7 @@
 package com.gitnova.service.agent.tools;
 
+import com.gitnova.gitlet.Commit;
+import com.gitnova.gitlet.Utils;
 import com.gitnova.service.GitletService;
 import com.gitnova.service.agent.AgentTool;
 import org.springframework.stereotype.Component;
@@ -7,7 +9,7 @@ import org.springframework.stereotype.Component;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import com.gitnova.storage.LocalObjectStorage;
+import com.gitnova.storage.ObjectStorage;
 
 /**
  * 工具 1 — 获取指定 commit 的 diff 文本
@@ -18,10 +20,11 @@ import com.gitnova.storage.LocalObjectStorage;
 public class GetDiffTool implements AgentTool {
 
     private final GitletService gitletService;
-    private final LocalObjectStorage localObjectStorage;
-    public GetDiffTool(GitletService gitletService, LocalObjectStorage localObjectStorage) {
+    private final ObjectStorage objectStorage;
+
+    public GetDiffTool(GitletService gitletService, ObjectStorage objectStorage) {
         this.gitletService = gitletService;
-        this.localObjectStorage = localObjectStorage;
+        this.objectStorage = objectStorage;
     }
 
     @Override
@@ -52,8 +55,31 @@ public class GetDiffTool implements AgentTool {
         String repoKey = params.get("repoKey");  // Loop 注入
         String commitSha1 = params.get("commitSha1");  // LLM 传入
         if (repoKey == null || commitSha1 == null) return "Error: Missing required parameters.";
-        // localObjectStorage.readObject(repoKey, commitSha1);
-        // TODO: 从 ObjectStorage 读取 Commit，与父 Commit 比对生成 diff 文本
+        byte[] bytes=objectStorage.readObject(repoKey,commitSha1);
+        Commit commit= Utils.deserialize(bytes,Commit.class);
+
+        if(commit.getParentCommit()==null) {
+            Map<String,String>mapping=commit.getMapping();
+            StringBuilder sb=new StringBuilder();
+            sb.append("Commit: ").append(commitSha1).append(" (initial commit)\n");
+            sb.append("Files: ").append(mapping.size()).append(" new\n\n");
+
+            for(Map.Entry<String,String>entry:mapping.entrySet()){
+                String filePath=entry.getKey();
+                String blobSha1=entry.getValue();
+                byte[] content=objectStorage.readObject(repoKey,blobSha1);
+                String[] lines=new String(content).split("\n");
+
+                sb.append("--- /dev/null\n");
+                sb.append("+++ b/").append(filePath).append("\n");
+                sb.append("@@ -0,0 +1,").append(lines.length).append(" @@\n");
+                for (String line : lines) {
+                    sb.append("+").append(line).append("\n");
+                }
+                sb.append("\n");
+            }
+            return sb.toString();
+        }
         throw new UnsupportedOperationException("Phase 4: 待实现");
     }
 }
