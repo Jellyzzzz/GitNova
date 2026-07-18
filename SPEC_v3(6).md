@@ -865,7 +865,18 @@ Agent 失败的四种情况及处理：
 
 #### Step 4 — 4 个工具的参数 Schema（已完成）
 
-4 个工具的 `parametersSchema()` 已补齐，具体参数见各工具类的 Javadoc。
+4 个工具的 `parametersSchema()` 已补齐。
+
+⚠️ **参数分工 — Context Injection 模式**：
+
+| 参数 | 谁传入 | 原因 |
+|------|--------|------|
+| `repoKey` | **Loop 框架注入** | 基础设施细节，LLM 不需要知道路径格式，防路径穿越 |
+| `repoId` | **Loop 注入**（仅 submitReview） | 写 review_comment 表需要 |
+| `commitSha1` | **LLM 显式传入** | Agent 推理变量——可能读当前 commit，也可能读父 commit |
+| `filePath` | **LLM 显式传入** | 同理，Agent 决定看哪个文件 |
+
+🔒 **安全防御**：`executeTool()` 中 `merged.putAll(call.getParams())` 先放 LLM 参数，`merged.put("repoKey", currentRepoKey)` 后放覆盖。框架永远覆盖 LLM 的同名参数，防止 LLM 注入 `repoKey=../../evil`。`currentRepoKey` 额外用 `\d+/\d+` 正则校验。
 
 ---
 
@@ -1053,10 +1064,9 @@ private Message toolMessage(String toolCallId, String result) {
 
 ---
 
-#### Step 8 — CodeReviewListener（无需修改）
+#### Step 8 — CodeReviewListener
 
-当前 `CodeReviewListener.onPostReceive()` 已经调用了 `agentLoop.runAgentLoop()`，
-骨架就绪，Step 7 完成后自动生效。
+**已更新**：注入 `RepositoryMapper`，在 `onPostReceive` 中通过 `event.getRepoId()` 查库获取 `ownerId`，拼接 `repoKey = "{ownerId}/{repoId}"` 后传入 `agentLoop.runAgentLoop(repoId, repoKey, commitSha1)`。避免 Agent Loop 内部重复查库。
 
 ---
 
@@ -1070,7 +1080,7 @@ private Message toolMessage(String toolCallId, String result) {
 | `ReadFileContentTool` | `ObjectStorage` |
 | `ListChangedFilesTool` | `GitletService` |
 | `SubmitReviewTool` | `ReviewCommentMapper`、`ReviewPushHandler`、`ObjectMapper` |
-| `CodeReviewListener` | `CodeReviewAgentLoop` |
+| `CodeReviewListener` | `CodeReviewAgentLoop`、`RepositoryMapper` |
 
 ---
 

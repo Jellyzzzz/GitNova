@@ -1,5 +1,7 @@
 package com.gitnova.event;
 
+import com.gitnova.entity.Repository;
+import com.gitnova.mapper.RepositoryMapper;
 import com.gitnova.service.agent.CodeReviewAgentLoop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,9 +26,12 @@ public class CodeReviewListener {
     private static final Logger log = LoggerFactory.getLogger(CodeReviewListener.class);
 
     private final CodeReviewAgentLoop agentLoop;
+    private final RepositoryMapper repositoryMapper;
 
-    public CodeReviewListener(CodeReviewAgentLoop agentLoop) {
+    public CodeReviewListener(CodeReviewAgentLoop agentLoop,
+                              RepositoryMapper repositoryMapper) {
         this.agentLoop = agentLoop;
+        this.repositoryMapper = repositoryMapper;
     }
 
     /**
@@ -41,9 +46,18 @@ public class CodeReviewListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onPostReceive(PostReceiveEvent event) {
         try {
-            log.info("Starting ReAct Agent review for repo={} commit={}",
-                     event.getRepoId(), event.getCommitSha1());
-            String reviewResult = agentLoop.runAgentLoop(event.getRepoId(), event.getCommitSha1());
+            // 查询 repo 拼 repoKey，避免 Agent Loop 内部重复查库
+            Repository repo = repositoryMapper.selectById(event.getRepoId());
+            if (repo == null) {
+                log.warn("Repo {} not found, skipping Agent review", event.getRepoId());
+                return;
+            }
+            String repoKey = repo.getOwnerId() + "/" + event.getRepoId();
+
+            log.info("Starting ReAct Agent review for repo={} repoKey={} commit={}",
+                     event.getRepoId(), repoKey, event.getCommitSha1());
+            String reviewResult = agentLoop.runAgentLoop(
+                    event.getRepoId(), repoKey, event.getCommitSha1());
             log.info("ReAct Agent review completed for commit={}: {}", event.getCommitSha1(), reviewResult);
         } catch (Exception e) {
             log.error("ReAct Agent review failed for commit={}, push result unaffected",

@@ -36,11 +36,10 @@ public class ReadFileContentTool implements AgentTool {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         Map<String, Object> props = new LinkedHashMap<>();
-        props.put("repoId", Map.of("type", "string", "description", "仓库ID"));
         props.put("filePath", Map.of("type", "string", "description", "文件路径"));
         props.put("commitSha1", Map.of("type", "string", "description", "commit的SHA-1"));
         schema.put("properties", props);
-        schema.put("required", List.of("repoId", "filePath", "commitSha1"));
+        schema.put("required", List.of("filePath", "commitSha1"));  // repoKey 由 Loop 注入
         return schema;
     }
 

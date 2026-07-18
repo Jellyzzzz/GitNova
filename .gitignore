@@ -47,3 +47,4 @@ data/
 # 环境变量文件（如果用 .env）
 .env
 .env.local
+gitnova-files.txt

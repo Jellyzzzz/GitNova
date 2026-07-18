@@ -49,11 +49,10 @@ public class SubmitReviewTool implements AgentTool {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         Map<String, Object> props = new LinkedHashMap<>();
-        props.put("repoId", Map.of("type", "string", "description", "仓库ID"));
         props.put("commitSha1", Map.of("type", "string", "description", "commit的SHA-1"));
         props.put("reviewJson", Map.of("type", "string", "description", "JSON数组格式的review结果"));
         schema.put("properties", props);
-        schema.put("required", List.of("repoId", "commitSha1", "reviewJson"));
+        schema.put("required", List.of("commitSha1", "reviewJson"));  // repoKey/repoId 由 Loop 注入
         return schema;
     }
 
