@@ -102,7 +102,7 @@ public class TransferService {
      */
     @Transactional
     public void updateHead(Long repoId, String repoKey,String baseHeadSha1, String newHeadSha1,
-                           String branchName, String commitMessage, Long authorId) {
+                           String branchName, String commitMessage, Long authorId,boolean requestReview) {
         // TODO: Phase 3 — CAS 并发控制
         // 1. CAS 更新 repository.head_commit_sha1
         //    UPDATE repository SET head_commit_sha1 = #{newHeadSha1}
@@ -129,6 +129,6 @@ public class TransferService {
 
         branchMapper.updateHead(repoId,branchName,newHeadSha1);
 
-        eventPublisher.publishEvent(new PostReceiveEvent(this,repoId,newHeadSha1,authorId));
+        eventPublisher.publishEvent(new PostReceiveEvent(this,repoId,newHeadSha1,authorId,requestReview));
     }
 }

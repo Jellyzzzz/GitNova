@@ -21,4 +21,7 @@ public class TransferMetadata {
 
     /** 提交信息 */
     private String commitMessage;
+
+    /** 是否请求 Code Review（默认 true，review=false 时跳过 Agent） */
+    private boolean review = true;
 }

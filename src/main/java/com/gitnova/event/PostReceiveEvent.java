@@ -1,5 +1,6 @@
 package com.gitnova.event;
 
+import lombok.Data;
 import org.springframework.context.ApplicationEvent;
 
 /**
@@ -14,12 +15,13 @@ public class PostReceiveEvent extends ApplicationEvent {
     private final Long repoId;
     private final String commitSha1;
     private final Long pusherId;
-
-    public PostReceiveEvent(Object source, Long repoId, String commitSha1, Long pusherId) {
+    private final boolean requestReview;
+    public PostReceiveEvent(Object source, Long repoId, String commitSha1, Long pusherId,boolean requestReview) {
         super(source);
         this.repoId = repoId;
         this.commitSha1 = commitSha1;
         this.pusherId = pusherId;
+        this.requestReview=requestReview;
     }
 
     public Long getRepoId() {
@@ -32,5 +34,9 @@ public class PostReceiveEvent extends ApplicationEvent {
 
     public Long getPusherId() {
         return pusherId;
+    }
+
+    public boolean isRequestReview() {
+        return requestReview;
     }
 }

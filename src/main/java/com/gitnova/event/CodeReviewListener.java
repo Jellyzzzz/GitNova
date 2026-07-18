@@ -1,6 +1,7 @@
 package com.gitnova.event;
 
 import com.gitnova.entity.Repository;
+import com.gitnova.gitlet.Utils;
 import com.gitnova.mapper.RepositoryMapper;
 import com.gitnova.service.agent.CodeReviewAgentLoop;
 import org.slf4j.Logger;
@@ -45,6 +46,10 @@ public class CodeReviewListener {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onPostReceive(PostReceiveEvent event) {
+        if(!event.isRequestReview()) {
+            log.info("Review skipped for commit={} (requestReview=false)", event.getCommitSha1());
+            return;
+        }
         try {
             // 查询 repo 拼 repoKey，避免 Agent Loop 内部重复查库
             Repository repo = repositoryMapper.selectById(event.getRepoId());
@@ -52,7 +57,7 @@ public class CodeReviewListener {
                 log.warn("Repo {} not found, skipping Agent review", event.getRepoId());
                 return;
             }
-            String repoKey = repo.getOwnerId() + "/" + event.getRepoId();
+            String repoKey = Utils.join(String.valueOf(repo.getOwnerId()),String.valueOf(event.getRepoId())).getPath();
 
             log.info("Starting ReAct Agent review for repo={} repoKey={} commit={}",
                      event.getRepoId(), repoKey, event.getCommitSha1());

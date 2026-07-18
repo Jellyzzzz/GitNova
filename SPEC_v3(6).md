@@ -1097,6 +1097,109 @@ Step 7   runAgentLoop()     (30 min — 主循环 + 4 个辅助方法)
 Step 8   CodeReviewListener (已就绪)
 ```
 
+### 4.8 Review 触发开关（Push Options 理念）
+
+**设计目标**：参考 Git Push Options（`git push -o review=false`），允许客户端在 push 时控制是否触发 Agent Review。WIP 提交、批量提交等不需要审查的场景跳过 Agent，节省 LLM 调用成本。
+
+**数据流**：
+
+```java
+// TransferMetadata.java — 加字段
+private boolean review = true;  // 默认触发，review=false 时跳过
+
+// PostReceiveEvent.java — 加字段
+private final boolean requestReview;
+
+// TransferService.updateHead() — 签名加参数
+public void updateHead(..., boolean requestReview) {
+    // ...
+    publishEvent(new PostReceiveEvent(repoId, commitSha1, pusherId, requestReview));
+}
+
+// CodeReviewListener.onPostReceive() — 最顶层拦截
+if (!event.isRequestReview()) {
+    log.info("Review skipped for commit={}", event.getCommitSha1());
+    return;
+}
+```
+
+**改动清单**：
+
+| # | 文件 | 改动 |
+|---|------|------|
+| 1 | `TransferMetadata.java` | 加 `private boolean review = true;` |
+| 2 | `PostReceiveEvent.java` | 加 `requestReview` 字段、getter、构造参数 |
+| 3 | `TransferService.updateHead()` | 签名加 `boolean requestReview`，透传到 Event |
+| 4 | `TransferController.transfer()` | `metadata.isReview()` 取值传给 `updateHead()` |
+| 5 | `CodeReviewListener.onPostReceive()` | 最顶层 `if (!event.isRequestReview()) return;` |
+
+> 💡 **面试话术**："参考 Git Push Options 的设计思想（`git push -o ci.skip`），在自定义传输协议的 metadata 层实现了 review 开关。GitLab 的 `-o merge_request.create` 在 receive-pack 阶段解析，我们是在 HTTP metadata 层达成同样效果——按需触发，节省 LLM 调用成本。"
+
+---
+
+### 4.9 修复提案闭环（ProposeFix + 用户确认）
+
+**权限边界**：Agent 只有 Propose 权限（创建临时 Commit 对象），没有 Commit 权限（更新分支指针）。修复需要用户确认后才由系统通过 CAS 合并。
+
+**完整流程**：
+
+```
+Agent 发现缺陷 → 调用 ProposeFixTool
+  │
+  ├── 1. 读取原文件 Blob（ObjectStorage.readObject）
+  ├── 2. 应用 LLM 生成的代码修改（字符串替换 originalCode → fixedCode）
+  ├── 3. sha1(新内容) → 创建新 Blob → writeObject()
+  ├── 4. 继承父 Commit 的 mapping，替换被修改文件的 Blob SHA-1
+  ├── 5. 新 Commit(parent=当前HEAD, mapping=更新后的映射) → 序列化 → writeObject()
+  ├── 6. NOTICE：不更新 refs/heads/main！不碰 branch 表！
+  ├── 7. 写入 ai_proposal 表: { repoId, proposalSha1, baseHeadSha1, diffJson, status='pending' }
+  └── 8. return "Proposal created: abc123"
+          │
+          ▼
+      WebSocket 推送 → 用户看到 Diff + [接受] [拒绝]
+          │ 用户点击接受
+          ▼
+      POST /api/repos/{repoId}/review/apply-proposal
+          │ body: { proposalId, accepted: true }
+          │
+          ▼
+      ApplyProposalService
+          │ CAS: UPDATE repository SET head_commit_sha1 = proposalSha1
+          │      WHERE id = repoId AND head_commit_sha1 = baseHeadSha1
+          │ ✅ affected=1 → 写 commit_record + 更新 branch
+          │ ❌ affected=0 → "分支已变更，AI 提案已失效"
+```
+
+**Gitlet 适配说明**：Gitlet 只有 Blob → Commit 两层（Commit.mapping 直接存文件→Blob SHA-1 映射），无 Tree 对象。生成修复 Commit 时直接继承父 Commit 的 mapping 并替换被修改文件的条目，不需要构建 Tree。
+
+**新增数据库表**：
+
+```sql
+CREATE TABLE ai_proposal (
+    id               BIGINT PRIMARY KEY AUTO_INCREMENT,
+    repo_id          BIGINT NOT NULL,
+    proposal_sha1    VARCHAR(40) NOT NULL,       -- 影子 Commit 的 SHA-1
+    base_head_sha1   VARCHAR(40) NOT NULL,       -- 提案时的 HEAD（CAS 基准）
+    file_path        VARCHAR(255),               -- 被修改的文件
+    diff_json        TEXT,                       -- 修复前后对比
+    status           ENUM('pending','accepted','rejected') DEFAULT 'pending',
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**新增接口**：
+
+```
+POST /api/repos/{repoId}/review/apply-proposal
+  body: { proposalId: Long, accepted: boolean }
+  逻辑: accepted=true → CAS 合并提案 → 创建 commit
+        accepted=false → 更新 status='rejected'
+```
+
+> 💡 **面试话术**："Agent 的权限边界是 Propose 而非 Commit。它生成的 Commit 对象只存在于临时存储，用户确认后系统通过 Phase 3 已有的 CAS 逻辑合并到主分支——并发安全是复用的，不额外开发。这和 Claude Code 的权限模型一致：AI 操作必须可追溯、可撤销。"
+
+---
+
 ### Milestone 验收
 
 - push 代码后，WebSocket 收到 review 结果通知
