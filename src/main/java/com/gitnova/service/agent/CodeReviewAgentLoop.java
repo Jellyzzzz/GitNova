@@ -16,12 +16,13 @@ import java.util.*;
  * 2. 循环调用 LLM，解析 tool_calls
  * 3. 遇到 submitReview 工具调用时终止
  * 4. maxTurns = 10 硬上限，防止无限循环
- *
- * 🔒 Context Injection 安全设计：
- * repoKey 由 Listener 查库拼接后传入，LLM 不可见也不可控。
- * 工具执行前由 Loop 注入 repoKey，且框架层永远覆盖 LLM 的同名参数。
- * 防止路径穿越攻击：repoKey 仅允许 \d+/\d+ 格式。
- *
+ /**
+ * Context Injection 安全设计：
+ * repoId、repoKey 与审查 Revision 由 Listener 构造的
+ * AgentRunContext 提供，模型不可控制。
+ * 工具执行时先复制模型参数，再由 Harness 写入可信参数，
+ * 从而无条件覆盖模型提供的同名值。
+ * repoKey 的规范化与格式校验由 AgentRunContext 统一负责。
  * 💡 Design Note — 为什么手写而非用 LangChain4j？
  * 4 个工具 + 1 个循环，手写 200 行代码就够了。
  * 引入框架反而增加了黑盒依赖，面试时讲不清楚底层原理。
@@ -32,8 +33,6 @@ public class CodeReviewAgentLoop {
     private static final Logger log = LoggerFactory.getLogger(CodeReviewAgentLoop.class);
     private static final int MAX_TURNS = 10;
 
-    /** {@code \d+/\d+} — 防止路径穿越攻击 */
-    private static final String REPO_KEY_PATTERN = "\\d+/\\d+";
 
     private final ToolRegistry toolRegistry;
 
@@ -48,33 +47,26 @@ public class CodeReviewAgentLoop {
 
     // ===== 请求级上下文（由 Listener 传入，LLM 不可见） =====
 
-    /** 当前审查的仓库 ID */
-    private Long currentRepoId;
-
-    /** 仓库路径标识（"{ownerId}/{repoId}"），由 Listener 从 DB 查得 */
-    private String currentRepoKey;
 
     public CodeReviewAgentLoop(ToolRegistry toolRegistry) {
         this.toolRegistry = toolRegistry;
     }
 
     /**
-     * 运行 Agent Loop，对指定 commit 进行 Code Review
+     * 运行 Agent Loop，对指定审查上下文执行 Code Review。
      *
-     * @param repoId     仓库 ID
-     * @param repoKey    仓库路径标识（Listener 查库拼接，防路径伪造）
-     * @param commitSha1 commit SHA-1
-     * @return review 结果 JSON 字符串（[] 表示无问题）
+     * @param context 本次 Agent Run 的不可变可信上下文
+     * @return Review 结果 JSON 字符串
      */
-    public String runAgentLoop(Long repoId, String repoKey, String commitSha1) {
-        this.currentRepoId = repoId;
-        this.currentRepoKey = repoKey;
+    public String runAgentLoop(AgentRunContext context) {
+        Objects.requireNonNull(context, "context must not be null");
 
-        // 防御：校验 repoKey 格式
-        if (!repoKey.matches(REPO_KEY_PATTERN)) {
-            log.error("Invalid repoKey format: {}", repoKey);
-            return "[]";  // 降级：返回空 review
-        }
+        log.info(
+                "Starting code review agent: runId={}, repoId={}, targetSha1={}",
+                context.runId(),
+                context.repoId(),
+                context.targetSha1()
+        );
 
         // TODO: Phase 4 — ReAct Agent Loop
         // 1. buildSystemPrompt() 构造 System Message
@@ -100,15 +92,29 @@ public class CodeReviewAgentLoop {
      * @param call LLM 返回的工具调用
      * @return 工具执行结果（Observation）
      */
-    private String executeTool(ToolCall call) {
+    private String executeTool(AgentRunContext context, ToolCall call) {
+        Objects.requireNonNull(context, "context must not be null");
+        Objects.requireNonNull(call, "tool call must not be null");
+        String toolName = Objects.requireNonNull(
+                call.getName(),
+                "tool call name must not be null"
+        );
+
+        if (toolName.isBlank()) {
+            throw new IllegalArgumentException(
+                    "tool call name must not be blank"
+            );
+        }
         Map<String, String> merged = new LinkedHashMap<>();
         // ① 先放 LLM 参数（不可信）
-        merged.putAll(call.getParams());
+        if(call.getParams()!=null){
+            merged.putAll(call.getParams());
+        }
         // ② 框架注入，后放覆盖同名参数（防 LLM 注入攻击）
-        merged.put("repoKey", currentRepoKey);
-
+        merged.put("repoKey", context.repoKey());
+        merged.put("commitSha1", context.targetSha1());
         if ("submitReview".equals(call.getName())) {
-            merged.putIfAbsent("repoId", String.valueOf(currentRepoId));
+            merged.put("repoId",String.valueOf(context.repoId()));
         }
 
         return toolRegistry.execute(call.getName(), merged);
@@ -120,7 +126,8 @@ public class CodeReviewAgentLoop {
      * 包含角色设定、可用工具列表、推荐工作流、审查重点、输出格式要求。
      * 参考 SPEC v3.4 4.3 节 Prompt 模板。
      */
-    private String buildSystemPrompt() {
+    private String buildSystemPrompt(AgentRunContext context) {
+        Objects.requireNonNull(context, "context must not be null");
         // TODO: Phase 4 — 构造完整的 System Prompt
         throw new UnsupportedOperationException("Phase 4: 待实现");
     }

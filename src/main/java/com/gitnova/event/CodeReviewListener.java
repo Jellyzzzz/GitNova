@@ -3,6 +3,7 @@ package com.gitnova.event;
 import com.gitnova.entity.Repository;
 import com.gitnova.gitlet.Utils;
 import com.gitnova.mapper.RepositoryMapper;
+import com.gitnova.service.agent.AgentRunContext;
 import com.gitnova.service.agent.CodeReviewAgentLoop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +11,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+
+import java.util.UUID;
 
 /**
  * Code Review 异步监听器 — Phase 4 核心
@@ -61,8 +64,8 @@ public class CodeReviewListener {
 
             log.info("Starting ReAct Agent review for repo={} repoKey={} commit={}",
                      event.getRepoId(), repoKey, event.getCommitSha1());
-            String reviewResult = agentLoop.runAgentLoop(
-                    event.getRepoId(), repoKey, event.getCommitSha1());
+            AgentRunContext context =new AgentRunContext(UUID.randomUUID().toString(),event.getRepoId(),repoKey,null, event.getCommitSha1());
+            String reviewResult = agentLoop.runAgentLoop(context);
             log.info("ReAct Agent review completed for commit={}: {}", event.getCommitSha1(), reviewResult);
         } catch (Exception e) {
             log.error("ReAct Agent review failed for commit={}, push result unaffected",
