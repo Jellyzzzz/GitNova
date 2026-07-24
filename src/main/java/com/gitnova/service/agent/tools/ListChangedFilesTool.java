@@ -1,7 +1,12 @@
 package com.gitnova.service.agent.tools;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.gitnova.dto.ToolDefinition;
 import com.gitnova.service.GitletService;
 import com.gitnova.service.agent.AgentTool;
+import com.gitnova.service.agent.ToolResult;
+import com.gitnova.service.agent.ToolStatus;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -11,7 +16,7 @@ import java.util.*;
  *
  * 帮助 Agent 快速了解本次 commit 的范围，决定是否需要深入查看某些文件。
  */
-@Component
+// @Component // v4.2 migration pending, temporarily disabled
 public class ListChangedFilesTool implements AgentTool {
 
     private final GitletService gitletService;
@@ -21,27 +26,38 @@ public class ListChangedFilesTool implements AgentTool {
     }
 
     @Override
+    public ToolDefinition definition() {
+        return new ToolDefinition("listChangedFiles", "v4.2 migration pending",
+                JsonNodeFactory.instance.objectNode().put("type", "object"));
+    }
+
+    @Override
+    public ToolResult execute(ToolExecutionContext execution, JsonNode arguments) {
+        return ToolResult.error(ToolStatus.INTERNAL_ERROR,
+                "NOT_MIGRATED", "listChangedFiles: v4.2 migration pending", false);
+    }
+
+    // === v3.6 旧代码保留 ===
+
     public String name() {
         return "listChangedFiles";
     }
 
-    @Override
     public String description() {
         return "列出指定 commit 中所有变更的文件路径及其变更类型（新增/修改/删除）";
     }
 
-    @Override
     public Map<String, Object> parametersSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         Map<String, Object> props = new LinkedHashMap<>();
         props.put("commitSha1", Map.of("type", "string", "description", "commit的SHA-1"));
         schema.put("properties", props);
-        schema.put("required", List.of("commitSha1"));  // repoKey 由 Loop 注入
+        schema.put("required", List.of("commitSha1"));
         return schema;
     }
 
-    @Override
+    /** @deprecated v4.2 待迁移 */
     public String execute(Map<String, String> params) {
         // TODO: Phase 4 — 对比 commit 与其父 commit 的 mapping，返回变更文件列表
         throw new UnsupportedOperationException("Phase 4: 待实现");

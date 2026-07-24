@@ -117,7 +117,8 @@ public class CodeReviewAgentLoop {
             merged.put("repoId",String.valueOf(context.repoId()));
         }
 
-        return toolRegistry.execute(call.getName(), merged);
+        // TODO: v4.2 — 迁移到 ToolExecutionContext + JsonNode，当前为编译兼容临时桥接
+        throw new UnsupportedOperationException("Phase 4: 待实现");
     }
 
     /**

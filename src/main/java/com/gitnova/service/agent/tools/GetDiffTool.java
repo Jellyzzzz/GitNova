@@ -5,8 +5,12 @@ import com.github.difflib.UnifiedDiffUtils;
 import com.github.difflib.patch.Patch;
 import com.gitnova.gitlet.Commit;
 import com.gitnova.gitlet.Utils;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.gitnova.dto.ToolDefinition;
 import com.gitnova.service.GitletService;
 import com.gitnova.service.agent.AgentTool;
+import com.gitnova.service.agent.ToolResult;
+import com.gitnova.service.agent.ToolStatus;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -19,7 +23,7 @@ import com.gitnova.storage.ObjectStorage;
  *
  * Agent 审查代码的第一步就是调用此工具获取变更内容。
  */
-@Component
+// @Component // v4.2 migration pending, temporarily disabled
 public class GetDiffTool implements AgentTool {
 
     private final GitletService gitletService;
@@ -30,29 +34,41 @@ public class GetDiffTool implements AgentTool {
         this.objectStorage = objectStorage;
     }
 
+    // === v4.2 新接口桩 ===
+    // v4.2 桩（Spring context 兼容，迁移后替换为真实实现）
     @Override
+    public ToolDefinition definition() {
+        return new ToolDefinition("getDiff", "v4.2 migration pending",
+                com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode().put("type", "object"));
+    }
+
+    @Override
+    public ToolResult execute(ToolExecutionContext execution, JsonNode arguments) {
+        return ToolResult.error(com.gitnova.service.agent.ToolStatus.INTERNAL_ERROR,
+                "NOT_MIGRATED", "getDiff: v4.2 migration pending", false);
+    }
+
+    // === v3.6 旧代码保留，迁移后删除 ===
+
     public String name() {
         return "getDiff";
     }
 
-    @Override
     public String description() {
         return "获取指定 commit 的 diff 文本";
     }
 
-    @Override
     public Map<String, Object> parametersSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         Map<String, Object> props = new LinkedHashMap<>();
-        //props.put("repoId", Map.of("type", "string", "description", "仓库ID"));
         props.put("commitSha1", Map.of("type", "string", "description", "commit的SHA-1"));
         schema.put("properties", props);
-        schema.put("required", List.of("commitSha1"));  // repoKey 由 Loop 注入，不暴露给 LLM
+        schema.put("required", List.of("commitSha1"));
         return schema;
     }
 
-    @Override
+    /** @deprecated v4.2 待迁移到 execute(ToolExecutionContext, JsonNode) */
     public String execute(Map<String, String> params) {
         // TODO: Phase 4 — 从 ObjectStorage 读取 Commit，与父 Commit 比对生成 diff
         String repoKey = params.get("repoKey");  // Loop 注入
