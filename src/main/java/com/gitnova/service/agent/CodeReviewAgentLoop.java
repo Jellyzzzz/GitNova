@@ -1,6 +1,10 @@
 package com.gitnova.service.agent;
 
 import com.gitnova.dto.ToolCall;
+import com.gitnova.service.agent.context.ReviewScope;
+import com.gitnova.service.agent.context.Revision;
+import com.gitnova.service.agent.runtime.AgentRunContext;
+import com.gitnova.service.agent.tool.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

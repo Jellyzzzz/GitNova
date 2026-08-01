@@ -1,8 +1,8 @@
-package com.gitnova.service.agent;
+package com.gitnova.service.agent.tool;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.gitnova.dto.ToolDefinition;
-import com.gitnova.service.agent.tools.ToolExecutionContext;
+import com.gitnova.service.agent.tool.ToolExecutionContext;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 import org.springframework.stereotype.Service;

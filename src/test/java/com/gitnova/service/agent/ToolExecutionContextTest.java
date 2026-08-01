@@ -2,7 +2,8 @@ package com.gitnova.service.agent;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.gitnova.service.agent.tools.ToolExecutionContext;
+import com.gitnova.service.agent.runtime.AgentRunContext;
+import com.gitnova.service.agent.tool.ToolExecutionContext;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;

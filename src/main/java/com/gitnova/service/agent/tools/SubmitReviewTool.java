@@ -5,10 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.dto.ToolDefinition;
-import com.gitnova.service.agent.AgentTool;
-import com.gitnova.service.agent.ToolAccessMode;
-import com.gitnova.service.agent.ToolResult;
-import com.gitnova.service.agent.ToolStatus;
+import com.gitnova.service.agent.tool.AgentTool;
+import com.gitnova.service.agent.tool.ToolExecutionContext;
+import com.gitnova.service.agent.tool.ToolAccessMode;
+import com.gitnova.service.agent.tool.ToolResult;
+import com.gitnova.service.agent.tool.ToolStatus;
 import org.springframework.stereotype.Component;
 
 /**

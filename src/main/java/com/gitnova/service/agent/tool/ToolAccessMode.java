@@ -1,4 +1,4 @@
-package com.gitnova.service.agent;
+package com.gitnova.service.agent.tool;
 
 public enum ToolAccessMode {
     /**

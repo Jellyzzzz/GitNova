@@ -3,7 +3,7 @@ package com.gitnova.event;
 import com.gitnova.entity.Repository;
 import com.gitnova.gitlet.Utils;
 import com.gitnova.mapper.RepositoryMapper;
-import com.gitnova.service.agent.AgentRunContext;
+import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.CodeReviewAgentLoop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

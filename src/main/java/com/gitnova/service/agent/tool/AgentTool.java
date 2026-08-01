@@ -1,8 +1,8 @@
-package com.gitnova.service.agent;
+package com.gitnova.service.agent.tool;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.gitnova.dto.ToolDefinition;
-import com.gitnova.service.agent.tools.ToolExecutionContext;
+import com.gitnova.service.agent.tool.ToolExecutionContext;
 
 import java.util.Map;
 

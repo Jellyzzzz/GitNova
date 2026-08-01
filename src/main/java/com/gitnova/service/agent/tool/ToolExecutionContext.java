@@ -1,6 +1,6 @@
-package com.gitnova.service.agent.tools;
+package com.gitnova.service.agent.tool;
 
-import com.gitnova.service.agent.AgentRunContext;
+import com.gitnova.service.agent.runtime.AgentRunContext;
 
 import java.util.Objects;
 

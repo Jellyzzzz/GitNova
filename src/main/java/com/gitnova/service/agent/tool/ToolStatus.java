@@ -1,4 +1,4 @@
-package com.gitnova.service.agent;
+package com.gitnova.service.agent.tool;
 /**
  * 工具执行结果的机器可读状态。
  *

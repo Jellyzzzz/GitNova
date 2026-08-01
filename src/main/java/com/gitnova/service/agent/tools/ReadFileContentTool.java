@@ -2,8 +2,9 @@ package com.gitnova.service.agent.tools;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.gitnova.dto.ToolDefinition;
-import com.gitnova.service.agent.AgentTool;
-import com.gitnova.service.agent.ToolResult;
+import com.gitnova.service.agent.tool.AgentTool;
+import com.gitnova.service.agent.tool.ToolExecutionContext;
+import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.storage.ObjectStorage;
 import org.springframework.stereotype.Component;
 

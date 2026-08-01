@@ -4,7 +4,10 @@ package com.gitnova.service.agent;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.gitnova.service.agent.tools.ToolExecutionContext;
+import com.gitnova.service.agent.runtime.AgentRunContext;
+import com.gitnova.service.agent.tool.ToolExecutionContext;
+import com.gitnova.service.agent.tool.ToolRegistry;
+import com.gitnova.service.agent.tool.ToolResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

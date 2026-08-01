@@ -8,9 +8,10 @@ import com.gitnova.gitlet.Utils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.gitnova.dto.ToolDefinition;
 import com.gitnova.service.GitletService;
-import com.gitnova.service.agent.AgentTool;
-import com.gitnova.service.agent.ToolResult;
-import com.gitnova.service.agent.ToolStatus;
+import com.gitnova.service.agent.tool.AgentTool;
+import com.gitnova.service.agent.tool.ToolExecutionContext;
+import com.gitnova.service.agent.tool.ToolResult;
+import com.gitnova.service.agent.tool.ToolStatus;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -44,7 +45,7 @@ public class GetDiffTool implements AgentTool {
 
     @Override
     public ToolResult execute(ToolExecutionContext execution, JsonNode arguments) {
-        return ToolResult.error(com.gitnova.service.agent.ToolStatus.INTERNAL_ERROR,
+        return ToolResult.error(com.gitnova.service.agent.tool.ToolStatus.INTERNAL_ERROR,
                 "NOT_MIGRATED", "getDiff: v4.2 migration pending", false);
     }
 
