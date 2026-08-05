@@ -8,6 +8,7 @@ import java.util.Iterator;
 import java.util.List;
 
 public final class ToolSchemaValidator {
+    private ToolSchemaValidator() {}
     public static List<String> validate(ToolDefinition definition, JsonNode arguments){
         List<String>errors=new ArrayList<>();
         if(arguments==null||!arguments.isObject()) return List.of("arguments must be a JSON object");
@@ -18,10 +19,10 @@ public final class ToolSchemaValidator {
                 errors.add("missing required field: " + name);
             }
         }
-        Iterator<String>filedNames=arguments.fieldNames();
-        while(filedNames.hasNext())
+        Iterator<String>fieldNames=arguments.fieldNames();
+        while(fieldNames.hasNext())
         {
-            String name=filedNames.next();
+            String name=fieldNames.next();
             JsonNode value=arguments.get(name);
             JsonNode propSchema=schema.path("properties").get(name);
             if (propSchema == null) {
@@ -39,7 +40,7 @@ public final class ToolSchemaValidator {
         }
         return errors;
     }
-    public static boolean matchesType(JsonNode value,String expectedType){
+    private static boolean matchesType(JsonNode value,String expectedType){
         return switch (expectedType) {
             case "string"  -> value.isTextual();
             case "integer" -> value.isIntegralNumber();   // 1, 42（不含 3.5）

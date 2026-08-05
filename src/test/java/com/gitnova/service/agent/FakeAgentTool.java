@@ -22,11 +22,14 @@ final class FakeAgentTool implements AgentTool {
             String name,
             ToolResult resultToReturn
     ) {
-        ObjectNode inputSchema =
-                JsonNodeFactory.instance.objectNode();
+        this(name, defaultInputSchema(), resultToReturn);
+    }
 
-        inputSchema.put("type", "object");
-
+    FakeAgentTool(
+            String name,
+            ObjectNode inputSchema,
+            ToolResult resultToReturn
+    ) {
         this.definition = new ToolDefinition(
                 name,
                 "Fake tool used for ToolRegistry tests",
@@ -34,6 +37,14 @@ final class FakeAgentTool implements AgentTool {
         );
 
         this.resultToReturn = resultToReturn;
+    }
+
+    private static ObjectNode defaultInputSchema() {
+        ObjectNode inputSchema =
+                JsonNodeFactory.instance.objectNode();
+
+        inputSchema.put("type", "object");
+        return inputSchema;
     }
 
     @Override

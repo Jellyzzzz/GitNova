@@ -3,6 +3,7 @@ package com.gitnova.service.agent.tool;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.gitnova.dto.ToolDefinition;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
+import com.gitnova.service.agent.tool.schema.ToolSchemaValidator;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
@@ -72,6 +73,13 @@ public class ToolRegistry {
         }
         if(arguments==null){
             return ToolResult.error(ToolStatus.INVALID_ARGUMENT,"MISSING_TOOL_ARGUMENTS","Tool arguments must not be null",false);
+        }
+        List<String>errors= ToolSchemaValidator.validate(tool.definition(),arguments);
+        if(!errors.isEmpty()){
+            return ToolResult.error(ToolStatus.INVALID_ARGUMENT,
+                    "SCHEMA_VALIDATION_FAILED",
+                    "Invalid tool arguments",
+                    false);
         }
         try{
             ToolResult result = tool.execute(execution, arguments);

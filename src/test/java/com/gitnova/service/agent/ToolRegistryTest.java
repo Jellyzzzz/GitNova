@@ -8,6 +8,7 @@ import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
+import com.gitnova.service.agent.tool.ToolStatus;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -39,6 +40,7 @@ class ToolRegistryTest {
         FakeAgentTool fakeTool =
                 new FakeAgentTool(
                         "fakeTool",
+                        schemaRequiringString("message"),
                         expectedResult
                 );
 
@@ -85,5 +87,65 @@ class ToolRegistryTest {
                 arguments,
                 fakeTool.receivedArguments()
         );
+    }
+
+    @Test
+    void shouldRejectInvalidArgumentsWithoutExecutingTool() {
+        FakeAgentTool fakeTool = new FakeAgentTool(
+                "readFile",
+                schemaRequiringString("path"),
+                ToolResult.success(JsonNodeFactory.instance.objectNode())
+        );
+        ToolRegistry registry = new ToolRegistry(List.of(fakeTool));
+        ToolExecutionContext execution = new ToolExecutionContext(
+                createRunContext(),
+                0,
+                "call-1"
+        );
+
+        ToolResult result = registry.execute(
+                execution,
+                "readFile",
+                JsonNodeFactory.instance.objectNode()
+        );
+
+        assertEquals(ToolStatus.INVALID_ARGUMENT, result.status());
+        assertEquals("SCHEMA_VALIDATION_FAILED", result.errorCode());
+        assertEquals(0, fakeTool.invocationCount());
+    }
+
+    @Test
+    void shouldRejectUnknownArgumentsWithoutExecutingTool() {
+        FakeAgentTool fakeTool = new FakeAgentTool(
+                "listChanges",
+                schemaRequiringString("path"),
+                ToolResult.success(JsonNodeFactory.instance.objectNode())
+        );
+        ToolRegistry registry = new ToolRegistry(List.of(fakeTool));
+        ToolExecutionContext execution = new ToolExecutionContext(
+                createRunContext(),
+                0,
+                "call-1"
+        );
+        ObjectNode arguments = JsonNodeFactory.instance.objectNode();
+        arguments.put("path", "src/Main.java");
+        arguments.put("repoKey", "model-must-not-control-this");
+
+        ToolResult result = registry.execute(execution, "listChanges", arguments);
+
+        assertEquals(ToolStatus.INVALID_ARGUMENT, result.status());
+        assertEquals("SCHEMA_VALIDATION_FAILED", result.errorCode());
+        assertEquals(0, fakeTool.invocationCount());
+    }
+
+    private ObjectNode schemaRequiringString(String fieldName) {
+        ObjectNode schema = JsonNodeFactory.instance.objectNode();
+        schema.put("type", "object");
+        schema.putObject("properties")
+                .putObject(fieldName)
+                .put("type", "string");
+        schema.putArray("required").add(fieldName);
+        schema.put("additionalProperties", false);
+        return schema;
     }
 }
