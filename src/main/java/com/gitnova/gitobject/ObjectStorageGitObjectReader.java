@@ -16,8 +16,11 @@ public class ObjectStorageGitObjectReader implements GitObjectReader{
         byte[] commit = requireRawObject(repoKey, sha1);
         try {
             return Utils.deserialize(commit, Commit.class);
-        }catch (RuntimeException e){
-            throw new RuntimeException("Object is not a valid commit",e);
+        } catch (RuntimeException e) {
+            throw new GitObjectReadException(
+                    "Object is not a valid commit",
+                    e
+            );
         }
     }
 

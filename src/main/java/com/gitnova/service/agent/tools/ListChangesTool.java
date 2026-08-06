@@ -5,8 +5,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.dto.ToolDefinition;
 import com.gitnova.gitlet.Commit;
-import com.gitnova.gitlet.Repository;
-import com.gitnova.service.GitletService;
+import com.gitnova.gitobject.ObjectStorageGitObjectReader;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.AgentTool;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
@@ -25,10 +24,10 @@ import java.util.*;
 @Component
 public class ListChangesTool implements AgentTool {
 
-    private final GitletService gitletService;
+    private final ObjectStorageGitObjectReader objectStorageGitObjectReader;
 
-    public ListChangesTool(GitletService gitletService) {
-        this.gitletService = gitletService;
+    public ListChangesTool(ObjectStorageGitObjectReader objectStorageGitObjectReader) {
+        this.objectStorageGitObjectReader = objectStorageGitObjectReader;
     }
 
     @Override
@@ -55,15 +54,14 @@ public class ListChangesTool implements AgentTool {
             return ToolResult.error(ToolStatus.CONFLICT, "BASE_REVISION_MISSING", "Review context does not contain a BASE revision", false);
         }
 
-        Repository repo = gitletService.getRepository(repoKey);
-        if (!repo.commitExists(baseSha1) || !repo.commitExists(targetSha1)) {
+        Commit baseCommit=objectStorageGitObjectReader.requireCommit(repoKey,baseSha1);
+        Commit targetCommit=objectStorageGitObjectReader.requireCommit(repoKey,targetSha1);
+        if (baseCommit==null||targetCommit==null) {
             return ToolResult.error(ToolStatus.NOT_FOUND,
                     "REVISION_NOT_FOUND",
                     "Review revision does not exist in the current repository",
                     false);
         }
-        Commit baseCommit = repo.readCommit(baseSha1);
-        Commit targetCommit = repo.readCommit(targetSha1);
         Map<String, String> baseFiles = baseCommit.getMapping();
         Map<String, String> targetFiles = targetCommit.getMapping();
         Set<String> paths = new TreeSet<>();
