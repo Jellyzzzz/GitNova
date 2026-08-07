@@ -1,11 +1,19 @@
 package com.gitnova.service.agent.tools;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.github.difflib.DiffUtils;
+import com.github.difflib.patch.Patch;
 import com.gitnova.dto.ToolDefinition;
 import com.gitnova.gitlet.Commit;
+import com.gitnova.gitlet.Utils;
+import com.gitnova.gitobject.GitObjectReadException;
+import com.gitnova.gitobject.GitObjectReader;
 import com.gitnova.gitobject.ObjectStorageGitObjectReader;
+import com.gitnova.service.agent.context.ChangedFile;
+import com.gitnova.service.agent.context.DiffManifest;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.AgentTool;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
@@ -14,6 +22,7 @@ import com.gitnova.service.agent.tool.ToolStatus;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
@@ -24,10 +33,12 @@ import java.util.*;
 @Component
 public class ListChangesTool implements AgentTool {
 
-    private final ObjectStorageGitObjectReader objectStorageGitObjectReader;
+    private final GitObjectReader gitObjectReader;
+    private final ObjectMapper objectMapper;
 
-    public ListChangesTool(ObjectStorageGitObjectReader objectStorageGitObjectReader) {
-        this.objectStorageGitObjectReader = objectStorageGitObjectReader;
+    public ListChangesTool(GitObjectReader objectStorageGitObjectReader, ObjectMapper objectMapper) {
+        this.gitObjectReader = objectStorageGitObjectReader;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -47,45 +58,95 @@ public class ListChangesTool implements AgentTool {
         String repoKey = run.repoKey();
         String baseSha1 = run.baseSha1();
         String targetSha1 = run.targetSha1();
-        ObjectNode payload = JsonNodeFactory.instance.objectNode();
-        ArrayNode files = payload.putArray("files");
-
+        DiffManifest diffManifest;
+        boolean containsBinary=false;
         if (baseSha1 == null) {
             return ToolResult.error(ToolStatus.CONFLICT, "BASE_REVISION_MISSING", "Review context does not contain a BASE revision", false);
         }
+        try {
+        Commit baseCommit=gitObjectReader.requireCommit(repoKey,baseSha1);
+        Commit targetCommit=gitObjectReader.requireCommit(repoKey,targetSha1);
+        int totalAddedLines=0;
+        int totalDeletedLines=0;
+        int totalHunks=0;
+        List<ChangedFile>changedFiles=new ArrayList<>();
 
-        Commit baseCommit=objectStorageGitObjectReader.requireCommit(repoKey,baseSha1);
-        Commit targetCommit=objectStorageGitObjectReader.requireCommit(repoKey,targetSha1);
-        if (baseCommit==null||targetCommit==null) {
+            Map<String, String> baseFiles = baseCommit.getMapping();
+            Map<String, String> targetFiles = targetCommit.getMapping();
+            Set<String> paths = new TreeSet<>();
+            paths.addAll(baseFiles.keySet());
+            paths.addAll(targetFiles.keySet());
+            for (String path : paths) {
+                String language=detectLanguage(path);
+                int addedLines=0;
+                int deletedLines=0;
+                int hunks=0;
+                String oldBlob=baseFiles.get(path);
+                String newBlob=targetFiles.get(path);
+                if(Objects.equals(oldBlob,newBlob)) continue;
+                String changeType;
+                if(oldBlob==null) changeType="ADDED";
+                else if(newBlob==null) changeType="DELETED";
+                else changeType="MODIFIED";
+                byte[] oldBytes = new byte[0];
+                byte[] newBytes = new byte[0];
+                List<String>oldLines=new ArrayList<>();
+                List<String>newLines=new ArrayList<>();
+                if(oldBlob!=null){
+                    oldBytes=gitObjectReader.requireBlob(repoKey,oldBlob);
+                    if(!isBinary(oldBytes)) oldLines=toLines(oldBytes);
+                }
+                if(newBlob!=null){
+                    newBytes=gitObjectReader.requireBlob(repoKey,newBlob);
+                    if(!isBinary(newBytes)) newLines=toLines(newBytes);
+                }
+                boolean binary=isBinary(oldBytes)||isBinary(newBytes);
+                if(!binary) {
+                    Patch<String> patch = DiffUtils.diff(oldLines, newLines);
+                    for (var delta : patch.getDeltas()) {
+                        deletedLines += delta.getSource().size();
+                        addedLines += delta.getTarget().size();
+                    }
+                    hunks = patch.getDeltas().size();
+                    totalAddedLines += addedLines;
+                    totalDeletedLines += deletedLines;
+                    totalHunks += hunks;
+                }
+                else containsBinary=true;
+                ChangedFile changedFile=new ChangedFile(path,changeType,language,addedLines,deletedLines,hunks,binary);
+                changedFiles.add(changedFile);
+            }
+            diffManifest=new DiffManifest(changedFiles,changedFiles.size(),totalHunks,totalAddedLines,totalDeletedLines,containsBinary);
+            JsonNode payload=objectMapper.valueToTree(diffManifest);
+            return ToolResult.success(payload);
+        }catch(GitObjectReadException e){
             return ToolResult.error(ToolStatus.NOT_FOUND,
                     "REVISION_NOT_FOUND",
                     "Review revision does not exist in the current repository",
                     false);
         }
-        Map<String, String> baseFiles = baseCommit.getMapping();
-        Map<String, String> targetFiles = targetCommit.getMapping();
-        Set<String> paths = new TreeSet<>();
-        paths.addAll(baseFiles.keySet());
-        paths.addAll(targetFiles.keySet());
-        for (String path : paths) {
-            String changeType = "";
-            if (!baseFiles.containsKey(path) && targetFiles.containsKey(path)) {
-                changeType = "ADDED";
-            } else if (baseFiles.containsKey(path) && !targetFiles.containsKey(path)) {
-                changeType = "DELETED";
-            } else if (baseFiles.containsKey(path) && targetFiles.containsKey(path)) {
-                String baseBlob = baseFiles.get(path);
-                String targetBlob = targetFiles.get(path);
-                if (!baseBlob.equals(targetBlob)) {
-                    changeType = "MODIFIED";
-                }
-            }
-            if(changeType.isEmpty()) continue;
-            ObjectNode file = files.addObject();
-            file.put("path", path);
-            file.put("changeType", changeType);
+    }
+    private List<String>toLines(byte[] content){
+        String text=new String(content, StandardCharsets.UTF_8);
+        return text.lines().toList();
+    }
+    private String detectLanguage(String path){
+        int lastDotIndex=path.lastIndexOf('.');
+        if(lastDotIndex==-1) return "unknown";
+        String extraName=path.substring(lastDotIndex+1);
+        if(extraName.equals("java")) return "java";
+        else if(extraName.equals("py")) return "python";
+        else if(extraName.equals("js")) return "javascript";
+        else if(extraName.equals("ts")) return "typescript";
+        else if(extraName.equals("c")||extraName.equals("cpp")||extraName.equals("h")||extraName.equals("cxx")||extraName.equals("hpp"))
+            return "cpp";
+        else return "unknown";
+    }
+    private boolean isBinary(byte[] content){
+        if(content==null) return false;
+        for(byte b:content){
+            if(b==0) return true;
         }
-        payload.put("totalFiles", files.size());
-        return ToolResult.success(payload);
+        return false;
     }
 }
