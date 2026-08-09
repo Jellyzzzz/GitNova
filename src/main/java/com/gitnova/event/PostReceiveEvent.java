@@ -1,7 +1,8 @@
 package com.gitnova.event;
 
-import lombok.Data;
 import org.springframework.context.ApplicationEvent;
+
+import java.util.Objects;
 
 /**
  * Push 成功后发布的事件
@@ -13,23 +14,40 @@ import org.springframework.context.ApplicationEvent;
 public class PostReceiveEvent extends ApplicationEvent {
 
     private final Long repoId;
-    private final String commitSha1;
+    private final String baseSha1;
+    private final String targetSha1;
     private final Long pusherId;
     private final boolean requestReview;
-    public PostReceiveEvent(Object source, Long repoId, String commitSha1, Long pusherId,boolean requestReview) {
+
+    public PostReceiveEvent(
+            Object source,
+            Long repoId,
+            String baseSha1,
+            String targetSha1,
+            Long pusherId,
+            boolean requestReview
+    ) {
         super(source);
-        this.repoId = repoId;
-        this.commitSha1 = commitSha1;
+        this.repoId = Objects.requireNonNull(repoId, "repoId must not be null");
+        this.baseSha1 = baseSha1;
+        this.targetSha1 = Objects.requireNonNull(
+                targetSha1,
+                "targetSha1 must not be null"
+        );
         this.pusherId = pusherId;
-        this.requestReview=requestReview;
+        this.requestReview = requestReview;
     }
 
     public Long getRepoId() {
         return repoId;
     }
 
-    public String getCommitSha1() {
-        return commitSha1;
+    public String getBaseSha1() {
+        return baseSha1;
+    }
+
+    public String getTargetSha1() {
+        return targetSha1;
     }
 
     public Long getPusherId() {

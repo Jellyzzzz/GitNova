@@ -129,6 +129,13 @@ public class TransferService {
 
         branchMapper.updateHead(repoId,branchName,newHeadSha1);
 
-        eventPublisher.publishEvent(new PostReceiveEvent(this,repoId,newHeadSha1,authorId,requestReview));
+        eventPublisher.publishEvent(new PostReceiveEvent(
+                this,
+                repoId,
+                baseHeadSha1,
+                newHeadSha1,
+                authorId,
+                requestReview
+        ));
     }
 }

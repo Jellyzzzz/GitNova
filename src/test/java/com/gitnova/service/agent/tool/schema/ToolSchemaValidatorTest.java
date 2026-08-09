@@ -63,6 +63,23 @@ class ToolSchemaValidatorTest {
         );
     }
 
+    @Test
+    void shouldAcceptOptionalStringOrNullUnion() {
+        ObjectNode schema = definition().inputSchema().deepCopy();
+        schema.withObject("properties")
+                .putObject("cursor")
+                .putArray("type")
+                .add("string")
+                .add("null");
+        ToolDefinition definition = new ToolDefinition("getDiff", "diff", schema);
+        ObjectNode arguments = JsonNodeFactory.instance.objectNode();
+        arguments.put("path", "src/Main.java");
+        arguments.put("pageSize", 10);
+        arguments.putNull("cursor");
+
+        assertTrue(ToolSchemaValidator.validate(definition, arguments).isEmpty());
+    }
+
     private ToolDefinition definition() {
         ObjectNode schema = JsonNodeFactory.instance.objectNode();
         schema.put("type", "object");

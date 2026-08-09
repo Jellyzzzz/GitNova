@@ -33,12 +33,31 @@ public final class ToolSchemaValidator {
                 }
                 continue;
             }
-            String expected=propSchema.path("type").asText("string");
-            if(!matchesType(value,expected)){
-                errors.add("field '" + name + "' must be " + expected);
+            JsonNode typeNode = propSchema.path("type");
+            if (!matchesType(value, typeNode)) {
+                errors.add("field '" + name + "' must be " + describeType(typeNode));
             }
         }
         return errors;
+    }
+    private static boolean matchesType(JsonNode value, JsonNode typeNode) {
+        if (typeNode.isArray()) {
+            for (JsonNode candidate : typeNode) {
+                if (matchesType(value, candidate.asText())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return matchesType(value, typeNode.asText("string"));
+    }
+    private static String describeType(JsonNode typeNode) {
+        if (!typeNode.isArray()) {
+            return typeNode.asText("string");
+        }
+        List<String> types = new ArrayList<>();
+        typeNode.forEach(node -> types.add(node.asText()));
+        return String.join(" or ", types);
     }
     private static boolean matchesType(JsonNode value,String expectedType){
         return switch (expectedType) {

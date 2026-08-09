@@ -1,162 +1,359 @@
 package com.gitnova.service.agent.tools;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.difflib.DiffUtils;
 import com.github.difflib.UnifiedDiffUtils;
 import com.github.difflib.patch.Patch;
-import com.gitnova.gitlet.Commit;
-import com.gitnova.gitlet.Utils;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.gitnova.dto.ToolDefinition;
-import com.gitnova.service.GitletService;
+import com.gitnova.gitlet.Commit;
+import com.gitnova.gitobject.GitObjectReadException;
+import com.gitnova.gitobject.GitObjectReader;
+import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.AgentTool;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
 import org.springframework.stereotype.Component;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import com.gitnova.storage.ObjectStorage;
-
-/**
- * 工具 1 — 获取指定 commit 的 diff 文本
- *
- * Agent 审查代码的第一步就是调用此工具获取变更内容。
- */
-// @Component // v4.2 migration pending, temporarily disabled
+/** Returns semantic unified-diff hunks for one file in the trusted review range. */
+@Component
 public class GetDiffTool implements AgentTool {
 
-    private final GitletService gitletService;
-    private final ObjectStorage objectStorage;
+    private static final Pattern CURSOR_PATTERN = Pattern.compile("h([1-9]\\d*)");
+    private static final Pattern HUNK_HEADER_PATTERN = Pattern.compile(
+            "^@@ -(\\d+)(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@.*$"
+    );
+    private static final int MAX_HUNKS_PER_CALL = 20;
+    private static final int MAX_CONTEXT_LINES = 20;
 
-    public GetDiffTool(GitletService gitletService, ObjectStorage objectStorage) {
-        this.gitletService = gitletService;
-        this.objectStorage = objectStorage;
+    private final GitObjectReader gitObjectReader;
+
+    public GetDiffTool(GitObjectReader gitObjectReader) {
+        this.gitObjectReader = gitObjectReader;
     }
 
-    // === v4.2 新接口桩 ===
-    // v4.2 桩（Spring context 兼容，迁移后替换为真实实现）
     @Override
     public ToolDefinition definition() {
-        return new ToolDefinition("getDiff", "v4.2 migration pending",
-                com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode().put("type", "object"));
+        ObjectNode schema = JsonNodeFactory.instance.objectNode();
+        schema.put("type", "object");
+        ObjectNode properties = schema.putObject("properties");
+        properties.putObject("filePath").put("type", "string");
+        properties.putObject("cursor")
+                .putArray("type")
+                .add("string")
+                .add("null");
+        properties.putObject("maxHunks").put("type", "integer");
+        properties.putObject("contextLines").put("type", "integer");
+        schema.putArray("required")
+                .add("filePath")
+                .add("maxHunks")
+                .add("contextLines");
+        schema.put("additionalProperties", false);
+        return new ToolDefinition(
+                "getDiff",
+                "Returns paginated diff hunks for one file changed from BASE to TARGET",
+                schema
+        );
     }
 
     @Override
     public ToolResult execute(ToolExecutionContext execution, JsonNode arguments) {
-        return ToolResult.error(com.gitnova.service.agent.tool.ToolStatus.INTERNAL_ERROR,
-                "NOT_MIGRATED", "getDiff: v4.2 migration pending", false);
+        AgentRunContext run = execution.run();
+        String filePath = arguments.path("filePath").asText();
+        int maxHunks = arguments.path("maxHunks").asInt();
+        int contextLines = arguments.path("contextLines").asInt();
+        String cursor = arguments.hasNonNull("cursor")
+                ? arguments.path("cursor").asText()
+                : null;
+
+        ToolResult validationError = validateArguments(
+                filePath,
+                cursor,
+                maxHunks,
+                contextLines
+        );
+        if (validationError != null) {
+            return validationError;
+        }
+        if (run.baseSha1() == null) {
+            return ToolResult.error(
+                    ToolStatus.CONFLICT,
+                    "BASE_REVISION_MISSING",
+                    "Review context does not contain a BASE revision",
+                    false
+            );
+        }
+
+        try {
+            Commit base = gitObjectReader.requireCommit(
+                    run.repoKey(),
+                    run.baseSha1()
+            );
+            Commit target = gitObjectReader.requireCommit(
+                    run.repoKey(),
+                    run.targetSha1()
+            );
+            String oldBlob = base.getMapping().get(filePath);
+            String newBlob = target.getMapping().get(filePath);
+
+            if (Objects.equals(oldBlob, newBlob)) {
+                return ToolResult.error(
+                        ToolStatus.PERMISSION_DENIED,
+                        "FILE_OUTSIDE_CHANGE_SCOPE",
+                        "Requested file is not changed in the current review range",
+                        false
+                );
+            }
+
+            byte[] oldBytes = oldBlob == null
+                    ? new byte[0]
+                    : gitObjectReader.requireBlob(run.repoKey(), oldBlob);
+            byte[] newBytes = newBlob == null
+                    ? new byte[0]
+                    : gitObjectReader.requireBlob(run.repoKey(), newBlob);
+            if (isBinary(oldBytes) || isBinary(newBytes)) {
+                return ToolResult.error(
+                        ToolStatus.INVALID_ARGUMENT,
+                        "BINARY_DIFF_UNSUPPORTED",
+                        "Diff hunks are not available for binary files",
+                        false
+                );
+            }
+
+            List<String> oldLines = decodeLines(oldBytes);
+            List<String> newLines = decodeLines(newBytes);
+            List<DiffHunk> hunks = buildHunks(
+                    filePath,
+                    oldBlob,
+                    newBlob,
+                    oldLines,
+                    newLines,
+                    contextLines
+            );
+            int startIndex = cursorStartIndex(cursor, hunks.size());
+            if (startIndex < 0) {
+                return invalidArgument(
+                        "INVALID_DIFF_CURSOR",
+                        "Cursor does not identify a hunk in this diff"
+                );
+            }
+
+            int endIndex = Math.min(startIndex + maxHunks, hunks.size());
+            boolean hasMore = endIndex < hunks.size();
+            ObjectNode payload = JsonNodeFactory.instance.objectNode();
+            payload.put("filePath", filePath);
+            ArrayNode hunkArray = payload.putArray("hunks");
+            for (int index = startIndex; index < endIndex; index++) {
+                DiffHunk hunk = hunks.get(index);
+                ObjectNode hunkNode = hunkArray.addObject();
+                hunkNode.put("hunkId", "h" + (index + 1));
+                hunkNode.put("oldStart", hunk.oldStart());
+                hunkNode.put("newStart", hunk.newStart());
+                ArrayNode lines = hunkNode.putArray("lines");
+                hunk.lines().forEach(lines::add);
+            }
+            if (hasMore) {
+                payload.put("nextCursor", "h" + (endIndex + 1));
+            } else {
+                payload.putNull("nextCursor");
+            }
+            payload.put("hasMore", hasMore);
+            return ToolResult.success(payload, hasMore);
+        } catch (GitObjectReadException e) {
+            return mapReadFailure(e);
+        } catch (CharacterCodingException e) {
+            return ToolResult.error(
+                    ToolStatus.INVALID_ARGUMENT,
+                    "UNSUPPORTED_FILE_ENCODING",
+                    "Diff is only available for valid UTF-8 text files",
+                    false
+            );
+        }
     }
 
-    // === v3.6 旧代码保留，迁移后删除 ===
-
-    public String name() {
-        return "getDiff";
+    private ToolResult validateArguments(
+            String filePath,
+            String cursor,
+            int maxHunks,
+            int contextLines
+    ) {
+        if (!isSafeRepositoryPath(filePath)) {
+            return ToolResult.error(
+                    ToolStatus.PERMISSION_DENIED,
+                    "INVALID_REPOSITORY_PATH",
+                    "File path must be a normalized repository-relative path",
+                    false
+            );
+        }
+        if (maxHunks < 1 || maxHunks > MAX_HUNKS_PER_CALL) {
+            return invalidArgument(
+                    "INVALID_MAX_HUNKS",
+                    "maxHunks must be between 1 and " + MAX_HUNKS_PER_CALL
+            );
+        }
+        if (contextLines < 0 || contextLines > MAX_CONTEXT_LINES) {
+            return invalidArgument(
+                    "INVALID_CONTEXT_LINES",
+                    "contextLines must be between 0 and " + MAX_CONTEXT_LINES
+            );
+        }
+        if (cursor != null && !CURSOR_PATTERN.matcher(cursor).matches()) {
+            return invalidArgument(
+                    "INVALID_DIFF_CURSOR",
+                    "Cursor must use the hunk format hN"
+            );
+        }
+        return null;
     }
 
-    public String description() {
-        return "获取指定 commit 的 diff 文本";
+    private int cursorStartIndex(String cursor, int hunkCount) {
+        if (cursor == null) {
+            return 0;
+        }
+        Matcher matcher = CURSOR_PATTERN.matcher(cursor);
+        if (!matcher.matches()) {
+            return -1;
+        }
+        try {
+            int index = Integer.parseInt(matcher.group(1)) - 1;
+            return index >= 0 && index < hunkCount ? index : -1;
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
-    public Map<String, Object> parametersSchema() {
-        Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("type", "object");
-        Map<String, Object> props = new LinkedHashMap<>();
-        props.put("commitSha1", Map.of("type", "string", "description", "commit的SHA-1"));
-        schema.put("properties", props);
-        schema.put("required", List.of("commitSha1"));
-        return schema;
-    }
-
-    /** @deprecated v4.2 待迁移到 execute(ToolExecutionContext, JsonNode) */
-    public String execute(Map<String, String> params) {
-        // TODO: Phase 4 — 从 ObjectStorage 读取 Commit，与父 Commit 比对生成 diff
-        String repoKey = params.get("repoKey");  // Loop 注入
-        String commitSha1 = params.get("commitSha1");  // LLM 传入
-        if (repoKey == null || commitSha1 == null) return "Error: Missing required parameters.";
-        byte[] bytes=objectStorage.readObject(repoKey,commitSha1);
-        if(bytes==null) return "Error: Commit " + commitSha1 + " not found in repository.";
-        Commit commit= Utils.deserialize(bytes,Commit.class);
-
-        if(commit.getParentCommit()==null) {
-            Map<String,String>mapping=commit.getMapping();
-            StringBuilder sb=new StringBuilder();
-            sb.append("Commit: ").append(commitSha1).append(" (initial commit)\n");
-            sb.append("Files: ").append(mapping.size()).append(" new\n\n");
-
-            for(Map.Entry<String,String>entry:mapping.entrySet()){
-                String filePath=entry.getKey();
-                String blobSha1=entry.getValue();
-                byte[] content=objectStorage.readObject(repoKey,blobSha1);
-                String[] lines = new String(content, StandardCharsets.UTF_8).split("\n", -1);
-
-                sb.append("--- /dev/null\n");
-                sb.append("+++ b/").append(filePath).append("\n");
-                sb.append("@@ -0,0 +1,").append(lines.length).append(" @@\n");
-                for (String line : lines) {
-                    sb.append("+").append(line).append("\n");
+    private List<DiffHunk> buildHunks(
+            String filePath,
+            String oldBlob,
+            String newBlob,
+            List<String> oldLines,
+            List<String> newLines,
+            int contextLines
+    ) {
+        Patch<String> patch = DiffUtils.diff(oldLines, newLines);
+        String oldName = oldBlob == null ? "/dev/null" : "a/" + filePath;
+        String newName = newBlob == null ? "/dev/null" : "b/" + filePath;
+        List<String> unified = UnifiedDiffUtils.generateUnifiedDiff(
+                oldName,
+                newName,
+                oldLines,
+                patch,
+                contextLines
+        );
+        List<DiffHunk> hunks = new ArrayList<>();
+        int oldStart = 0;
+        int newStart = 0;
+        List<String> currentLines = null;
+        for (String line : unified) {
+            Matcher matcher = HUNK_HEADER_PATTERN.matcher(line);
+            if (matcher.matches()) {
+                if (currentLines != null) {
+                    hunks.add(new DiffHunk(oldStart, newStart, List.copyOf(currentLines)));
                 }
-                sb.append("\n");
+                oldStart = Integer.parseInt(matcher.group(1));
+                newStart = Integer.parseInt(matcher.group(2));
+                currentLines = new ArrayList<>();
+                currentLines.add(line);
+            } else if (currentLines != null) {
+                currentLines.add(line);
             }
-            return sb.toString();
         }
-        Commit parent=Utils.deserialize(objectStorage.readObject(repoKey,commit.getParentCommit()),Commit.class);
-        Map<String,String>childMap=commit.getMapping();
-        Map<String,String>parentMap=parent.getMapping();
+        if (currentLines != null) {
+            hunks.add(new DiffHunk(oldStart, newStart, List.copyOf(currentLines)));
+        }
+        return hunks;
+    }
 
-        Set<String> newFiles = new HashSet<>(childMap.keySet());
-        Set<String> deletedFiles = new HashSet<>(parentMap.keySet());
-        newFiles.removeAll(parentMap.keySet());                    // child有,parent无
-        deletedFiles.removeAll(childMap.keySet());                  // parent有,child无
+    private List<String> decodeLines(byte[] content)
+            throws CharacterCodingException {
+        if (content.length == 0) {
+            return List.of();
+        }
+        String text = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(content))
+                .toString();
+        return text.lines().toList();
+    }
 
-        Set<String> modified = new HashSet<>(childMap.keySet());
-        modified.retainAll(parentMap.keySet());                     // 两边都有
-        modified.removeIf(f -> parentMap.get(f).equals(childMap.get(f)));  // SHA-1相同的排除
-        StringBuilder sb=new StringBuilder();
-        for (String filePath : newFiles) {
-            String blobSha1 = childMap.get(filePath);
-            byte[] content = objectStorage.readObject(repoKey, blobSha1);
-            String blob = new String(content, StandardCharsets.UTF_8);
-            String[] newLines = blob.split("\n", -1);
-            sb.append("--- /dev/null\n");
-            sb.append("+++ b/").append(filePath).append("\n");
-            sb.append("@@ -0,0 +1,").append(newLines.length).append(" @@\n");
-            for (String line : newLines) {
-                sb.append("+").append(line).append("\n");
+    private boolean isBinary(byte[] content) {
+        for (byte value : content) {
+            if (value == 0) {
+                return true;
             }
-            sb.append("\n");
         }
-        for (String filePath : deletedFiles) {
-            String blobSha1 = parentMap.get(filePath);
-            byte[] content = objectStorage.readObject(repoKey, blobSha1);
-            String blob = new String(content, StandardCharsets.UTF_8);
-            String[] oldLines = blob.split("\n", -1);
-            sb.append("--- a/").append(filePath).append("\n");
-            sb.append("+++ /dev/null\n");
-            sb.append("@@ -1,").append(oldLines.length).append(" +0,0 @@\n");
-            for (String line : oldLines) {
-                sb.append("-").append(line).append("\n");
-            }
-            sb.append("\n");
-        }
-        for (String filePath : modified) {
-            String oldSha1 = parentMap.get(filePath);
-            String newSha1 = childMap.get(filePath);
-            String oldContent = new String(objectStorage.readObject(repoKey, oldSha1), StandardCharsets.UTF_8);
-            String newContent = new String(objectStorage.readObject(repoKey, newSha1), StandardCharsets.UTF_8);
-            List<String> oldLines = List.of(oldContent.split("\n", -1));
-            List<String> newLines = List.of(newContent.split("\n", -1));
+        return false;
+    }
 
-            Patch<String> patch = DiffUtils.diff(oldLines, newLines);
-            sb.append("--- a/").append(filePath).append("\n");
-            sb.append("+++ b/").append(filePath).append("\n");
-            for (String line : UnifiedDiffUtils.generateUnifiedDiff(
-                    "a/" + filePath, "b/" + filePath, oldLines, patch, 3)) {
-                sb.append(line).append("\n");
-            }
-            sb.append("\n");
+    private boolean isSafeRepositoryPath(String path) {
+        if (path == null || path.isBlank() || path.length() > 4096) {
+            return false;
         }
-        return sb.toString();
+        if (path.indexOf('\0') >= 0
+                || path.startsWith("/")
+                || path.startsWith("\\")
+                || path.matches("^[A-Za-z]:.*")
+                || path.contains("\\")) {
+            return false;
+        }
+        for (String segment : path.split("/", -1)) {
+            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private ToolResult mapReadFailure(GitObjectReadException exception) {
+        return switch (exception.reason()) {
+            case NOT_FOUND -> ToolResult.error(
+                    ToolStatus.NOT_FOUND,
+                    "GIT_OBJECT_NOT_FOUND",
+                    "Required Git object was not found in the current repository",
+                    false
+            );
+            case CORRUPT -> ToolResult.error(
+                    ToolStatus.INTERNAL_ERROR,
+                    "CORRUPT_GIT_OBJECT",
+                    "Required Git object is corrupt or has an unexpected type",
+                    false
+            );
+            case TRANSIENT -> ToolResult.error(
+                    ToolStatus.TRANSIENT_ERROR,
+                    "GIT_OBJECT_READ_FAILED",
+                    "Git object storage is temporarily unavailable",
+                    true
+            );
+        };
+    }
+
+    private ToolResult invalidArgument(String code, String message) {
+        return ToolResult.error(
+                ToolStatus.INVALID_ARGUMENT,
+                code,
+                message,
+                false
+        );
+    }
+
+    private record DiffHunk(
+            int oldStart,
+            int newStart,
+            List<String> lines
+    ) {
     }
 }

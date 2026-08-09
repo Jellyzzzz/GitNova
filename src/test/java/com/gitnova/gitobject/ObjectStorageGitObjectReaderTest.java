@@ -48,6 +48,7 @@ class ObjectStorageGitObjectReaderTest {
     @Test
     void shouldWrapStorageFailureAndPreserveCause() {
         FakeObjectStorage storage = new FakeObjectStorage();
+        storage.writeObject(REPO_KEY, "blob-sha", new byte[]{1});
         IllegalStateException storageFailure =
                 new IllegalStateException("storage unavailable");
         storage.failReadsWith(storageFailure);
@@ -59,7 +60,8 @@ class ObjectStorageGitObjectReaderTest {
                 () -> reader.requireBlob(REPO_KEY, "blob-sha")
         );
 
-        assertEquals("Failed to read Object", exception.getMessage());
+        assertEquals("Failed to read object", exception.getMessage());
+        assertEquals(GitObjectReadException.Reason.TRANSIENT, exception.reason());
         assertSame(storageFailure, exception.getCause());
     }
 
@@ -76,7 +78,40 @@ class ObjectStorageGitObjectReaderTest {
         );
 
         assertEquals("Object is not a valid commit", exception.getMessage());
+        assertEquals(GitObjectReadException.Reason.CORRUPT, exception.reason());
         assertNotNull(exception.getCause());
+    }
+
+    @Test
+    void shouldRejectCommitWithInvalidInternalState() {
+        FakeObjectStorage storage = new FakeObjectStorage();
+        Commit invalid = new Commit("invalid", null);
+        invalid.setMapping(null);
+        storage.writeObject(REPO_KEY, "invalid-commit", Utils.serialize(invalid));
+
+        GitObjectReader reader = new ObjectStorageGitObjectReader(storage);
+
+        GitObjectReadException exception = assertThrows(
+                GitObjectReadException.class,
+                () -> reader.requireCommit(REPO_KEY, "invalid-commit")
+        );
+
+        assertEquals(GitObjectReadException.Reason.CORRUPT, exception.reason());
+        assertEquals("Object is not a valid commit", exception.getMessage());
+    }
+
+    @Test
+    void shouldClassifyAbsentObjectAsNotFound() {
+        GitObjectReader reader = new ObjectStorageGitObjectReader(
+                new FakeObjectStorage()
+        );
+
+        GitObjectReadException exception = assertThrows(
+                GitObjectReadException.class,
+                () -> reader.requireBlob(REPO_KEY, "missing")
+        );
+
+        assertEquals(GitObjectReadException.Reason.NOT_FOUND, exception.reason());
     }
 
     @Test

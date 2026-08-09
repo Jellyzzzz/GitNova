@@ -50,7 +50,7 @@ public class CodeReviewListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onPostReceive(PostReceiveEvent event) {
         if(!event.isRequestReview()) {
-            log.info("Review skipped for commit={} (requestReview=false)", event.getCommitSha1());
+            log.info("Review skipped for commit={} (requestReview=false)", event.getTargetSha1());
             return;
         }
         try {
@@ -63,13 +63,19 @@ public class CodeReviewListener {
             String repoKey = Utils.join(String.valueOf(repo.getOwnerId()),String.valueOf(event.getRepoId())).getPath();
 
             log.info("Starting ReAct Agent review for repo={} repoKey={} commit={}",
-                     event.getRepoId(), repoKey, event.getCommitSha1());
-            AgentRunContext context =new AgentRunContext(UUID.randomUUID().toString(),event.getRepoId(),repoKey,null, event.getCommitSha1());
+                     event.getRepoId(), repoKey, event.getTargetSha1());
+            AgentRunContext context = new AgentRunContext(
+                    UUID.randomUUID().toString(),
+                    event.getRepoId(),
+                    repoKey,
+                    event.getBaseSha1(),
+                    event.getTargetSha1()
+            );
             String reviewResult = agentLoop.runAgentLoop(context);
-            log.info("ReAct Agent review completed for commit={}: {}", event.getCommitSha1(), reviewResult);
+            log.info("ReAct Agent review completed for commit={}: {}", event.getTargetSha1(), reviewResult);
         } catch (Exception e) {
             log.error("ReAct Agent review failed for commit={}, push result unaffected",
-                      event.getCommitSha1(), e);
+                      event.getTargetSha1(), e);
         }
     }
 }
