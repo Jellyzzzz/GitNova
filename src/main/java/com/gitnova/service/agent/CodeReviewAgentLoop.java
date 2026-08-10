@@ -3,6 +3,7 @@ package com.gitnova.service.agent;
 import com.gitnova.dto.ToolCall;
 import com.gitnova.service.agent.context.ReviewScope;
 import com.gitnova.service.agent.context.Revision;
+import com.gitnova.service.agent.model.ModelUsage;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import org.slf4j.Logger;
@@ -10,7 +11,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * ReAct Code Review Agent — 核心循环
@@ -89,9 +92,8 @@ public class CodeReviewAgentLoop {
      * 执行工具 — 注入上下文参数 + 安全防御
      *
      * 🔒 安全原则：
-     * 1. 先放 LLM 参数 (call.params)，再放框架参数 (repoKey)
-     *    顺序保证框架覆盖 LLM，类似 HTTP header 注入防御
-     * 2. submitReview 是终止信号，额外注入 repoId 供写库
+     * v4.2 工具不再把可信上下文混入模型 arguments；Runtime 应将
+     * AgentRunContext 放入 ToolExecutionContext 后交给 ToolRegistry。
      *
      * @param call LLM 返回的工具调用
      * @return 工具执行结果（Observation）
@@ -100,7 +102,7 @@ public class CodeReviewAgentLoop {
         Objects.requireNonNull(context, "context must not be null");
         Objects.requireNonNull(call, "tool call must not be null");
         String toolName = Objects.requireNonNull(
-                call.getName(),
+                call.name(),
                 "tool call name must not be null"
         );
 
@@ -109,19 +111,7 @@ public class CodeReviewAgentLoop {
                     "tool call name must not be blank"
             );
         }
-        Map<String, String> merged = new LinkedHashMap<>();
-        // ① 先放 LLM 参数（不可信）
-        if(call.getParams()!=null){
-            merged.putAll(call.getParams());
-        }
-        // ② 框架注入，后放覆盖同名参数（防 LLM 注入攻击）
-        merged.put("repoKey", context.repoKey());
-        merged.put("commitSha1", context.targetSha1());
-        if ("submitReview".equals(call.getName())) {
-            merged.put("repoId",String.valueOf(context.repoId()));
-        }
-
-        // TODO: v4.2 — 迁移到 ToolExecutionContext + JsonNode，当前为编译兼容临时桥接
+        // TODO: v4.2 — AgentRuntime will create ToolExecutionContext and dispatch via ToolRegistry.
         throw new UnsupportedOperationException("Phase 4: 待实现");
     }
 
@@ -135,5 +125,10 @@ public class CodeReviewAgentLoop {
         Objects.requireNonNull(context, "context must not be null");
         // TODO: Phase 4 — 构造完整的 System Prompt
         throw new UnsupportedOperationException("Phase 4: 待实现");
+    }
+    private static final class RunState{
+        private int modelCallCount;
+        private int toolCallCount;
+        private final List<ModelUsage>modelUsages=new ArrayList<>();
     }
 }

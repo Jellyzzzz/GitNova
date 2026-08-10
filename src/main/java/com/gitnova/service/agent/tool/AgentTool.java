@@ -43,6 +43,10 @@ public interface AgentTool {
      * 当前 Tool Bean 是否支持并发调用。
      */
     default boolean concurrencySafe() {
-        return true;
+        return false;
     }
+    /**
+     * 当前工具是否为terminal工具
+     */
+    default boolean terminal() {return false;}
 }

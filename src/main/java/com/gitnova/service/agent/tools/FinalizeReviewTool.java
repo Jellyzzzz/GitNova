@@ -174,4 +174,6 @@ public class FinalizeReviewTool implements AgentTool {
                 schema
         );
     }
+    @Override
+    public boolean terminal(){return true;}
 }
