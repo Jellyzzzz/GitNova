@@ -7,6 +7,5 @@ package com.gitnova.service.agent.model;
  * The runtime only sees the model types in this package.</p>
  */
 public interface ModelGateway {
-
     ModelResponse complete(ModelRequest request);
 }

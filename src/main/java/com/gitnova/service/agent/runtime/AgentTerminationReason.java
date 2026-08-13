@@ -1,12 +1,14 @@
 package com.gitnova.service.agent.runtime;
 
-public enum AgentTerminationReason {FINALIZE_SUCCEEDED,
-    MODEL_STOPPED_WITHOUT_FINALIZE,
+/** The final reason a Run stopped, not an intermediate model protocol event. */
+public enum AgentTerminationReason {
+    FINALIZE_SUCCEEDED,
+    INVALID_FINAL_DRAFT,
     MODEL_OUTPUT_LENGTH,
     MODEL_CONTENT_FILTERED,
     MAX_MODEL_CALLS_REACHED,
     MAX_TOOL_CALLS_REACHED,
     MODEL_GATEWAY_FAILURE,
     INVALID_MODEL_PROTOCOL,
-    MIXED_TERMINAL_TOOL_CALLS
+    PROTOCOL_CORRECTION_EXHAUSTED
 }
