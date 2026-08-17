@@ -1,6 +1,6 @@
 package com.gitnova.storage;
 
-import java.util.*;
+import java.util.Set;
 
 public interface ObjectStorage {
     void writeObject(String repoKey, String sha1, byte[] content);

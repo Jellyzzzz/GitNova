@@ -1,25 +1,29 @@
 package com.gitnova.service;
 
-
-import com.gitnova.gitlet.Utils ; // 确保引入了你的 Utils.sha1 方法
+import com.gitnova.gitlet.Utils;
+import com.gitnova.storage.FakeObjectStorage;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// 这个注解会启动 Spring 容器，帮你把需要的 Service 和配置自动注入进来
-@SpringBootTest
-public class TransferServiceTest {
-
-    @Autowired
-    private TransferService transferService;
+class TransferServiceTest {
 
     @Test
-    public void testUnpackAndStore() throws Exception {
+    void shouldUnpackAndStoreVerifiedObjectWithoutSpringContext() {
+        FakeObjectStorage objectStorage = new FakeObjectStorage();
+        TransferService transferService = new TransferService(
+                null,
+                null,
+                null,
+                null,
+                objectStorage,
+                null
+        );
+
         // 1. 准备要传输的文件内容
         String fileContent = "Hello GitNova! This is a unit test file.";
         byte[] contentBytes = fileContent.getBytes(StandardCharsets.UTF_8);
@@ -45,7 +49,6 @@ public class TransferServiceTest {
 
         // 5. 断言（Assert）：期待成功解包 1 个对象
         assertEquals(1, storedCount, "解包数量应为 1");
-
-        System.out.println("✅ 单元测试通过！成功解包并写入本地！SHA-1: " + sha1);
+        assertTrue(objectStorage.existsObject(testRepoKey, sha1));
     }
 }

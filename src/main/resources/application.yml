@@ -68,7 +68,11 @@ gitnova:
 
   # 仓库存储根目录（两台机器通过环境变量设不同路径）
   repo:
-    base-path: ${REPO_BASE_PATH:D:/gitnova-repos}
+    base-path: ${REPO_BASE_PATH:./data/repos}
+
+  workspace:
+    base-path: ${WORKSPACE_BASE_PATH:./data/workspaces}
+
 
   # LLM API配置（Phase 4 Agent使用）
   llm:
@@ -86,3 +90,7 @@ gitnova:
   transfer:
     max-objects-per-push: 10000   # 单次push最大对象数，防止恶意大push
     chunk-size: 4096              # 分块读写字节数
+
+  agent:
+    artifact:
+      base-path: ${AGENT_ARTIFACT_BASE_PATH:./data/agent-artifacts}

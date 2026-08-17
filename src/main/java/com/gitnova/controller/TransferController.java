@@ -15,6 +15,7 @@ import com.gitnova.mapper.RepoMemberMapper;
 import com.gitnova.mapper.RepositoryMapper;
 import com.gitnova.service.ObjectNegotiationService;
 import com.gitnova.service.TransferService;
+import com.gitnova.storage.RepoKey;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -72,7 +73,7 @@ public class TransferController {
         wrapper.eq(RepoMember::getUserId,userId).eq(RepoMember::getRepoId,repoId);
         RepoMember member=repoMemberMapper.selectOne(wrapper);
         if(member==null) return ApiResponse.error(403,"无权访问该仓库");
-        String repoKey= Utils.join(String.valueOf(repo.getOwnerId()),String.valueOf(repoId)).getPath();
+        String repoKey= RepoKey.of(repo.getOwnerId(),repo.getId()).value();
         NegotiationResponse res=negotiationService.negotiate(repoKey,request);
         return ApiResponse.success(res);
     }
@@ -103,7 +104,7 @@ public class TransferController {
             RepoMember member = repoMemberMapper.selectOne(wrapper);
             if (member == null) return ApiResponse.error(403, "用户权限不足");
             TransferMetadata metadata = objectMapper.readValue(metadataJson, TransferMetadata.class);
-            String repoKey=Utils.join(String.valueOf(repo.getOwnerId()),String.valueOf(repoId)).getPath();
+            String repoKey= RepoKey.of(repo.getOwnerId(),repo.getId()).value();
             int count=transferService.unpackAndStore(repoKey, objectsFile.getBytes());
             transferService.updateHead(repoId, repoKey, metadata.getBaseHeadSha1(), metadata.getNewHeadSha1(), metadata.getBranchName(), metadata.getCommitMessage(), userId,metadata.isReview());
             return ApiResponse.success(Map.of("newHeadSha1", metadata.getNewHeadSha1(), "objectsStored", count));
