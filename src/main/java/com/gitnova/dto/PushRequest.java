@@ -15,6 +15,9 @@ public class PushRequest {
     /** 客户端当前 HEAD commit SHA-1 */
     private String localHeadSha1;
 
+    /** Target branch; defaults to the hosted default branch. */
+    private String branchName = "main";
+
     /** 客户端本地所有对象的 SHA-1 列表（非文件内容，只是哈希字符串） */
     private List<String> localObjects;
 }

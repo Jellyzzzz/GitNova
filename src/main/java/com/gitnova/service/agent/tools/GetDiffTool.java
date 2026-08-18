@@ -8,7 +8,8 @@ import com.github.difflib.DiffUtils;
 import com.github.difflib.UnifiedDiffUtils;
 import com.github.difflib.patch.Patch;
 import com.gitnova.dto.ToolDefinition;
-import com.gitnova.gitlet.Commit;
+import com.gitnova.gitobject.CommitObject;
+import com.gitnova.gitobject.GitObjectId;
 import com.gitnova.gitobject.GitObjectReadException;
 import com.gitnova.gitobject.GitObjectReader;
 import com.gitnova.service.agent.runtime.AgentRunContext;
@@ -98,16 +99,16 @@ public class GetDiffTool implements AgentTool {
         }
 
         try {
-            Commit base = gitObjectReader.requireCommit(
+            CommitObject base = gitObjectReader.requireCommit(
                     run.repoKey(),
                     run.baseSha1()
             );
-            Commit target = gitObjectReader.requireCommit(
+            CommitObject target = gitObjectReader.requireCommit(
                     run.repoKey(),
                     run.targetSha1()
             );
-            String oldBlob = base.getMapping().get(filePath);
-            String newBlob = target.getMapping().get(filePath);
+            GitObjectId oldBlob = base.mapping().get(filePath);
+            GitObjectId newBlob = target.mapping().get(filePath);
 
             if (Objects.equals(oldBlob, newBlob)) {
                 return ToolResult.error(
@@ -120,10 +121,10 @@ public class GetDiffTool implements AgentTool {
 
             byte[] oldBytes = oldBlob == null
                     ? new byte[0]
-                    : gitObjectReader.requireBlob(run.repoKey(), oldBlob);
+                    : gitObjectReader.requireBlob(run.repoKey(), oldBlob.value());
             byte[] newBytes = newBlob == null
                     ? new byte[0]
-                    : gitObjectReader.requireBlob(run.repoKey(), newBlob);
+                    : gitObjectReader.requireBlob(run.repoKey(), newBlob.value());
             if (isBinary(oldBytes) || isBinary(newBytes)) {
                 return ToolResult.error(
                         ToolStatus.INVALID_ARGUMENT,
@@ -137,8 +138,8 @@ public class GetDiffTool implements AgentTool {
             List<String> newLines = decodeLines(newBytes);
             List<DiffHunk> hunks = buildHunks(
                     filePath,
-                    oldBlob,
-                    newBlob,
+                    oldBlob == null ? null : oldBlob.value(),
+                    newBlob == null ? null : newBlob.value(),
                     oldLines,
                     newLines,
                     contextLines

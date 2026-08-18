@@ -27,8 +27,8 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: 500MB       # 单文件最大500MB
-      max-request-size: 500MB
+      max-file-size: 128MB       # HTTP 外层保护；协议内层限制见 gitnova.transfer
+      max-request-size: 128MB
 
   # ===== 异步线程池：Spring Event @Async使用 =====
   task:
@@ -84,12 +84,13 @@ gitnova:
   # 存储策略（Phase 1 接口，Phase 2 起用）
   storage:
     type: local                    # local | minio（未来扩展）
-    max-object-size: 524288000     # 单个对象最大 500 MB（与 multipart 限制对齐）
 
   # 对象传输配置（Phase 2）
   transfer:
-    max-objects-per-push: 10000   # 单次push最大对象数，防止恶意大push
-    chunk-size: 4096              # 分块读写字节数
+    max-objects-per-push: 10000
+    max-object-size: 32MB
+    max-pack-size: 128MB
+    io-buffer-size: 64KB
 
   agent:
     artifact:

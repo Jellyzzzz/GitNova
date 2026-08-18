@@ -5,7 +5,8 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.dto.ToolDefinition;
-import com.gitnova.gitlet.Commit;
+import com.gitnova.gitobject.CommitObject;
+import com.gitnova.gitobject.GitObjectId;
 import com.gitnova.gitobject.GitObjectReadException;
 import com.gitnova.gitobject.GitObjectReader;
 import com.gitnova.service.agent.context.Revision;
@@ -112,11 +113,11 @@ public class ReadFileTool implements AgentTool {
         }
 
         try {
-            Commit commit = gitObjectReader.requireCommit(
+            CommitObject commit = gitObjectReader.requireCommit(
                     run.repoKey(),
                     revisionSha
             );
-            String blobSha = commit.getMapping().get(filePath);
+            GitObjectId blobSha = commit.mapping().get(filePath);
             if (blobSha == null) {
                 return ToolResult.error(
                         ToolStatus.NOT_FOUND,
@@ -125,7 +126,7 @@ public class ReadFileTool implements AgentTool {
                         false
                 );
             }
-            byte[] content = gitObjectReader.requireBlob(run.repoKey(), blobSha);
+            byte[] content = gitObjectReader.requireBlob(run.repoKey(), blobSha.value());
             if (content.length > MAX_FILE_BYTES) {
                 return invalidArgument(
                         "FILE_TOO_LARGE",

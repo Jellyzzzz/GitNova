@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS user (
 
 -- =============================================
 -- 仓库表
--- ⚠️ Warning：head_commit_sha1 是整个并发控制的核心字段
---    所有 CAS 校验都基于这一列，不要随意加索引或触发器修改它
+-- head_commit_sha1 is a cache of the default branch. Hosted-push CAS uses
+-- branch.head_commit, which is the authoritative per-branch pointer.
 -- =============================================
 CREATE TABLE IF NOT EXISTS repository (
     id               BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS repository (
     owner_id         BIGINT NOT NULL,
     is_private       TINYINT  DEFAULT 1,
     description      VARCHAR(255),
-    head_commit_sha1 VARCHAR(40),                -- CAS 乐观锁目标列
+    head_commit_sha1 VARCHAR(40),                -- default branch cache, non-authoritative
     created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_owner_name (owner_id, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -48,8 +48,8 @@ CREATE TABLE IF NOT EXISTS repo_member (
 
 -- =============================================
 -- Commit 元数据索引层
--- 💡 Design Note：Gitlet 的 Commit 对象本身序列化存磁盘，
---    这张表只是"索引"，目的是让前端展示 commit log 时不用
+-- Commit objects are canonical bytes in ObjectStorage; this table is only
+--    a rebuildable index for front-end commit-log queries, avoiding
 --    扫描磁盘文件，直接走 SQL 查询。两者必须保持同步写入。
 -- =============================================
 CREATE TABLE IF NOT EXISTS commit_record (
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS branch (
     id          BIGINT PRIMARY KEY AUTO_INCREMENT,
     repo_id     BIGINT      NOT NULL,
     name        VARCHAR(100) NOT NULL,
-    head_commit VARCHAR(40)  NOT NULL,
+    head_commit VARCHAR(40)  NOT NULL,           -- authoritative branch pointer
     UNIQUE KEY uk_repo_branch (repo_id, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

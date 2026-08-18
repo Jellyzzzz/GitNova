@@ -12,19 +12,8 @@ import org.apache.ibatis.annotations.Update;
 @Mapper
 public interface RepositoryMapper extends BaseMapper<Repository> {
 
-    /**
-     * CAS 更新 HEAD commit SHA-1（乐观锁核心）
-     *
-     * 只有当前 head_commit_sha1 == baseHeadSha1 时才更新，否则 affected rows = 0
-     *
-     * @param repoId       仓库 ID
-     * @param baseHeadSha1 客户端认为的当前 HEAD
-     * @param newHeadSha1  新的 HEAD
-     * @return affected rows（0 = CAS 失败 → non-fast-forward）
-     */
-    @Update("UPDATE repository SET head_commit_sha1 = #{newHeadSha1} "
-          + "WHERE id = #{repoId} AND head_commit_sha1 = #{baseHeadSha1}")
-    int casUpdateHead(@Param("repoId") Long repoId,
-                      @Param("baseHeadSha1") String baseHeadSha1,
-                      @Param("newHeadSha1") String newHeadSha1);
+    /** Non-authoritative cache update after the default branch CAS has succeeded. */
+    @Update("UPDATE repository SET head_commit_sha1 = #{headSha1} WHERE id = #{repoId}")
+    int updateDefaultBranchHeadCache(@Param("repoId") Long repoId,
+                                     @Param("headSha1") String headSha1);
 }

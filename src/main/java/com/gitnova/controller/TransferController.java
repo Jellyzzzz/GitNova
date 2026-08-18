@@ -10,7 +10,6 @@ import com.gitnova.dto.PushRequest;
 import com.gitnova.dto.TransferMetadata;
 import com.gitnova.entity.RepoMember;
 import com.gitnova.entity.Repository;
-import com.gitnova.gitlet.Utils;
 import com.gitnova.mapper.RepoMemberMapper;
 import com.gitnova.mapper.RepositoryMapper;
 import com.gitnova.service.ObjectNegotiationService;
@@ -74,7 +73,7 @@ public class TransferController {
         RepoMember member=repoMemberMapper.selectOne(wrapper);
         if(member==null) return ApiResponse.error(403,"无权访问该仓库");
         String repoKey= RepoKey.of(repo.getOwnerId(),repo.getId()).value();
-        NegotiationResponse res=negotiationService.negotiate(repoKey,request);
+        NegotiationResponse res=negotiationService.negotiate(repoId, repoKey, request);
         return ApiResponse.success(res);
     }
 
@@ -88,14 +87,6 @@ public class TransferController {
     public ApiResponse<?> transfer(@PathVariable Long repoId,
                                    @RequestParam("metadata") String metadataJson,
                                    @RequestParam("objects") MultipartFile objectsFile)throws Exception{
-        // TODO: Phase 2/3
-        // 1. 校验 repoId 存在 + 当前用户是仓库成员
-        // 2. 解析 metadata → TransferMetadata meta
-        // 3. 拼接 repoKey = ownerId + "/" + repoId
-        // 4. int count = transferService.unpackAndStore(repoKey, objectsFile.getBytes())
-        // 5. transferService.updateHead(repoId, meta.getBaseHeadSha1(), meta.getNewHeadSha1(), ...)
-        // 6. return ApiResponse.success(Map.of("newHeadSha1", ..., "objectsStored", count))
-
             long userId = UserContext.getUserId();
             Repository repo = repositoryMapper.selectById(repoId);
             if (repo == null) return ApiResponse.error(404, "仓库不存在");
@@ -105,8 +96,9 @@ public class TransferController {
             if (member == null) return ApiResponse.error(403, "用户权限不足");
             TransferMetadata metadata = objectMapper.readValue(metadataJson, TransferMetadata.class);
             String repoKey= RepoKey.of(repo.getOwnerId(),repo.getId()).value();
-            int count=transferService.unpackAndStore(repoKey, objectsFile.getBytes());
-            transferService.updateHead(repoId, repoKey, metadata.getBaseHeadSha1(), metadata.getNewHeadSha1(), metadata.getBranchName(), metadata.getCommitMessage(), userId,metadata.isReview());
+            int count = transferService.unpackAndStore(repoKey, objectsFile.getInputStream(), objectsFile.getSize());
+            transferService.updateHead(repoId, repoKey, metadata.getBaseHeadSha1(), metadata.getNewHeadSha1(),
+                    metadata.getBranchName(), userId, metadata.isReview());
             return ApiResponse.success(Map.of("newHeadSha1", metadata.getNewHeadSha1(), "objectsStored", count));
     }
 }

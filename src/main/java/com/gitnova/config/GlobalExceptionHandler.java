@@ -1,10 +1,15 @@
 package com.gitnova.config;
 
 import com.gitnova.dto.ApiResponse;
+import com.gitnova.gitobject.CommitCodecException;
 import com.gitnova.gitlet.GitletException;
+import com.gitnova.service.TransferRejectedException;
+import com.gitnova.storage.ObjectStorageException;
+import com.gitnova.transfer.PackFormatException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -28,6 +33,28 @@ public class GlobalExceptionHandler {
     public ApiResponse<?> handleGitletException(GitletException ex) {
         log.warn("Gitlet error: {}", ex.getMessage());
         return ApiResponse.error(400, ex.getMessage());
+    }
+
+    @ExceptionHandler({PackFormatException.class, CommitCodecException.class})
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<?> handleMalformedTransfer(RuntimeException ex) {
+        log.warn("Malformed Git transfer: {}", ex.getMessage());
+        return ApiResponse.error(400, ex.getMessage());
+    }
+
+    @ExceptionHandler(TransferRejectedException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<?> handleTransferRejected(TransferRejectedException ex) {
+        log.warn("Push rejected [{}]: {}", ex.reason(), ex.getMessage());
+        return ApiResponse.error(409, ex.getMessage());
+    }
+
+    @ExceptionHandler(ObjectStorageException.class)
+    public ResponseEntity<ApiResponse<?>> handleObjectStorage(ObjectStorageException ex) {
+        HttpStatus status = ex.reason() == ObjectStorageException.Reason.TRANSIENT
+                ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.BAD_REQUEST;
+        log.warn("Object storage failure [{}]: {}", ex.reason(), ex.getMessage());
+        return ResponseEntity.status(status).body(ApiResponse.error(status.value(), ex.getMessage()));
     }
 
     /**

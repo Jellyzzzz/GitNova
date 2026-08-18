@@ -1,8 +1,8 @@
 package com.gitnova.event;
 
 import com.gitnova.entity.Repository;
-import com.gitnova.gitlet.Utils;
 import com.gitnova.mapper.RepositoryMapper;
+import com.gitnova.storage.RepoKey;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.CodeReviewAgentLoop;
 import org.slf4j.Logger;
@@ -60,7 +60,7 @@ public class CodeReviewListener {
                 log.warn("Repo {} not found, skipping Agent review", event.getRepoId());
                 return;
             }
-            String repoKey = Utils.join(String.valueOf(repo.getOwnerId()),String.valueOf(event.getRepoId())).getPath();
+            String repoKey = RepoKey.of(repo.getOwnerId(), event.getRepoId()).value();
 
             log.info("Starting ReAct Agent review for repo={} repoKey={} commit={}",
                      event.getRepoId(), repoKey, event.getTargetSha1());

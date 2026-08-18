@@ -2,6 +2,8 @@ package com.gitnova.service;
 
 import com.gitnova.dto.NegotiationResponse;
 import com.gitnova.dto.PushRequest;
+import com.gitnova.gitobject.GitObjectId;
+import com.gitnova.mapper.BranchMapper;
 import com.gitnova.storage.ObjectStorage;
 import org.springframework.stereotype.Service;
 
@@ -21,11 +23,11 @@ import java.util.List;
 @Service
 public class ObjectNegotiationService {
 
-    private final GitletService gitletService;
+    private final BranchMapper branchMapper;
     private final ObjectStorage objectStorage;
-    public ObjectNegotiationService(GitletService gitletService,ObjectStorage objectStorage) {
-        this.objectStorage=objectStorage;
-        this.gitletService = gitletService;
+    public ObjectNegotiationService(BranchMapper branchMapper, ObjectStorage objectStorage) {
+        this.branchMapper = branchMapper;
+        this.objectStorage = objectStorage;
     }
 
     /**
@@ -35,20 +37,22 @@ public class ObjectNegotiationService {
      * @param request  客户端上报的 HEAD 和对象列表
      * @return { "remoteHeadSha1": "...", "missingObjects": [...] }
      */
-    public NegotiationResponse negotiate(String repoKey, PushRequest request) {
-        // TODO: Phase 2 — 协商逻辑
-        // 1. 获取服务端当前 HEAD：gitletService.getHeadSha1(repoKey)
-        // 2. 遍历 request.getLocalObjects()，用 objectStorage.existsObject(repoKey, sha1) 检查
-        // 3. 返回 remoteHeadSha1 + missingObjects
-        String remoteHead=gitletService.getHeadSha1(repoKey);
-        if(request.getLocalObjects()==null||request.getLocalObjects().isEmpty()) return new NegotiationResponse(remoteHead,new ArrayList<>());
-        List<String> missing=new ArrayList<>();
-        if(remoteHead==null) return new NegotiationResponse(null,request.getLocalObjects());
-        for(String sha1:request.getLocalObjects()){
-            if(!objectStorage.existsObject(repoKey,sha1)){
+    public NegotiationResponse negotiate(Long repoId, String repoKey, PushRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("push request must not be null");
+        }
+        String branchName = BranchName.requireValid(request.getBranchName() == null ? "main" : request.getBranchName());
+        String remoteHead = branchMapper.findHead(repoId, branchName);
+        if (request.getLocalObjects() == null || request.getLocalObjects().isEmpty()) {
+            return new NegotiationResponse(remoteHead, List.of());
+        }
+        List<String> missing = new ArrayList<>();
+        for (String sha1 : request.getLocalObjects()) {
+            String objectId = GitObjectId.of(sha1).value();
+            if (!objectStorage.existsObject(repoKey, objectId)) {
                 missing.add(sha1);
             }
         }
-        return new NegotiationResponse(remoteHead,missing);
+        return new NegotiationResponse(remoteHead, missing);
     }
 }

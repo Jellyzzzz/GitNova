@@ -1,141 +1,227 @@
 package com.gitnova.service;
 
+import com.gitnova.entity.Branch;
 import com.gitnova.entity.CommitRecord;
 import com.gitnova.event.PostReceiveEvent;
-import com.gitnova.gitlet.Commit;
-import com.gitnova.gitlet.GitletException;
-import com.gitnova.gitlet.Utils;
+import com.gitnova.gitobject.CommitCodecException;
+import com.gitnova.gitobject.CommitObject;
+import com.gitnova.gitobject.GitObjectCodec;
+import com.gitnova.gitobject.GitObjectId;
 import com.gitnova.mapper.BranchMapper;
 import com.gitnova.mapper.CommitRecordMapper;
 import com.gitnova.mapper.RepositoryMapper;
 import com.gitnova.storage.ObjectStorage;
+import com.gitnova.storage.ObjectStorageException;
+import com.gitnova.transfer.ObjectPackDecoder;
+import com.gitnova.transfer.TransferProperties;
+import com.gitnova.transfer.ValidatedPack;
+import com.gitnova.transfer.ValidatedObject;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 
-/**
- * 传输服务 — Phase 2/3 核心
- *
- * 负责：增量对象解包 + SHA-1 完整性校验 + CAS 指针更新
- */
+/** Hosted push flow: stream-validate objects first, then publish a branch CAS last. */
 @Service
 public class TransferService {
+
+    private static final String DEFAULT_BRANCH = "main";
+    private static final int MAX_ANCESTOR_WALK = 100_000;
 
     private final RepositoryMapper repositoryMapper;
     private final CommitRecordMapper commitRecordMapper;
     private final BranchMapper branchMapper;
-    private final GitletService gitletService;
     private final ObjectStorage objectStorage;
     private final ApplicationEventPublisher eventPublisher;
+    private final ObjectPackDecoder packDecoder;
+    private final TransferProperties transferProperties;
+    private final GitObjectCodec gitObjectCodec;
 
     public TransferService(RepositoryMapper repositoryMapper,
                            CommitRecordMapper commitRecordMapper,
                            BranchMapper branchMapper,
-                           GitletService gitletService,
                            ObjectStorage objectStorage,
-                           ApplicationEventPublisher eventPublisher) {
+                           ApplicationEventPublisher eventPublisher,
+                           ObjectPackDecoder packDecoder,
+                           TransferProperties transferProperties,
+                           GitObjectCodec gitObjectCodec) {
         this.repositoryMapper = repositoryMapper;
         this.commitRecordMapper = commitRecordMapper;
         this.branchMapper = branchMapper;
-        this.gitletService = gitletService;
         this.objectStorage = objectStorage;
         this.eventPublisher = eventPublisher;
+        this.packDecoder = packDecoder;
+        this.transferProperties = transferProperties;
+        this.gitObjectCodec = gitObjectCodec;
     }
 
-    /**
-     * 处理接收到的对象包 — 解包 + SHA-1 校验 + 写入对象库
-     *
-     * ⚠️ 解包时对每个对象重新计算 SHA-1，与包头声明的 SHA-1 比对，
-     * 不一致则拒绝整次 push，返回 400 + 具体错误对象。
-     */
+    /** Compatibility entry point; production controllers must call the InputStream overload. */
     public int unpackAndStore(String repoKey, byte[] objectsPack) {
-        // TODO: Phase 2 — 解包逻辑
-        // 1. 解析打包格式：[4 bytes N] + for each: [40 bytes SHA-1][8 bytes length][L bytes content]
-        // 2. 对每个对象重新计算 SHA-1
-        // 3. 与包头 SHA-1 比对，不一致则拒绝
-        // 4. 写入 .gitlet/objects/
-        if(objectsPack==null) throw new GitletException("传入空包");
-        ByteBuffer buffer= ByteBuffer.wrap(objectsPack);
-        int objectCount=buffer.getInt();
-        if(objectCount==0) return 0;
-        if(objectCount>10000) throw new GitletException("传入数量过多");
-        for(int i=0;i<objectCount;i++){
-            byte[] sha1Bytes =new byte[40];
-            buffer.get(sha1Bytes);
-            long length=buffer.getLong();
-            if(length>500*1024*1024) throw new GitletException("对象大小异常，单文件不可超过500MB");
-            byte[] contentsBytes=new byte[(int)length];
-            buffer.get(contentsBytes);
+        Objects.requireNonNull(objectsPack, "objectsPack must not be null");
+        return unpackAndStore(repoKey, new ByteArrayInputStream(objectsPack), objectsPack.length);
+    }
 
-            String declared = new String(sha1Bytes, StandardCharsets.UTF_8);
-            String actual= Utils.sha1(contentsBytes);
-            if(!actual.equals(declared)) throw new GitletException("SHA-1 校验失败！声明值: " + declared + "，实际计算值: " + actual);
+    public int unpackAndStore(String repoKey, InputStream objectsPack, long declaredPackSize) {
+        try (ValidatedPack pack = packDecoder.decode(objectsPack, declaredPackSize, transferProperties)) {
+            for (ValidatedObject object : pack.objects()) {
+                objectStorage.promoteObject(repoKey, object.id().value(), object.temporaryFile());
+            }
+            return pack.objects().size();
         }
-        buffer.rewind();
-        buffer.getInt();
-        for(int i=0;i<objectCount;i++){
-            byte[] sha1Bytes=new byte[40];
-            buffer.get(sha1Bytes);
-            long length=buffer.getLong();
-            byte[] contentsBytes=new byte[(int)length];
-            buffer.get(contentsBytes);
-            String declared=new String(sha1Bytes, StandardCharsets.UTF_8);
-            objectStorage.writeObject(repoKey,declared,contentsBytes);
-        }
-        return objectCount;
     }
 
     /**
-     * CAS 更新 HEAD 指针 — Phase 3 核心
-     *
-     * @param repoId        仓库 ID
-     * @param repoKey       仓库路径标识（"{ownerId}/{repoId}"），由 Controller 鉴权时拼接，
-     *                      传入 Service 避免重复查库拼路径
-     * @param baseHeadSha1  客户端认为的当前 HEAD（CAS 基准值）
-     * @param newHeadSha1   新的 HEAD
-     * @param branchName    分支名
-     * @param commitMessage 提交信息
-     * @param authorId      作者用户 ID
+     * Makes a new branch head externally visible only after the target and all
+     * required object references validate. Filesystem writes are deliberately
+     * outside the database transaction: unreachable content-addressed objects
+     * are safe, while a branch CAS is the visibility boundary.
      */
     @Transactional
-    public void updateHead(Long repoId, String repoKey,String baseHeadSha1, String newHeadSha1,
-                           String branchName, String commitMessage, Long authorId,boolean requestReview) {
-        // TODO: Phase 3 — CAS 并发控制
-        // 1. CAS 更新 repository.head_commit_sha1
-        //    UPDATE repository SET head_commit_sha1 = #{newHeadSha1}
-        //    WHERE id = #{repoId} AND head_commit_sha1 = #{baseHeadSha1}
-        // 2. affected rows == 0 → throw NonFastForwardException (409)
-        // 3. 同步写入 commit_record 表
-        // 4. 更新 branch 表 HEAD
-        // 5. 发布 PostReceiveEvent（触发异步 Agent review）
-        int affected=repositoryMapper.casUpdateHead(repoId,baseHeadSha1,newHeadSha1);
-        if (affected == 0) throw new GitletException("non-fast-forward: 远程仓库包含冲突提交，请先 pull 拉取最新代码。");
+    public void updateHead(Long repoId, String repoKey, String baseHeadSha1, String newHeadSha1,
+                           String branchName, Long authorId, boolean requestReview) {
+        Objects.requireNonNull(repoId, "repoId must not be null");
+        Objects.requireNonNull(authorId, "authorId must not be null");
+        String validatedBranch = BranchName.requireValid(branchName == null ? DEFAULT_BRANCH : branchName);
+        GitObjectId targetId = GitObjectId.of(newHeadSha1);
+        String expectedBase = normalizeOptionalObjectId(baseHeadSha1);
+        CommitObject targetCommit = requireCanonicalCommit(repoKey, targetId);
+        requireReferencedBlobs(repoKey, targetCommit);
 
-        CommitRecord record=new CommitRecord();
-        byte[] commitbytes= objectStorage.readObject(repoKey,newHeadSha1);
-        Commit commit=Utils.deserialize(commitbytes,Commit.class);
-        String timestamp =commit.getTimestamp();
-        record.setAuthorId(authorId);
-        record.setMessage(commitMessage);
-        record.setRepoId(repoId);
-        record.setSha1(newHeadSha1);
-        record.setBranchName(branchName);
-        record.setParentSha1(baseHeadSha1);
-        record.setCreatedAt(Utils.parseTimestamp(timestamp));
-        commitRecordMapper.insert(record);
+        String currentHead = branchMapper.findHead(repoId, validatedBranch);
+        if (currentHead == null) {
+            if (expectedBase != null) {
+                throw nonFastForward();
+            }
+            requireDescendsFrom(repoKey, targetId, null);
+            createFirstBranchHead(repoId, validatedBranch, targetId.value());
+        } else {
+            GitObjectId currentId;
+            try {
+                currentId = GitObjectId.of(currentHead);
+            } catch (IllegalArgumentException exception) {
+                throw new TransferRejectedException(TransferRejectedException.Reason.CORRUPT_OBJECT,
+                        "branch head is not a valid Git object ID", exception);
+            }
+            if (!currentId.value().equals(expectedBase)) {
+                throw nonFastForward();
+            }
+            if (currentId.equals(targetId)) {
+                return;
+            }
+            requireDescendsFrom(repoKey, targetId, currentId);
+            if (branchMapper.compareAndSetHead(repoId, validatedBranch, currentId.value(), targetId.value()) != 1) {
+                throw nonFastForward();
+            }
+        }
 
-        branchMapper.updateHead(repoId,branchName,newHeadSha1);
-
+        writeCommitRecordIfAbsent(repoId, validatedBranch, targetId, targetCommit, authorId);
+        if (DEFAULT_BRANCH.equals(validatedBranch)) {
+            repositoryMapper.updateDefaultBranchHeadCache(repoId, targetId.value());
+        }
         eventPublisher.publishEvent(new PostReceiveEvent(
-                this,
-                repoId,
-                baseHeadSha1,
-                newHeadSha1,
-                authorId,
-                requestReview
+                this, repoId, expectedBase, targetId.value(), authorId, requestReview
         ));
+    }
+
+    private void createFirstBranchHead(Long repoId, String branchName, String targetHead) {
+        Branch branch = new Branch();
+        branch.setRepoId(repoId);
+        branch.setName(branchName);
+        branch.setHeadCommit(targetHead);
+        try {
+            if (branchMapper.insert(branch) != 1) {
+                throw nonFastForward();
+            }
+        } catch (DuplicateKeyException exception) {
+            throw nonFastForward();
+        }
+    }
+
+    private void writeCommitRecordIfAbsent(Long repoId, String branchName, GitObjectId targetId,
+                                           CommitObject commit, Long authorId) {
+        CommitRecord record = new CommitRecord();
+        record.setSha1(targetId.value());
+        record.setRepoId(repoId);
+        record.setParentSha1(commit.parentSha1().map(GitObjectId::value).orElse(null));
+        record.setMessage(commit.message());
+        record.setAuthorId(authorId);
+        record.setBranchName(branchName);
+        record.setCreatedAt(LocalDateTime.ofInstant(commit.timestamp(), ZoneOffset.UTC));
+        commitRecordMapper.insertIfAbsent(record);
+    }
+
+    private void requireReferencedBlobs(String repoKey, CommitObject commit) {
+        for (GitObjectId blobId : commit.mapping().values()) {
+            if (!objectStorage.existsObject(repoKey, blobId.value())) {
+                throw new TransferRejectedException(TransferRejectedException.Reason.MISSING_OBJECT,
+                        "commit references a missing blob: " + blobId.value());
+            }
+        }
+    }
+
+    private void requireDescendsFrom(String repoKey, GitObjectId target, GitObjectId expectedBase) {
+        Set<GitObjectId> visited = new HashSet<>();
+        GitObjectId current = target;
+        for (int depth = 0; depth < MAX_ANCESTOR_WALK; depth++) {
+            if (expectedBase != null && current.equals(expectedBase)) {
+                return;
+            }
+            if (!visited.add(current)) {
+                throw new TransferRejectedException(TransferRejectedException.Reason.CORRUPT_OBJECT,
+                        "commit ancestry contains a cycle");
+            }
+            CommitObject commit = requireCanonicalCommit(repoKey, current);
+            Optional<GitObjectId> parent = commit.parentSha1();
+            if (parent.isEmpty()) {
+                if (expectedBase == null) {
+                    return;
+                }
+                throw nonFastForward();
+            }
+            current = parent.orElseThrow();
+        }
+        throw new TransferRejectedException(TransferRejectedException.Reason.CORRUPT_OBJECT,
+                "commit ancestry exceeds traversal limit");
+    }
+
+    private CommitObject requireCanonicalCommit(String repoKey, GitObjectId id) {
+        try {
+            byte[] content = objectStorage.readObject(repoKey, id.value());
+            return gitObjectCodec.decodeCommit(content);
+        } catch (ObjectStorageException exception) {
+            if (exception.reason() == ObjectStorageException.Reason.NOT_FOUND) {
+                throw new TransferRejectedException(TransferRejectedException.Reason.MISSING_OBJECT,
+                        "commit object is missing: " + id.value(), exception);
+            }
+            if (exception.reason() == ObjectStorageException.Reason.CORRUPT) {
+                throw new TransferRejectedException(TransferRejectedException.Reason.CORRUPT_OBJECT,
+                        "commit object is corrupt: " + id.value(), exception);
+            }
+            throw exception;
+        } catch (CommitCodecException exception) {
+            throw new TransferRejectedException(TransferRejectedException.Reason.CORRUPT_OBJECT,
+                    "object is not a valid canonical commit: " + id.value(), exception);
+        }
+    }
+
+    private static String normalizeOptionalObjectId(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return GitObjectId.of(value).value();
+    }
+
+    private static TransferRejectedException nonFastForward() {
+        return new TransferRejectedException(TransferRejectedException.Reason.NON_FAST_FORWARD,
+                "non-fast-forward: remote branch advanced or the target does not descend from its HEAD");
     }
 }

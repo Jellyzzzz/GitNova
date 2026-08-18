@@ -7,7 +7,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.difflib.DiffUtils;
 import com.github.difflib.patch.Patch;
 import com.gitnova.dto.ToolDefinition;
-import com.gitnova.gitlet.Commit;
+import com.gitnova.gitobject.CommitObject;
+import com.gitnova.gitobject.GitObjectId;
 import com.gitnova.gitobject.GitObjectReadException;
 import com.gitnova.gitobject.GitObjectReader;
 import com.gitnova.service.agent.context.ChangedFile;
@@ -69,16 +70,16 @@ public class ListChangesTool implements AgentTool {
             );
         }
         try {
-            Commit baseCommit = gitObjectReader.requireCommit(repoKey, baseSha1);
-            Commit targetCommit = gitObjectReader.requireCommit(repoKey, targetSha1);
+            CommitObject baseCommit = gitObjectReader.requireCommit(repoKey, baseSha1);
+            CommitObject targetCommit = gitObjectReader.requireCommit(repoKey, targetSha1);
             int totalAddedLines = 0;
             int totalDeletedLines = 0;
             int totalHunks = 0;
             boolean containsBinary = false;
             List<ChangedFile> changedFiles = new ArrayList<>();
 
-            Map<String, String> baseFiles = baseCommit.getMapping();
-            Map<String, String> targetFiles = targetCommit.getMapping();
+            Map<String, GitObjectId> baseFiles = baseCommit.mapping();
+            Map<String, GitObjectId> targetFiles = targetCommit.mapping();
             Set<String> paths = new TreeSet<>();
             paths.addAll(baseFiles.keySet());
             paths.addAll(targetFiles.keySet());
@@ -87,8 +88,8 @@ public class ListChangesTool implements AgentTool {
                 int addedLines = 0;
                 int deletedLines = 0;
                 int hunks = 0;
-                String oldBlob = baseFiles.get(path);
-                String newBlob = targetFiles.get(path);
+                GitObjectId oldBlob = baseFiles.get(path);
+                GitObjectId newBlob = targetFiles.get(path);
                 if (Objects.equals(oldBlob, newBlob)) {
                     continue;
                 }
@@ -105,13 +106,13 @@ public class ListChangesTool implements AgentTool {
                 List<String> oldLines = new ArrayList<>();
                 List<String> newLines = new ArrayList<>();
                 if (oldBlob != null) {
-                    oldBytes = gitObjectReader.requireBlob(repoKey, oldBlob);
+                    oldBytes = gitObjectReader.requireBlob(repoKey, oldBlob.value());
                     if (!isBinary(oldBytes)) {
                         oldLines = toLines(oldBytes);
                     }
                 }
                 if (newBlob != null) {
-                    newBytes = gitObjectReader.requireBlob(repoKey, newBlob);
+                    newBytes = gitObjectReader.requireBlob(repoKey, newBlob.value());
                     if (!isBinary(newBytes)) {
                         newLines = toLines(newBytes);
                     }

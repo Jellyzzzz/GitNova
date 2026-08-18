@@ -10,8 +10,8 @@ import java.time.LocalDateTime;
 /**
  * 仓库表实体
  *
- * ⚠️ Warning：head_commit_sha1 是整个并发控制的核心字段
- * 所有 CAS 校验都基于这一列，不要随意加索引或触发器修改它
+ * {@code headCommitSha1} is only the cached HEAD of the default branch.
+ * Hosted push CAS is authoritative on {@code branch.head_commit}.
  */
 @Data
 @TableName("repository")
@@ -28,7 +28,7 @@ public class Repository {
 
     private String description;
 
-    /** CAS 乐观锁目标列 — 所有 push 操作必须校验此字段 */
+    /** Non-authoritative cache synchronized after a successful default-branch CAS. */
     private String headCommitSha1;
 
     private LocalDateTime createdAt;

@@ -1,15 +1,26 @@
 package com.gitnova.storage;
 
-/**
- * Signals an I/O failure at the ObjectStorage boundary.
- *
- * <p>R0-04 will refine this into stable NOT_FOUND, CORRUPT, and TRANSIENT
- * classifications. Callers must not depend on the underlying filesystem
- * exception type.</p>
- */
 public class ObjectStorageException extends RuntimeException {
 
-    public ObjectStorageException(String message, Throwable cause) {
+    public enum Reason {
+        NOT_FOUND,
+        CORRUPT,
+        TRANSIENT
+    }
+
+    private final Reason reason;
+
+    public ObjectStorageException(Reason reason, String message) {
+        super(message);
+        this.reason = reason;
+    }
+
+    public ObjectStorageException(Reason reason, String message, Throwable cause) {
         super(message, cause);
+        this.reason = reason;
+    }
+
+    public Reason reason() {
+        return reason;
     }
 }

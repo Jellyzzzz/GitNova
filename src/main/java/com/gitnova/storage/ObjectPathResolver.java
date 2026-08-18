@@ -14,6 +14,10 @@ public final class ObjectPathResolver {
                 .normalize();
     }
 
+    public Path storageRoot() {
+        return storageRoot;
+    }
+
     public Path objectDirectory(RepoKey repoKey) {
         Path result = storageRoot
                 .resolve(Long.toString(repoKey.ownerId()))
