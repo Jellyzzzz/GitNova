@@ -109,4 +109,8 @@ public class ToolRegistry {
             );
         }
     }
+    public boolean isTerminal(String name){
+        AgentTool tool=tools.get(name);
+        return tool!=null&&tool.terminal();
+    }
 }

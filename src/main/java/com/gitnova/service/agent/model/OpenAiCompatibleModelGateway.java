@@ -23,15 +23,17 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 @Component
 public class OpenAiCompatibleModelGateway implements ModelGateway{
     private final MediaType JSON=MediaType.get("application/json");
-    private ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper;
     private final OkHttpClient httpClient;
     private final HttpUrl endpoint;
     private final String apiKey;
+    private final ProviderThinking thinking;
     private static final int MAX_ERROR_BODY_BYTES=8192;
     private static final int MAX_ERROR_MESSAGE_CHARS=300;
     @Autowired
@@ -39,7 +41,8 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
             ObjectMapper objectMapper,
             @Value("${gitnova.llm.api-key:}") String apiKey,
             @Value("${gitnova.llm.base-url:https://api.deepseek.com}") String baseUrl,
-            @Value("${gitnova.llm.timeout:60}") long timeoutSeconds
+            @Value("${gitnova.llm.timeout:60}") long timeoutSeconds,
+            @Value("${gitnova.llm.thinking-mode:}") String thinkingMode
     ) {
         this(
                 objectMapper,
@@ -47,7 +50,8 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
                         .callTimeout(Duration.ofSeconds(timeoutSeconds))
                         .build(),
                 apiKey,
-                toChatCompletionsEndpoint(baseUrl)
+                toChatCompletionsEndpoint(baseUrl),
+                thinkingMode
         );
     }
     OpenAiCompatibleModelGateway(
@@ -56,10 +60,21 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
             String apiKey,
             HttpUrl endpoint
     ) {
+        this(objectMapper, httpClient, apiKey, endpoint, null);
+    }
+
+    OpenAiCompatibleModelGateway(
+            ObjectMapper objectMapper,
+            OkHttpClient httpClient,
+            String apiKey,
+            HttpUrl endpoint,
+            String thinkingMode
+    ) {
         this.objectMapper = Objects.requireNonNull(objectMapper);
         this.httpClient = Objects.requireNonNull(httpClient);
         this.apiKey = apiKey;
         this.endpoint = Objects.requireNonNull(endpoint);
+        this.thinking = parseThinkingMode(thinkingMode);
     }
 
     @Override
@@ -132,6 +147,7 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
                 toProviderTools(request.tools()),
                 request.maxOutputTokens(),
                 request.temperature(),
+                thinking,
                 false
         );
     }
@@ -410,6 +426,22 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
         }
     }
 
+    private static ProviderThinking parseThinkingMode(String thinkingMode) {
+        if (thinkingMode == null || thinkingMode.isBlank()) {
+            return null;
+        }
+        String normalized = thinkingMode.strip().toLowerCase(Locale.ROOT);
+        if (!normalized.equals("enabled") && !normalized.equals("disabled")) {
+            throw new ModelGatewayException(
+                    ModelGatewayErrorCode.CONFIGURATION_ERROR,
+                    "Model provider thinking mode must be enabled or disabled",
+                    false,
+                    null
+            );
+        }
+        return new ProviderThinking(normalized);
+    }
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private record ProviderRequest(
             String model,
@@ -417,8 +449,11 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
             List<ProviderTool> tools,
             @JsonProperty("max_tokens") Integer maxTokens,
             Double temperature,
+            ProviderThinking thinking,
             boolean stream
     ) {}
+
+    private record ProviderThinking(String type) {}
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private record ProviderMessage(

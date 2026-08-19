@@ -78,7 +78,8 @@ gitnova:
   llm:
     api-key: ${LLM_API_KEY:}                                      # 必须通过环境变量注入，不要硬编码
     base-url: ${LLM_BASE_URL:https://api.deepseek.com}
-    model: ${LLM_MODEL:deepseek-chat}
+    model: ${LLM_MODEL:deepseek-v4-flash}
+    thinking-mode: ${LLM_THINKING_MODE:disabled}
     timeout: 60                   # 秒，LLM响应可能较慢
 
   # 存储策略（Phase 1 接口，Phase 2 起用）
@@ -95,3 +96,11 @@ gitnova:
   agent:
     artifact:
       base-path: ${AGENT_ARTIFACT_BASE_PATH:./data/agent-artifacts}
+    runtime:
+      model: ${gitnova.llm.model:deepseek-v4-flash}
+      max-model-calls: 20
+      max-tool-calls: 50
+      max-protocol-corrections: 1
+      max-final-draft-corrections: 1
+      max-output-tokens: 4096
+      temperature: 0.0

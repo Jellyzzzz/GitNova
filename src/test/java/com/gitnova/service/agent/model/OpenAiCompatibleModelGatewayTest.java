@@ -94,6 +94,24 @@ class OpenAiCompatibleModelGatewayTest {
     }
 
     @Test
+    void shouldIncludeConfiguredThinkingMode() throws Exception {
+        gateway = new OpenAiCompatibleModelGateway(
+                objectMapper,
+                new OkHttpClient(),
+                "test-api-key",
+                server.url("/v1/chat/completions"),
+                "disabled"
+        );
+        server.enqueue(successfulTextResponse("resp-thinking", "Ready."));
+
+        gateway.complete(simpleRequest());
+
+        RecordedRequest recorded = server.takeRequest();
+        JsonNode root = objectMapper.readTree(recorded.getBody().readUtf8());
+        assertEquals("disabled", root.path("thinking").path("type").asText());
+    }
+
+    @Test
     void shouldParseProviderToolCallsAndUsage() {
         server.enqueue(new MockResponse().setResponseCode(200).setBody("""
                 {

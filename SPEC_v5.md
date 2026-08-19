@@ -449,11 +449,14 @@ R1 中与 Session API、安全加固和 Repository Lifecycle 重叠的工作，�
 优先级纪律：
 
 ```text
-R0 未完成 → 不进入 Workspace/Write-back
+R0 未完成 → 不进入 Production Workspace/Git Write-back；允许使用 Fake/Local Adapter 验证 Agent Core
 R1 未完成 → 不把 Session API 作为可交付公网接口
 R2 → 必须和对应功能一起完成，禁止单独“大扫除”
 R3 → 核心 E2E 全绿后再决定是否投入
 ```
+
+R0–R3 是生产集成与最终交付门槛，不是 Agent Core 启动门槛。任何 R 项如果能被 Fake、临时目录、
+本地固定仓库或同线程 Runner 安全替代，就不得阻塞下一条 Agent 核心行为。
 
 ---
 
@@ -2068,6 +2071,93 @@ Mockito 应使用JDK 21支持的显式Java Agent或不需要instrumentation的Mo
 
 ## 20. 实现顺序与工时
 
+### 20.0 Core-first 开发路线
+
+本节覆盖旧的 infrastructure-first 排期。SPEC 描述最终架构，但实现必须采用可运行的纵向切片：
+
+```text
+Agent Alive
+→ Agent Useful
+→ Agent Smart
+→ Cloud Integration
+→ Cloud Hardening
+```
+
+#### Milestone A — Agent Alive【当前唯一主线】
+
+```text
+FakeModelGateway
+→ Tool Call
+→ ToolRegistry.execute
+→ Tool Observation 回填
+→ 下一次 Model Call
+→ Terminal Tool
+→ Verifier
+→ AgentRunResult
+```
+
+完成 Fake 控制流后，立即用真实 ModelGateway 和固定 Review Fixture 运行一次。DoD 是控制台/测试报告中存在
+完整 Tool Trace、ReviewDraft、TerminationReason 和 ModelUsage，而不是“相关类已经创建”。
+
+在该里程碑完成前禁止新增非必要 Manager、Helper、持久化表、Hosting 重构和未来字段。
+
+#### Milestone B — Agent Useful
+
+使用 `LocalWorkspace`、临时目录和固定真实仓库，不等待 Docker/MySQL/Hosting：
+
+```text
+task
+→ list/find/search/read
+→ applyPatch
+→ runCommand/test
+→ getWorkspaceDiff
+→ finalizeTask
+```
+
+DoD 是 Agent 在一个真实小仓库中完成一次 `read → edit → test → diff → finalize`。
+
+#### Milestone C — Agent Smart
+
+只根据真实运行暴露的问题增加 Context 能力：
+
+```text
+大结果外置
+→ Token Budget
+→ Context Selection
+→ Compaction
+→ Structured Checkpoint
+→ Resume
+```
+
+每项都必须用 Milestone B 的固定任务比较成功率、token、行为或可恢复性；不得只验收类结构。
+
+#### Milestone D — Cloud Integration
+
+将开发 Adapter 替换为生产实现：
+
+```text
+Local Runner        → Session API
+Same-thread run     → Durable Worker
+LocalWorkspace      → Docker Workspace
+Local repo fixture  → GitNova ObjectStorage/Branch
+Console result      → Change Proposal/Agent Branch
+```
+
+R0 Hosting Gate、R1 API/Auth、Session/Worker、Proposal/Write-back 在这里成为硬依赖。
+
+#### Milestone E — Cloud Hardening
+
+最后完成 Recovery、Lease、并发隔离、Metrics、实时事件、安全加固、自动 REVIEW 迁移和 R3 清理。
+
+#### Core-first Gate
+
+每个新抽象必须回答：
+
+> 没有它，下一条可运行 Agent 行为是否无法验证？
+
+若可以使用 Fake/Local Adapter 验证，则该抽象进入 Backlog。每个开发日只允许一个当前目标，并以一条可观察
+Trace、测试或真实输出结束。
+
 ### 20.1 估算口径
 
 - 工时是单人净开发时间，包含相邻单元测试，不包含吃饭、学习论文或大规模返工。
@@ -2075,7 +2165,7 @@ Mockito 应使用JDK 21支持的显式Java Agent或不需要instrumentation的Mo
 - 上限假设主要由开发者手写、边写边理解并处理现有技术债。
 - Hosting Consistency、Workspace、Git Write-back 和 Context 是风险最高的四部分，应预留 20% 缓冲。
 
-### 20.2 任务清单
+### 20.2 最终交付工作清单（不是当前执行顺序）
 
 | 顺序 | Issue/任务 | 主要产出 | 依赖 | 预计工时 |
 |---:|---|---|---|---:|
@@ -2115,60 +2205,66 @@ Provider 流式输出：额外 4–6 小时
 独立 RepoAgent：额外 16–24 小时
 ```
 
-### 20.3 现实日历
+### 20.3 纵向里程碑工时
 
-按每天 6–8 小时有效开发：
+| 里程碑 | 可观察结果 | 增量工时 |
+|---|---|---:|
+| Agent Alive | Fake + 真实Model完成 `tool → observation → terminal` | 2–4h |
+| Agent Useful | 真实本地仓库完成 `search → edit → test → diff` | 12–20h |
+| Agent Smart | 大结果外置、Context Budget、Compaction、Checkpoint | 8–14h |
+| Cloud Integration | Session/Worker、Hosting、Docker、Proposal/Write-back | 见20.2对应任务 |
+| Cloud Hardening | Recovery、安全、观测、自动Review、R3 | 见20.2对应任务 |
+
+第一个Dogfood版本在 Agent Useful 完成时产生，不等待Cloud Integration。日期计划根据最近一个可运行里程碑滚动，
+不再用一次性日历安排让所有未来任务同时成为当前压力。
+
+### 20.4 开发 ownership 三部分契约
+
+#### 第一部分：Harness / AI Infra 技术栈【本人主写】
+
+本人必须亲手决定并实现最有学习价值的控制语义：
 
 ```text
-核心演示切片：12–15 个有效开发日
-SPEC v5 P0 全部 DoD：17–22 个有效开发日
-P0 + SHOULD 加固：19–24 个有效开发日
+AgentRuntime Loop
+FinishReason + ToolCalls 协议
+Observation 回填
+Terminal/Correction/Termination
+Context prepare/compact
+Cycle/Budget
+Workspace generation
+Verifier 对真实证据的判断
 ```
 
-加入 Hosting Gate 后，2026-08-24 前不应再承诺完整 CODING E2E。该日期的合理目标是：
+允许先读接口、流程和伪代码，但应关闭参考后重建关键方法，并能够解释不变量、失败路径和修改点。
 
-- Hosting Consistency Gate 通过；
-- REVIEW Runtime 回归稳定并完成通用 Profile 边界；
-- Session/Run 能持久化排队；
-- Local Docker Workspace 可以从统一 ObjectStorage 物化；
-- 至少一条 read/edit/test 工具链可运行。
+#### 第二部分：项目主线设计【本人推理，协作实现】
 
-若要尽快形成完整 CODING E2E，仍必须采用下面的裁剪：
+本人负责事实源、边界、状态转换和取舍，Codex可实现样板：
 
-- 保留一个 LocalDockerWorkspaceProvider；
-- 只做 MySQL Queue，不做 Redis/Kafka；
-- 先做 Step 级事件，不做 Provider token stream；
-- Context 先实现确定性外置 + 一种结构化 Compaction；
-- 先完成 CODING 主链，自动 REVIEW 迁移可以随后补；
-- 只支持一个受控 Agent Branch，不做 PR/Merge UI；
-- 不开发 RepoAgent。
+```text
+Task Profile / RevisionScope
+Local/Production Workspace Adapter边界
+Context Item与Checkpoint Schema
+Session/Run/Step生命周期
+Object/Branch/Workspace可信边界
+Proposal/Approval/Write-back语义
+```
 
-完整核心演示更合理的目标是 2026-08-29 ～ 2026-08-31。若每天只有 3–4 个有效小时，应按三周以上安排，
-不能用日历天数替代净工时，也不能跳过 Hosting Gate 来换取表面进度。
+验收不是“读过代码”，而是能画流程、说出至少三个不变量、预测失败并根据新需求定位修改层。
 
-### 20.4 建议日程（从 2026-08-17 开始）
+#### 第三部分：机械工程与过度设计【Codex代办或Backlog】
 
-| 日期 | 主任务 | 当日验收 |
-|---|---|---|
-| 8/17 | Test Baseline + Review Runtime 收口 | 全绿命令可重复；REVIEW Runtime 回归稳定 |
-| 8/18 | RepoKey/ObjectStorage/GitObjectCodec | 单一对象布局、路径安全、Canonical Commit round-trip |
-| 8/19 | TransferProperties + Streaming Pack Decoder | 配置生效，损坏/超限 Pack 确定性拒绝 |
-| 8/20 | Branch CAS + Fast-forward + Negotiation | first push/并发 push/多 commit push 一致 |
-| 8/21 | API/Auth + Repository Lifecycle/Schema | 真实HTTP状态、集中权限、仓库状态与迁移脚本正确 |
-| 8/22 | Generic Profile + Session/Run/Step | Runtime 不再硬编码Review；Session可持久化排队 |
-| 8/23 | Durable Worker + Workspace Materializer | Run唯一Claim；指定Commit可物化 |
-| 8/24 | Docker Gateway + Search/Read | Sandbox可浏览、搜索和读取统一对象快照 |
-| 8/25 | ApplyPatch/RunCommand 基础链路 | Workspace完成一次read-edit-test，generation正确 |
-| 8/26 | Context Budget + Artifact + Compaction | 大结果外置，压缩后继续Tool Loop |
-| 8/27 | Checkpoint/Resume + Coding Verifier | 中断后恢复；旧generation测试不能通过Verifier |
-| 8/28 | Proposal/Approval/Git Write-back | approve幂等创建Agent Branch Commit |
-| 8/29–8/31 | E2E/Security/Metrics/README | 固定Demo全链运行、失败路径可解释 |
+```text
+DTO/Entity/Mapper/Builder
+重复Schema和测试Fixture
+Controller参数转换
+Properties绑定
+日志/Metrics注册
+包移动/格式化/失效注释
+当前里程碑未使用的生产设施
+```
 
-该日程是冲刺版，不包含完整 Provider Streaming、Redis、RepoAgent 和 UI 美化。
-
-8/31 之后仍需按 Definition of Done 补齐自动 REVIEW 迁移、Lease Recovery 全矩阵、安全加固、
-更多 Integration Cases 和交付文档，才能称为 SPEC v5 P0 完成。8/24 的合理口径只是
-“Hosting 与 Workspace 执行基础贯通”，不是“核心产品闭环完成”。
+Codex代办的必要代码由本人Review契约和关键测试；未来可能需要但当前无真实消费者的设计直接进入Backlog。
 
 ---
 

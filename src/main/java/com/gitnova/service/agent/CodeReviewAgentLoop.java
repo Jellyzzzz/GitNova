@@ -126,9 +126,4 @@ public class CodeReviewAgentLoop {
         // TODO: Phase 4 — 构造完整的 System Prompt
         throw new UnsupportedOperationException("Phase 4: 待实现");
     }
-    private static final class RunState{
-        private int modelCallCount;
-        private int toolCallCount;
-        private final List<ModelUsage>modelUsages=new ArrayList<>();
-    }
 }
