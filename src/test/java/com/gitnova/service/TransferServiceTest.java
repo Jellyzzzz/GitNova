@@ -1,11 +1,18 @@
 package com.gitnova.service;
 
-import com.gitnova.gitlet.Utils;
+import com.gitnova.gitobject.CanonicalGitObjectCodec;
+import com.gitnova.gitobject.GitObjectHasher;
 import com.gitnova.storage.FakeObjectStorage;
+import com.gitnova.storage.config.RepositoryStorageProperties;
+import com.gitnova.transfer.StreamingObjectPackDecoder;
+import com.gitnova.transfer.TransferProperties;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.util.unit.DataSize;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -13,15 +20,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TransferServiceTest {
 
     @Test
-    void shouldUnpackAndStoreVerifiedObjectWithoutSpringContext() {
+    void shouldUnpackAndStoreVerifiedObjectWithoutSpringContext(@TempDir Path tempDirectory) {
         FakeObjectStorage objectStorage = new FakeObjectStorage();
         TransferService transferService = new TransferService(
                 null,
                 null,
                 null,
-                null,
                 objectStorage,
-                null
+                null,
+                new StreamingObjectPackDecoder(
+                        new RepositoryStorageProperties(tempDirectory)
+                ),
+                new TransferProperties(
+                        10,
+                        DataSize.ofMegabytes(1),
+                        DataSize.ofMegabytes(2),
+                        DataSize.ofKilobytes(8)
+                ),
+                new CanonicalGitObjectCodec()
         );
 
         // 1. 准备要传输的文件内容
@@ -29,7 +45,7 @@ class TransferServiceTest {
         byte[] contentBytes = fileContent.getBytes(StandardCharsets.UTF_8);
 
         // 2. 计算真实 SHA-1
-        String sha1 = Utils.sha1(contentBytes);
+        String sha1 = GitObjectHasher.sha1(contentBytes).value();
         byte[] sha1Bytes = sha1.getBytes(StandardCharsets.UTF_8);
 
         // 3. 严格按照协议拼装二进制包：[4字节 N] + [40字节 SHA1] + [8字节 长度] + [真实内容]

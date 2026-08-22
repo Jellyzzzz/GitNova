@@ -2,9 +2,6 @@ package com.gitnova.service.agent.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.gitnova.gitlet.Commit;
-import com.gitnova.gitlet.Utils;
-import com.gitnova.gitobject.ObjectStorageGitObjectReader;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
@@ -17,6 +14,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.List;
 
+import static com.gitnova.gitobject.GitObjectTestFixtures.objectId;
+import static com.gitnova.gitobject.GitObjectTestFixtures.reader;
+import static com.gitnova.gitobject.GitObjectTestFixtures.writeCommit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -24,15 +24,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ListChangesToolTest {
 
     private static final String REPO_KEY = "1/10";
-    private static final String BASE_SHA = "base-commit";
-    private static final String TARGET_SHA = "target-commit";
+    private static final String BASE_SHA = objectId('a');
+    private static final String TARGET_SHA = objectId('b');
+    private static final String KEEP_BLOB_SHA = objectId('c');
+    private static final String REMOVED_BLOB_SHA = objectId('d');
+    private static final String MODIFIED_OLD_BLOB_SHA = objectId('e');
+    private static final String MODIFIED_NEW_BLOB_SHA = objectId('f');
+    private static final String ADDED_BLOB_SHA = objectId('0');
+    private static final String PARENT_SHA = objectId('1');
 
     @Test
     void shouldBuildManifestForAddedModifiedAndDeletedFiles() {
         FakeObjectStorage storage = new FakeObjectStorage();
         writeScenario(storage);
         ListChangesTool tool = new ListChangesTool(
-                new ObjectStorageGitObjectReader(storage),
+                reader(storage),
                 new ObjectMapper()
         );
 
@@ -103,13 +109,23 @@ class ListChangesToolTest {
     @Test
     void shouldReturnEmptyManifestWhenSnapshotsAreIdentical() {
         FakeObjectStorage storage = new FakeObjectStorage();
-        storage.writeObject(REPO_KEY, "same-blob", bytes("same\n"));
-        Commit base = new Commit("base", null);
-        base.setMapping(Map.of("src/Main.java", "same-blob"));
-        Commit target = new Commit("target", BASE_SHA);
-        target.setMapping(Map.of("src/Main.java", "same-blob"));
-        storage.writeObject(REPO_KEY, BASE_SHA, Utils.serialize(base));
-        storage.writeObject(REPO_KEY, TARGET_SHA, Utils.serialize(target));
+        storage.writeObject(REPO_KEY, KEEP_BLOB_SHA, bytes("same\n"));
+        writeCommit(
+                storage,
+                REPO_KEY,
+                BASE_SHA,
+                null,
+                "base",
+                Map.of("src/Main.java", KEEP_BLOB_SHA)
+        );
+        writeCommit(
+                storage,
+                REPO_KEY,
+                TARGET_SHA,
+                BASE_SHA,
+                "target",
+                Map.of("src/Main.java", KEEP_BLOB_SHA)
+        );
 
         ToolResult result = executeWith(storage);
 
@@ -125,7 +141,7 @@ class ListChangesToolTest {
     @Test
     void shouldRejectMissingBaseRevision() {
         ListChangesTool tool = new ListChangesTool(
-                new ObjectStorageGitObjectReader(new FakeObjectStorage()),
+                reader(new FakeObjectStorage()),
                 new ObjectMapper()
         );
         ToolResult result = tool.execute(
@@ -152,7 +168,7 @@ class ListChangesToolTest {
         FakeObjectStorage storage = new FakeObjectStorage();
         writeScenario(storage);
         ListChangesTool tool = new ListChangesTool(
-                new ObjectStorageGitObjectReader(storage),
+                reader(storage),
                 new ObjectMapper()
         );
         ToolRegistry registry = new ToolRegistry(List.of(tool));
@@ -183,7 +199,7 @@ class ListChangesToolTest {
 
     private ToolResult executeWith(FakeObjectStorage storage) {
         ListChangesTool tool = new ListChangesTool(
-                new ObjectStorageGitObjectReader(storage),
+                reader(storage),
                 new ObjectMapper()
         );
         return tool.execute(
@@ -203,28 +219,36 @@ class ListChangesToolTest {
     }
 
     private void writeScenario(FakeObjectStorage storage) {
-        storage.writeObject(REPO_KEY, "blob-keep", bytes("unchanged"));
-        storage.writeObject(REPO_KEY, "blob-removed", bytes("class Removed {}\n"));
-        storage.writeObject(REPO_KEY, "blob-modified-old", bytes("class Modified { int value = 1; }\n"));
-        storage.writeObject(REPO_KEY, "blob-modified-new", bytes("class Modified { int value = 2; }\n"));
-        storage.writeObject(REPO_KEY, "blob-added", bytes("class Added {}\n"));
+        storage.writeObject(REPO_KEY, KEEP_BLOB_SHA, bytes("unchanged"));
+        storage.writeObject(REPO_KEY, REMOVED_BLOB_SHA, bytes("class Removed {}\n"));
+        storage.writeObject(REPO_KEY, MODIFIED_OLD_BLOB_SHA, bytes("class Modified { int value = 1; }\n"));
+        storage.writeObject(REPO_KEY, MODIFIED_NEW_BLOB_SHA, bytes("class Modified { int value = 2; }\n"));
+        storage.writeObject(REPO_KEY, ADDED_BLOB_SHA, bytes("class Added {}\n"));
 
-        Commit base = new Commit("base", "parent-sha");
-        base.setMapping(Map.of(
-                "docs/Keep.md", "blob-keep",
-                "src/Modified.java", "blob-modified-old",
-                "src/Removed.java", "blob-removed"
-        ));
-
-        Commit target = new Commit("target", BASE_SHA);
-        target.setMapping(Map.of(
-                "docs/Keep.md", "blob-keep",
-                "src/Modified.java", "blob-modified-new",
-                "src/Added.java", "blob-added"
-        ));
-
-        storage.writeObject(REPO_KEY, BASE_SHA, Utils.serialize(base));
-        storage.writeObject(REPO_KEY, TARGET_SHA, Utils.serialize(target));
+        writeCommit(
+                storage,
+                REPO_KEY,
+                BASE_SHA,
+                PARENT_SHA,
+                "base",
+                Map.of(
+                        "docs/Keep.md", KEEP_BLOB_SHA,
+                        "src/Modified.java", MODIFIED_OLD_BLOB_SHA,
+                        "src/Removed.java", REMOVED_BLOB_SHA
+                )
+        );
+        writeCommit(
+                storage,
+                REPO_KEY,
+                TARGET_SHA,
+                BASE_SHA,
+                "target",
+                Map.of(
+                        "docs/Keep.md", KEEP_BLOB_SHA,
+                        "src/Modified.java", MODIFIED_NEW_BLOB_SHA,
+                        "src/Added.java", ADDED_BLOB_SHA
+                )
+        );
     }
 
     private byte[] bytes(String value) {

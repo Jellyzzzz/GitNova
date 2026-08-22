@@ -1,9 +1,14 @@
 package com.gitnova.storage;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FakeObjectStorageTest {
@@ -17,5 +22,20 @@ class FakeObjectStorageTest {
 
         assertEquals(Set.of("sha-a", "sha-b"), storage.listObjects("1/10"));
         assertEquals(Set.of(), storage.listObjects("404/404"));
+    }
+
+    @Test
+    void shouldPromoteAndOpenCopiedObjectBytes(@TempDir Path temporaryDirectory)
+            throws Exception {
+        FakeObjectStorage storage = new FakeObjectStorage();
+        byte[] expected = new byte[]{0, 1, 2, -1};
+        Path stagedObject = temporaryDirectory.resolve("staged-object");
+        Files.write(stagedObject, expected);
+
+        storage.promoteObject("1/10", "object-id", stagedObject);
+
+        try (InputStream input = storage.openObject("1/10", "object-id")) {
+            assertArrayEquals(expected, input.readAllBytes());
+        }
     }
 }

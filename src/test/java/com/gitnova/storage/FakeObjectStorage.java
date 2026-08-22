@@ -1,5 +1,10 @@
 package com.gitnova.storage;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Arrays;
@@ -23,6 +28,19 @@ public class FakeObjectStorage implements ObjectStorage {
     }
 
     @Override
+    public void promoteObject(String repoKey, String sha1, Path verifiedTemporaryFile) {
+        try {
+            writeObject(repoKey, sha1, Files.readAllBytes(verifiedTemporaryFile));
+        } catch (IOException exception) {
+            throw new ObjectStorageException(
+                    ObjectStorageException.Reason.TRANSIENT,
+                    "Failed to promote fake object",
+                    exception
+            );
+        }
+    }
+
+    @Override
     public byte[] readObject(String repoKey, String sha1) {
         if (readFailure != null) {
             throw readFailure;
@@ -33,10 +51,18 @@ public class FakeObjectStorage implements ObjectStorage {
                 .get(sha1);
 
         if (content == null) {
-            throw new IllegalStateException("Object not found: " + sha1);
+            throw new ObjectStorageException(
+                    ObjectStorageException.Reason.NOT_FOUND,
+                    "Object not found: " + sha1
+            );
         }
 
         return Arrays.copyOf(content, content.length);
+    }
+
+    @Override
+    public InputStream openObject(String repoKey, String sha1) {
+        return new ByteArrayInputStream(readObject(repoKey, sha1));
     }
 
     @Override

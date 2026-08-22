@@ -2,9 +2,6 @@ package com.gitnova.service.agent.tools;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.gitnova.gitlet.Commit;
-import com.gitnova.gitlet.Utils;
-import com.gitnova.gitobject.ObjectStorageGitObjectReader;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
@@ -17,6 +14,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
+import static com.gitnova.gitobject.GitObjectTestFixtures.objectId;
+import static com.gitnova.gitobject.GitObjectTestFixtures.reader;
+import static com.gitnova.gitobject.GitObjectTestFixtures.writeCommit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -24,8 +24,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class GetDiffToolTest {
 
     private static final String REPO_KEY = "1/10";
-    private static final String BASE_SHA = "base-commit";
-    private static final String TARGET_SHA = "target-commit";
+    private static final String BASE_SHA = objectId('a');
+    private static final String TARGET_SHA = objectId('b');
+    private static final String OLD_BLOB_SHA = objectId('c');
+    private static final String NEW_BLOB_SHA = objectId('d');
+    private static final String SAME_BLOB_SHA = objectId('e');
     private static final String FILE_PATH = "src/Main.java";
 
     @Test
@@ -33,7 +36,7 @@ class GetDiffToolTest {
         FakeObjectStorage storage = new FakeObjectStorage();
         writeTwoHunkScenario(storage);
         GetDiffTool tool = new GetDiffTool(
-                new ObjectStorageGitObjectReader(storage)
+                reader(storage)
         );
         ToolRegistry registry = new ToolRegistry(List.of(tool));
 
@@ -77,7 +80,7 @@ class GetDiffToolTest {
         FakeObjectStorage storage = new FakeObjectStorage();
         writeTwoHunkScenario(storage);
         GetDiffTool tool = new GetDiffTool(
-                new ObjectStorageGitObjectReader(storage)
+                reader(storage)
         );
         ObjectNode arguments = arguments();
         arguments.put("filePath", "src/Unchanged.java");
@@ -111,26 +114,36 @@ class GetDiffToolTest {
     }
 
     private void writeTwoHunkScenario(FakeObjectStorage storage) {
-        storage.writeObject(REPO_KEY, "old-blob", bytes(
+        storage.writeObject(REPO_KEY, OLD_BLOB_SHA, bytes(
                 "keep-1\nold-one\nkeep-3\nkeep-4\nold-two\nkeep-6\n"
         ));
-        storage.writeObject(REPO_KEY, "new-blob", bytes(
+        storage.writeObject(REPO_KEY, NEW_BLOB_SHA, bytes(
                 "keep-1\nnew-one\nkeep-3\nkeep-4\nnew-two\nkeep-6\n"
         ));
-        storage.writeObject(REPO_KEY, "same-blob", bytes("same\n"));
+        storage.writeObject(REPO_KEY, SAME_BLOB_SHA, bytes("same\n"));
 
-        Commit base = new Commit("base", null);
-        base.setMapping(Map.of(
-                FILE_PATH, "old-blob",
-                "src/Unchanged.java", "same-blob"
-        ));
-        Commit target = new Commit("target", BASE_SHA);
-        target.setMapping(Map.of(
-                FILE_PATH, "new-blob",
-                "src/Unchanged.java", "same-blob"
-        ));
-        storage.writeObject(REPO_KEY, BASE_SHA, Utils.serialize(base));
-        storage.writeObject(REPO_KEY, TARGET_SHA, Utils.serialize(target));
+        writeCommit(
+                storage,
+                REPO_KEY,
+                BASE_SHA,
+                null,
+                "base",
+                Map.of(
+                        FILE_PATH, OLD_BLOB_SHA,
+                        "src/Unchanged.java", SAME_BLOB_SHA
+                )
+        );
+        writeCommit(
+                storage,
+                REPO_KEY,
+                TARGET_SHA,
+                BASE_SHA,
+                "target",
+                Map.of(
+                        FILE_PATH, NEW_BLOB_SHA,
+                        "src/Unchanged.java", SAME_BLOB_SHA
+                )
+        );
     }
 
     private byte[] bytes(String value) {

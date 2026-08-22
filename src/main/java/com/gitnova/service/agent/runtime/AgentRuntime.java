@@ -181,7 +181,11 @@ public class AgentRuntime {
 
         if(!result.successful()){
             if(result.status()==ToolStatus.INVALID_ARGUMENT){
-                return handleInvalidDraft(state,result.message());
+                return handleInvalidDraft(
+                        state,
+                        result.message(),
+                        "Correct the draft and call finalizeReview alone."
+                );
             }
             return Optional.of(terminate(state,AgentTerminationReason.TOOL_EXECUTION_FAILURE));
         }
@@ -198,9 +202,18 @@ public class AgentRuntime {
         if(!verification.correctable()){
             return Optional.of(terminate(state,AgentTerminationReason.INVALID_FINAL_DRAFT));
         }
-        return handleInvalidDraft(state,String.join("\n",verification.feedback()));
+        return handleInvalidDraft(
+                state,
+                String.join("\n",verification.feedback()),
+                "Gather any missing tool evidence or correct the draft, "
+                        + "then call finalizeReview alone."
+        );
     }
-    private Optional<AgentRunResult> handleInvalidDraft(RunState state,String feedback){
+    private Optional<AgentRunResult> handleInvalidDraft(
+            RunState state,
+            String feedback,
+            String correctionInstruction
+    ){
         if(state.finalDraftCorrectionCount>=agentRuntimePolicy.maxFinalDraftCorrections()){
             return Optional.of(terminate(state,AgentTerminationReason.INVALID_FINAL_DRAFT));
         }
@@ -209,8 +222,8 @@ public class AgentRuntime {
                 messageFactory.harnessFeedback(
                         "The final review draft was rejected:\n"
                                 + feedback
-                                + "\nCorrect the draft and call "
-                                + "finalizeReview alone."
+                                + "\n"
+                                + correctionInstruction
                 )
         );
         return Optional.empty();

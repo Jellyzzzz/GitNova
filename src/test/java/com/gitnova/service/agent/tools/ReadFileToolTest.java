@@ -2,9 +2,6 @@ package com.gitnova.service.agent.tools;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.gitnova.gitlet.Commit;
-import com.gitnova.gitlet.Utils;
-import com.gitnova.gitobject.ObjectStorageGitObjectReader;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolResult;
@@ -15,25 +12,37 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
+import static com.gitnova.gitobject.GitObjectTestFixtures.objectId;
+import static com.gitnova.gitobject.GitObjectTestFixtures.reader;
+import static com.gitnova.gitobject.GitObjectTestFixtures.writeCommit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ReadFileToolTest {
 
     private static final String REPO_KEY = "1/10";
+    private static final String BASE_SHA = objectId('a');
+    private static final String TARGET_SHA = objectId('b');
+    private static final String BASE_BLOB_SHA = objectId('c');
+    private static final String TARGET_BLOB_SHA = objectId('d');
 
     @Test
     void shouldReadRequestedTargetRangeWithRealLineNumbers() {
         FakeObjectStorage storage = new FakeObjectStorage();
         storage.writeObject(
                 REPO_KEY,
-                "target-blob",
+                TARGET_BLOB_SHA,
                 "one\ntwo\nthree\nfour\n".getBytes(StandardCharsets.UTF_8)
         );
-        Commit target = new Commit("target", "base-sha");
-        target.setMapping(Map.of("src/Main.java", "target-blob"));
-        storage.writeObject(REPO_KEY, "target-sha", Utils.serialize(target));
+        writeCommit(
+                storage,
+                REPO_KEY,
+                TARGET_SHA,
+                BASE_SHA,
+                "target",
+                Map.of("src/Main.java", TARGET_BLOB_SHA)
+        );
         ReadFileTool tool = new ReadFileTool(
-                new ObjectStorageGitObjectReader(storage)
+                reader(storage)
         );
 
         ObjectNode arguments = JsonNodeFactory.instance.objectNode();
@@ -56,7 +65,7 @@ class ReadFileToolTest {
     @Test
     void shouldRejectTraversalPathBeforeReadingStorage() {
         ReadFileTool tool = new ReadFileTool(
-                new ObjectStorageGitObjectReader(new FakeObjectStorage())
+                reader(new FakeObjectStorage())
         );
         ObjectNode arguments = JsonNodeFactory.instance.objectNode();
         arguments.put("revision", "TARGET");
@@ -73,15 +82,25 @@ class ReadFileToolTest {
     @Test
     void shouldResolveBaseAndTargetOnlyFromRunContext() {
         FakeObjectStorage storage = new FakeObjectStorage();
-        storage.writeObject(REPO_KEY, "base-blob", "base\n".getBytes(StandardCharsets.UTF_8));
-        storage.writeObject(REPO_KEY, "target-blob", "target\n".getBytes(StandardCharsets.UTF_8));
-        Commit base = new Commit("base", null);
-        base.setMapping(Map.of("src/Main.java", "base-blob"));
-        Commit target = new Commit("target", "base-sha");
-        target.setMapping(Map.of("src/Main.java", "target-blob"));
-        storage.writeObject(REPO_KEY, "base-sha", Utils.serialize(base));
-        storage.writeObject(REPO_KEY, "target-sha", Utils.serialize(target));
-        ReadFileTool tool = new ReadFileTool(new ObjectStorageGitObjectReader(storage));
+        storage.writeObject(REPO_KEY, BASE_BLOB_SHA, "base\n".getBytes(StandardCharsets.UTF_8));
+        storage.writeObject(REPO_KEY, TARGET_BLOB_SHA, "target\n".getBytes(StandardCharsets.UTF_8));
+        writeCommit(
+                storage,
+                REPO_KEY,
+                BASE_SHA,
+                null,
+                "base",
+                Map.of("src/Main.java", BASE_BLOB_SHA)
+        );
+        writeCommit(
+                storage,
+                REPO_KEY,
+                TARGET_SHA,
+                BASE_SHA,
+                "target",
+                Map.of("src/Main.java", TARGET_BLOB_SHA)
+        );
+        ReadFileTool tool = new ReadFileTool(reader(storage));
 
         ObjectNode baseArguments = readArguments("BASE");
         ObjectNode targetArguments = readArguments("TARGET");
@@ -102,7 +121,7 @@ class ReadFileToolTest {
     void shouldRejectBinaryAndOversizedFiles() {
         FakeObjectStorage binaryStorage = storageWithTargetBlob(new byte[]{'a', 0, 'b'});
         ReadFileTool binaryTool = new ReadFileTool(
-                new ObjectStorageGitObjectReader(binaryStorage)
+                reader(binaryStorage)
         );
         ToolResult binary = binaryTool.execute(execution(), readArguments("TARGET"));
         assertEquals(ToolStatus.INVALID_ARGUMENT, binary.status());
@@ -111,7 +130,7 @@ class ReadFileToolTest {
         byte[] oversizedContent = new byte[1024 * 1024 + 1];
         FakeObjectStorage oversizedStorage = storageWithTargetBlob(oversizedContent);
         ReadFileTool oversizedTool = new ReadFileTool(
-                new ObjectStorageGitObjectReader(oversizedStorage)
+                reader(oversizedStorage)
         );
         ToolResult oversized = oversizedTool.execute(execution(), readArguments("TARGET"));
         assertEquals(ToolStatus.INVALID_ARGUMENT, oversized.status());
@@ -129,10 +148,15 @@ class ReadFileToolTest {
 
     private FakeObjectStorage storageWithTargetBlob(byte[] content) {
         FakeObjectStorage storage = new FakeObjectStorage();
-        storage.writeObject(REPO_KEY, "target-blob", content);
-        Commit target = new Commit("target", "base-sha");
-        target.setMapping(Map.of("src/Main.java", "target-blob"));
-        storage.writeObject(REPO_KEY, "target-sha", Utils.serialize(target));
+        storage.writeObject(REPO_KEY, TARGET_BLOB_SHA, content);
+        writeCommit(
+                storage,
+                REPO_KEY,
+                TARGET_SHA,
+                BASE_SHA,
+                "target",
+                Map.of("src/Main.java", TARGET_BLOB_SHA)
+        );
         return storage;
     }
 
@@ -142,8 +166,8 @@ class ReadFileToolTest {
                         "run-1",
                         10L,
                         REPO_KEY,
-                        "base-sha",
-                        "target-sha"
+                        BASE_SHA,
+                        TARGET_SHA
                 ),
                 0,
                 "call-1"

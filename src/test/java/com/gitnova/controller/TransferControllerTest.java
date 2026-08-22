@@ -56,13 +56,13 @@ class TransferControllerTest {
         when(repositoryMapper.selectById(10L)).thenReturn(repository);
         when(repoMemberMapper.selectOne(any(LambdaQueryWrapper.class)))
                 .thenReturn(new RepoMember());
-        when(negotiationService.negotiate(any(String.class), same(request)))
+        when(negotiationService.negotiate(eq(10L), eq("100/10"), same(request)))
                 .thenReturn(response);
 
         ApiResponse<NegotiationResponse> actual = controller.negotiate(10L, request);
 
         assertEquals(200, actual.getCode());
         assertEquals(response, actual.getData());
-        verify(negotiationService).negotiate(eq("100/10"), same(request));
+        verify(negotiationService).negotiate(eq(10L), eq("100/10"), same(request));
     }
 }

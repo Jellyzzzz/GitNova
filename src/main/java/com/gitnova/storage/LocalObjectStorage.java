@@ -39,9 +39,9 @@ public class LocalObjectStorage implements ObjectStorage {
     @Override
     public void writeObject(String repoKey, String sha1, byte[] content) {
         Objects.requireNonNull(content, "content must not be null");
+        RepoKey key = RepoKey.parseCanonical(repoKey);
         GitObjectId id = GitObjectId.of(sha1);
         verifyDigest(content, id);
-        RepoKey key = RepoKey.parseCanonical(repoKey);
         Path directory = requireObjectDirectory(key);
         Path temporary = createTemporaryFile(directory, id);
         try {
@@ -116,10 +116,9 @@ public class LocalObjectStorage implements ObjectStorage {
     @Override
     public Set<String> listObjects(String repoKey) {
         RepoKey key = RepoKey.parseCanonical(repoKey);
-        Path directory = requireObjectDirectory(key);
-        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
-            throw new ObjectStorageException(ObjectStorageException.Reason.CORRUPT,
-                    "object directory is not a directory");
+        Path directory = findExistingObjectDirectory(key);
+        if (directory == null) {
+            return Set.of();
         }
         Set<String> objectIds = new HashSet<>();
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(directory)) {
@@ -134,6 +133,36 @@ public class LocalObjectStorage implements ObjectStorage {
                     "failed to list objects for repository: " + key.value(), exception);
         }
         return Set.copyOf(objectIds);
+    }
+
+    private Path findExistingObjectDirectory(RepoKey key) {
+        Path directory = pathResolver.objectDirectory(key);
+        Path root = pathResolver.storageRoot();
+        if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) {
+            return null;
+        }
+        if (Files.isSymbolicLink(root)
+                || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
+            throw new ObjectStorageException(
+                    ObjectStorageException.Reason.CORRUPT,
+                    "storage root is not a safe directory"
+            );
+        }
+        Path current = root;
+        for (Path part : root.relativize(directory)) {
+            current = current.resolve(part);
+            if (Files.notExists(current, LinkOption.NOFOLLOW_LINKS)) {
+                return null;
+            }
+            if (Files.isSymbolicLink(current)
+                    || !Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS)) {
+                throw new ObjectStorageException(
+                        ObjectStorageException.Reason.CORRUPT,
+                        "object directory contains an unsafe path component"
+                );
+            }
+        }
+        return directory;
     }
 
     private Path requireObjectDirectory(RepoKey key) {

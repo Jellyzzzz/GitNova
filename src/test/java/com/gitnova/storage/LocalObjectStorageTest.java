@@ -1,6 +1,7 @@
 package com.gitnova.storage;
 
 import com.gitnova.storage.config.RepositoryStorageProperties;
+import com.gitnova.gitobject.GitObjectHasher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -13,7 +14,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -30,11 +31,12 @@ class LocalObjectStorageTest {
     void shouldCreateTheObjectDirectoryAndRoundTripObjectBytes() throws IOException {
         LocalObjectStorage storage = storage();
         byte[] expected = "GitNova object".getBytes(StandardCharsets.UTF_8);
+        String expectedSha1 = GitObjectHasher.sha1(expected).value();
 
-        storage.writeObject(REPO_KEY, FIRST_SHA1, expected);
+        storage.writeObject(REPO_KEY, expectedSha1, expected);
 
-        assertTrue(storage.existsObject(REPO_KEY, FIRST_SHA1));
-        assertArrayEquals(expected, storage.readObject(REPO_KEY, FIRST_SHA1));
+        assertTrue(storage.existsObject(REPO_KEY, expectedSha1));
+        assertArrayEquals(expected, storage.readObject(REPO_KEY, expectedSha1));
     }
 
     @Test
@@ -80,29 +82,33 @@ class LocalObjectStorageTest {
     }
 
     @Test
-    void shouldWrapAReadIoFailureAtTheStorageBoundary() {
+    void shouldClassifyMissingObjectWithoutInventingAnIoCause() {
         ObjectStorageException exception = assertThrows(
                 ObjectStorageException.class,
                 () -> storage().readObject(REPO_KEY, FIRST_SHA1)
         );
 
-        assertNotNull(exception.getCause());
+        assertEquals(ObjectStorageException.Reason.NOT_FOUND, exception.reason());
+        assertNull(exception.getCause());
     }
 
     @Test
-    void shouldWrapAWriteIoFailureAtTheStorageBoundary() throws IOException {
+    void shouldRejectAStorageRootThatIsNotADirectory() throws IOException {
         Path fileInsteadOfStorageRoot = tempDir.resolve("not-a-directory");
         Files.writeString(fileInsteadOfStorageRoot, "file");
         LocalObjectStorage storage = new LocalObjectStorage(
                 new RepositoryStorageProperties(fileInsteadOfStorageRoot)
         );
 
+        byte[] content = new byte[]{1};
+        String contentSha1 = GitObjectHasher.sha1(content).value();
         ObjectStorageException exception = assertThrows(
                 ObjectStorageException.class,
-                () -> storage.writeObject(REPO_KEY, FIRST_SHA1, new byte[]{1})
+                () -> storage.writeObject(REPO_KEY, contentSha1, content)
         );
 
-        assertNotNull(exception.getCause());
+        assertEquals(ObjectStorageException.Reason.CORRUPT, exception.reason());
+        assertNull(exception.getCause());
     }
 
     private LocalObjectStorage storage() {
