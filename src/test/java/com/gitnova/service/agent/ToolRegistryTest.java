@@ -12,6 +12,7 @@ import com.gitnova.service.agent.tool.ToolStatus;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -136,6 +137,86 @@ class ToolRegistryTest {
         assertEquals(ToolStatus.INVALID_ARGUMENT, result.status());
         assertEquals("SCHEMA_VALIDATION_FAILED", result.errorCode());
         assertEquals(0, fakeTool.invocationCount());
+    }
+
+    @Test
+    void shouldExposeOnlyToolsAllowedByTaskProfile() {
+        FakeAgentTool readTool = new FakeAgentTool(
+                "readFile",
+                ToolResult.success(JsonNodeFactory.instance.objectNode())
+        );
+        FakeAgentTool writeTool = new FakeAgentTool(
+                "applyPatch",
+                ToolResult.success(JsonNodeFactory.instance.objectNode())
+        );
+        ToolRegistry registry = new ToolRegistry(List.of(readTool, writeTool));
+
+        assertEquals(
+                List.of("readFile"),
+                registry.definitions(Set.of("readFile"))
+                        .stream()
+                        .map(definition -> definition.name())
+                        .toList()
+        );
+    }
+
+    @Test
+    void shouldRejectForgedScopedCallWithoutExecutingTool() {
+        FakeAgentTool writeTool = new FakeAgentTool(
+                "applyPatch",
+                ToolResult.success(JsonNodeFactory.instance.objectNode())
+        );
+        ToolRegistry registry = new ToolRegistry(List.of(writeTool));
+
+        ToolResult result = registry.executeScoped(
+                new ToolExecutionContext(createRunContext(), 0, "call-write"),
+                Set.of(),
+                "applyPatch",
+                JsonNodeFactory.instance.objectNode()
+        );
+
+        assertEquals(ToolStatus.PERMISSION_DENIED, result.status());
+        assertEquals("TOOL_NOT_ALLOWED", result.errorCode());
+        assertEquals(0, writeTool.invocationCount());
+    }
+
+    @Test
+    void shouldExecuteScopedCallWhenToolIsAllowed() {
+        ToolResult expected = ToolResult.success(
+                JsonNodeFactory.instance.objectNode()
+        );
+        FakeAgentTool writeTool = new FakeAgentTool("applyPatch", expected);
+        ToolRegistry registry = new ToolRegistry(List.of(writeTool));
+
+        ToolResult result = registry.executeScoped(
+                new ToolExecutionContext(createRunContext(), 0, "call-write"),
+                Set.of("applyPatch"),
+                "applyPatch",
+                JsonNodeFactory.instance.objectNode()
+        );
+
+        assertSame(expected, result);
+        assertEquals(1, writeTool.invocationCount());
+    }
+
+    @Test
+    void shouldFailFastWhenProfileReferencesUnregisteredTool() {
+        ToolRegistry registry = new ToolRegistry(List.of(
+                new FakeAgentTool(
+                        "readFile",
+                        ToolResult.success(JsonNodeFactory.instance.objectNode())
+                )
+        ));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.definitions(Set.of("applyPatch"))
+        );
+
+        assertEquals(
+                "Allowed tool is not registered: applyPatch",
+                exception.getMessage()
+        );
     }
 
     private ObjectNode schemaRequiringString(String fieldName) {

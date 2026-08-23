@@ -15,6 +15,10 @@ import com.gitnova.service.agent.tool.AgentTool;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
+import com.gitnova.service.agent.workspace.WorkspaceGateway;
+import com.gitnova.service.agent.workspace.WorkspaceOperationException;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.nio.ByteBuffer;
@@ -32,9 +36,26 @@ public class ReadFileTool implements AgentTool {
     private static final int MAX_FILE_BYTES = 1024 * 1024;
 
     private final GitObjectReader gitObjectReader;
+    private final WorkspaceGateway workspaceGateway;
 
     public ReadFileTool(GitObjectReader gitObjectReader) {
+        this(gitObjectReader, (WorkspaceGateway) null);
+    }
+
+    public ReadFileTool(
+            GitObjectReader gitObjectReader,
+            WorkspaceGateway workspaceGateway
+    ) {
         this.gitObjectReader = gitObjectReader;
+        this.workspaceGateway = workspaceGateway;
+    }
+
+    @Autowired
+    public ReadFileTool(
+            GitObjectReader gitObjectReader,
+            ObjectProvider<WorkspaceGateway> workspaceGatewayProvider
+    ) {
+        this(gitObjectReader, workspaceGatewayProvider.getIfAvailable());
     }
 
     @Override
@@ -54,7 +75,7 @@ public class ReadFileTool implements AgentTool {
         schema.put("additionalProperties", false);
         return new ToolDefinition(
                 "readFile",
-                "Reads a bounded line range from BASE or TARGET in the current repository",
+                "Reads a bounded line range from BASE, TARGET, or the current WORKSPACE",
                 schema
         );
     }
@@ -97,9 +118,14 @@ public class ReadFileTool implements AgentTool {
         } catch (IllegalArgumentException e) {
             return invalidArgument(
                     "INVALID_REVISION",
-                    "revision must be BASE or TARGET"
+                    "revision must be BASE, TARGET, or WORKSPACE"
             );
         }
+
+        if (revision == Revision.WORKSPACE) {
+            return readWorkspace(execution, filePath, startLine, requestedEndLine);
+        }
+
         String revisionSha = revision == Revision.TARGET
                 ? run.targetSha1()
                 : run.baseSha1();
@@ -167,6 +193,48 @@ public class ReadFileTool implements AgentTool {
                     "UNSUPPORTED_FILE_ENCODING",
                     "readFile only supports valid UTF-8 text files"
             );
+        }
+    }
+
+    private ToolResult readWorkspace(
+            ToolExecutionContext execution,
+            String filePath,
+            int startLine,
+            int endLine
+    ) {
+        if (workspaceGateway == null) {
+            return ToolResult.error(
+                    ToolStatus.INTERNAL_ERROR,
+                    "WORKSPACE_GATEWAY_UNAVAILABLE",
+                    "Workspace file access is not configured",
+                    false
+            );
+        }
+        try {
+            WorkspaceGateway.FileContent content = workspaceGateway.readFile(
+                    execution.requireWorkspaceId(),
+                    filePath,
+                    startLine,
+                    endLine
+            );
+            ObjectNode payload = JsonNodeFactory.instance.objectNode();
+            payload.put("revision", Revision.WORKSPACE.name());
+            payload.put("generation", content.generation());
+            payload.put("filePath", content.filePath());
+            payload.put("startLine", content.startLine());
+            payload.put("endLine", content.endLine());
+            payload.put("totalLines", content.totalLines());
+            ArrayNode lines = payload.putArray("lines");
+            for (WorkspaceGateway.FileLine fileLine : content.lines()) {
+                ObjectNode line = lines.addObject();
+                line.put("lineNumber", fileLine.lineNumber());
+                line.put("content", fileLine.content());
+            }
+            return ToolResult.success(payload);
+        } catch (IllegalStateException exception) {
+            return WorkspaceToolResults.missingContext();
+        } catch (WorkspaceOperationException exception) {
+            return WorkspaceToolResults.error(exception);
         }
     }
 

@@ -11,6 +11,12 @@ public enum ToolStatus {
      */
     SUCCESS,
     /**
+     * The tool changed state for a confirmed prefix of the requested operations, then stopped
+     * at the first failed operation. The payload must describe the resulting authoritative
+     * state and the operations that were not applied.
+     */
+    PARTIAL_SUCCESS,
+    /**
      * 模型提供的参数缺失、格式错误或不符合 Schema。
      */
     INVALID_ARGUMENT,

@@ -50,9 +50,19 @@ public class ToolRegistry {
      * 返回暴露给模型的全部工具定义。
      */
     public List<ToolDefinition> definitions() {
+        return definitions(tools.keySet());
+    }
+
+    /**
+     * Returns only the definitions authorized by the server-selected task profile.
+     */
+    public List<ToolDefinition> definitions(Set<String> allowedTools) {
+        Set<String> allowed = requireAllowedTools(allowedTools);
         List<ToolDefinition>definitions=new ArrayList<>(tools.size());
         for(AgentTool tool:tools.values()){
-            definitions.add(tool.definition());
+            if (allowed.contains(tool.definition().name())) {
+                definitions.add(tool.definition());
+            }
         }
         return List.copyOf(definitions);
     }
@@ -108,6 +118,59 @@ public class ToolRegistry {
                     false
             );
         }
+    }
+
+    /**
+     * Executes a tool only when it is authorized by the same task profile that produced the
+     * model-visible definitions. This second check prevents forged or stale tool calls from
+     * bypassing definition filtering.
+     */
+    public ToolResult executeScoped(
+            ToolExecutionContext execution,
+            Set<String> allowedTools,
+            String toolName,
+            JsonNode arguments
+    ) {
+        Objects.requireNonNull(execution, "execution must not be null");
+        Objects.requireNonNull(toolName, "toolName must not be null");
+        if (toolName.isBlank()) {
+            return ToolResult.error(
+                    ToolStatus.INVALID_ARGUMENT,
+                    "INVALID_TOOL_NAME",
+                    "Tool name must not be blank",
+                    false
+            );
+        }
+        Set<String> allowed = requireAllowedTools(allowedTools);
+        if (!allowed.contains(toolName)) {
+            return ToolResult.error(
+                    ToolStatus.PERMISSION_DENIED,
+                    "TOOL_NOT_ALLOWED",
+                    "Tool is not allowed for the current task profile",
+                    false
+            );
+        }
+        return execute(execution, toolName, arguments);
+    }
+
+    private Set<String> requireAllowedTools(Set<String> allowedTools) {
+        Objects.requireNonNull(allowedTools, "allowedTools must not be null");
+        LinkedHashSet<String> copied = new LinkedHashSet<>();
+        for (String name : allowedTools) {
+            Objects.requireNonNull(name, "allowed tool name must not be null");
+            if (name.isBlank()) {
+                throw new IllegalArgumentException(
+                        "allowed tool name must not be blank"
+                );
+            }
+            if (!tools.containsKey(name)) {
+                throw new IllegalArgumentException(
+                        "Allowed tool is not registered: " + name
+                );
+            }
+            copied.add(name);
+        }
+        return Collections.unmodifiableSet(copied);
     }
     public boolean isTerminal(String name){
         AgentTool tool=tools.get(name);

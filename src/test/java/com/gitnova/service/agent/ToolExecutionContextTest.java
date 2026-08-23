@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
+import com.gitnova.service.agent.workspace.WorkspaceId;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -37,6 +38,59 @@ class ToolExecutionContextTest {
         assertSame(run, execution.run());
         assertEquals(0, execution.turn());
         assertEquals("call-1", execution.toolCallId());
+        assertFalse(execution.hasWorkspace());
+        assertNull(execution.workspace());
+    }
+
+    @Test
+    void shouldExposeOnlyTrustedWorkspaceIdentityForWorkspaceTool() {
+        WorkspaceId workspaceId = WorkspaceId.generate();
+
+        ToolExecutionContext execution =
+                ToolExecutionContext.forWorkspace(
+                        createRunContext(),
+                        1,
+                        "call-workspace",
+                        workspaceId
+                );
+
+        assertTrue(execution.hasWorkspace());
+        assertEquals(workspaceId, execution.requireWorkspaceId());
+        assertEquals(workspaceId, execution.workspace().workspaceId());
+    }
+
+    @Test
+    void shouldRejectWorkspaceRequirementForReviewOnlyExecution() {
+        ToolExecutionContext execution = new ToolExecutionContext(
+                createRunContext(),
+                0,
+                "call-review"
+        );
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                execution::requireWorkspaceId
+        );
+
+        assertEquals(
+                "tool execution is not bound to a Workspace",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    void shouldRejectNullWorkspaceIdentity() {
+        NullPointerException exception = assertThrows(
+                NullPointerException.class,
+                () -> ToolExecutionContext.forWorkspace(
+                        createRunContext(),
+                        0,
+                        "call-workspace",
+                        null
+                )
+        );
+
+        assertEquals("workspaceId must not be null", exception.getMessage());
     }
 
     @Test

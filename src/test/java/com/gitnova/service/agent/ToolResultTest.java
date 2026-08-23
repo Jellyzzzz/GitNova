@@ -132,6 +132,104 @@ class ToolResultTest {
     }
 
     @Test
+    void shouldCreatePartialSuccessWithAuthoritativeStatePayload() {
+        ObjectNode payload = JsonNodeFactory.instance.objectNode();
+        payload.put("generationBefore", 3);
+        payload.put("generationAfter", 4);
+        payload.putArray("applied").add("src/A.java");
+        payload.put("failedPath", "src/B.java");
+
+        ToolResult result = ToolResult.partialSuccess(
+                payload,
+                "PATCH_OPERATION_FAILED",
+                "One operation was applied before the next operation failed"
+        );
+
+        assertFalse(result.successful());
+        assertTrue(result.partiallySuccessful());
+        assertEquals(ToolStatus.PARTIAL_SUCCESS, result.status());
+        assertSame(payload, result.payload());
+        assertEquals("PATCH_OPERATION_FAILED", result.errorCode());
+        assertFalse(result.retryable());
+        assertFalse(result.truncated());
+    }
+
+    @Test
+    void shouldCreateFailureWithCurrentStatePayload() {
+        ObjectNode payload = JsonNodeFactory.instance.objectNode();
+        payload.put("expectedGeneration", 3);
+        payload.put("currentGeneration", 4);
+
+        ToolResult result = ToolResult.error(
+                ToolStatus.CONFLICT,
+                payload,
+                "STALE_WORKSPACE_GENERATION",
+                "Workspace generation no longer matches",
+                false
+        );
+
+        assertFalse(result.successful());
+        assertFalse(result.partiallySuccessful());
+        assertSame(payload, result.payload());
+        assertEquals(4, result.payload().path("currentGeneration").asInt());
+    }
+
+    @Test
+    void shouldRejectPartialSuccessWithoutStatePayload() {
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> ToolResult.partialSuccess(
+                        JsonNodeFactory.instance.nullNode(),
+                        "PATCH_OPERATION_FAILED",
+                        "Patch partially applied"
+                )
+        );
+
+        assertEquals(
+                "Partial ToolResult must contain a state payload",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    void shouldRejectRetryablePartialSuccess() {
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> new ToolResult(
+                        ToolStatus.PARTIAL_SUCCESS,
+                        JsonNodeFactory.instance.objectNode(),
+                        "PATCH_OPERATION_FAILED",
+                        "Patch partially applied",
+                        true,
+                        false
+                )
+        );
+
+        assertEquals(
+                "Partial ToolResult cannot be retried unchanged",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    void shouldRejectPartialStatusInErrorFactory() {
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> ToolResult.error(
+                        ToolStatus.PARTIAL_SUCCESS,
+                        "PATCH_OPERATION_FAILED",
+                        "Use the partial success factory",
+                        false
+                )
+        );
+
+        assertEquals(
+                "Error result cannot use PARTIAL_SUCCESS status",
+                exception.getMessage()
+        );
+    }
+
+    @Test
     void shouldRejectNullStatus() {
         NullPointerException exception = assertThrows(
                 NullPointerException.class,

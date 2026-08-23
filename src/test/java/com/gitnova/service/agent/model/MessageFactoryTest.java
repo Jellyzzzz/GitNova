@@ -89,6 +89,36 @@ class MessageFactoryTest {
     }
 
     @Test
+    void shouldSerializePartialStateAndPreserveCallId() throws Exception {
+        JsonNode payload = JsonNodeFactory.instance.objectNode()
+                .put("generationBefore", 3)
+                .put("generationAfter", 4);
+
+        ModelMessage message = factory.tool(
+                toolCall("call-patch", "applyPatch"),
+                ToolResult.partialSuccess(
+                        payload,
+                        "PATCH_OPERATION_FAILED",
+                        "A confirmed prefix was applied before the patch failed"
+                )
+        );
+
+        JsonNode observation = objectMapper.readTree(message.content());
+        assertEquals(ModelRole.TOOL, message.role());
+        assertEquals("call-patch", message.toolCallId());
+        assertEquals(
+                ToolStatus.PARTIAL_SUCCESS.name(),
+                observation.path("status").asText()
+        );
+        assertEquals(4, observation.path("payload").path("generationAfter").asInt());
+        assertEquals(
+                "PATCH_OPERATION_FAILED",
+                observation.path("errorCode").asText()
+        );
+        assertFalse(observation.path("retryable").asBoolean());
+    }
+
+    @Test
     void shouldCreateTaggedHarnessFeedbackWithoutToolBinding() {
         ModelMessage message = factory.harnessFeedback("Call finalizeReview alone after evidence gathering.");
 
