@@ -4,11 +4,18 @@ package com.gitnova.service.agent;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.gitnova.service.agent.runtime.AgentCapability;
+import com.gitnova.service.agent.runtime.AgentCapabilityPolicy;
+import com.gitnova.service.agent.runtime.AgentExecutionContext;
 import com.gitnova.service.agent.runtime.AgentRunContext;
+import com.gitnova.service.agent.tool.ToolAccessMode;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
+import com.gitnova.service.agent.workspace.SnapshotScope;
+import com.gitnova.service.agent.workspace.WorkspaceBinding;
+import com.gitnova.service.agent.workspace.WorkspaceId;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -20,11 +27,10 @@ class ToolRegistryTest {
 
     private AgentRunContext createRunContext() {
         return new AgentRunContext(
-                "run-1",
+                "context-1",
                 10L,
                 "1/10",
-                null,
-                "target-sha"
+                SnapshotScope.of("a".repeat(40))
         );
     }
 
@@ -51,7 +57,7 @@ class ToolRegistryTest {
                 );
 
         ToolExecutionContext execution =
-                new ToolExecutionContext(
+                com.gitnova.service.agent.AgentTestContexts.toolExecution(
                         createRunContext(),
                         0,
                         "call-1"
@@ -98,7 +104,7 @@ class ToolRegistryTest {
                 ToolResult.success(JsonNodeFactory.instance.objectNode())
         );
         ToolRegistry registry = new ToolRegistry(List.of(fakeTool));
-        ToolExecutionContext execution = new ToolExecutionContext(
+        ToolExecutionContext execution = com.gitnova.service.agent.AgentTestContexts.toolExecution(
                 createRunContext(),
                 0,
                 "call-1"
@@ -123,7 +129,7 @@ class ToolRegistryTest {
                 ToolResult.success(JsonNodeFactory.instance.objectNode())
         );
         ToolRegistry registry = new ToolRegistry(List.of(fakeTool));
-        ToolExecutionContext execution = new ToolExecutionContext(
+        ToolExecutionContext execution = com.gitnova.service.agent.AgentTestContexts.toolExecution(
                 createRunContext(),
                 0,
                 "call-1"
@@ -140,83 +146,48 @@ class ToolRegistryTest {
     }
 
     @Test
-    void shouldExposeOnlyToolsAllowedByTaskProfile() {
+    void shouldFilterAndRecheckToolsByHarnessCapabilityPolicy() {
         FakeAgentTool readTool = new FakeAgentTool(
                 "readFile",
-                ToolResult.success(JsonNodeFactory.instance.objectNode())
+                JsonNodeFactory.instance.objectNode().put("type", "object"),
+                ToolResult.success(JsonNodeFactory.instance.objectNode()),
+                ToolAccessMode.READ_ONLY
         );
         FakeAgentTool writeTool = new FakeAgentTool(
                 "applyPatch",
-                ToolResult.success(JsonNodeFactory.instance.objectNode())
+                JsonNodeFactory.instance.objectNode().put("type", "object"),
+                ToolResult.success(JsonNodeFactory.instance.objectNode()),
+                ToolAccessMode.WORKSPACE_WRITE
         );
         ToolRegistry registry = new ToolRegistry(List.of(readTool, writeTool));
+        AgentCapabilityPolicy readOnlyPolicy = new AgentCapabilityPolicy(
+                Set.of(AgentCapability.CODE_READ)
+        );
 
         assertEquals(
                 List.of("readFile"),
-                registry.definitions(Set.of("readFile"))
-                        .stream()
+                registry.definitions(readOnlyPolicy).stream()
                         .map(definition -> definition.name())
                         .toList()
         );
-    }
 
-    @Test
-    void shouldRejectForgedScopedCallWithoutExecutingTool() {
-        FakeAgentTool writeTool = new FakeAgentTool(
-                "applyPatch",
-                ToolResult.success(JsonNodeFactory.instance.objectNode())
+        AgentExecutionContext readOnlyContext = new AgentExecutionContext(
+                "session-read-only",
+                createRunContext(),
+                1L,
+                "Inspect without modifying",
+                new WorkspaceBinding(WorkspaceId.generate()),
+                readOnlyPolicy
         );
-        ToolRegistry registry = new ToolRegistry(List.of(writeTool));
-
-        ToolResult result = registry.executeScoped(
-                new ToolExecutionContext(createRunContext(), 0, "call-write"),
-                Set.of(),
+        ToolResult denied = registry.execute(
+                new ToolExecutionContext(readOnlyContext, 0, "call-write"),
                 "applyPatch",
                 JsonNodeFactory.instance.objectNode()
         );
 
-        assertEquals(ToolStatus.PERMISSION_DENIED, result.status());
-        assertEquals("TOOL_NOT_ALLOWED", result.errorCode());
+        assertEquals(ToolStatus.PERMISSION_DENIED, denied.status());
+        assertEquals("MISSING_TOOL_CAPABILITY", denied.errorCode());
         assertEquals(0, writeTool.invocationCount());
-    }
-
-    @Test
-    void shouldExecuteScopedCallWhenToolIsAllowed() {
-        ToolResult expected = ToolResult.success(
-                JsonNodeFactory.instance.objectNode()
-        );
-        FakeAgentTool writeTool = new FakeAgentTool("applyPatch", expected);
-        ToolRegistry registry = new ToolRegistry(List.of(writeTool));
-
-        ToolResult result = registry.executeScoped(
-                new ToolExecutionContext(createRunContext(), 0, "call-write"),
-                Set.of("applyPatch"),
-                "applyPatch",
-                JsonNodeFactory.instance.objectNode()
-        );
-
-        assertSame(expected, result);
-        assertEquals(1, writeTool.invocationCount());
-    }
-
-    @Test
-    void shouldFailFastWhenProfileReferencesUnregisteredTool() {
-        ToolRegistry registry = new ToolRegistry(List.of(
-                new FakeAgentTool(
-                        "readFile",
-                        ToolResult.success(JsonNodeFactory.instance.objectNode())
-                )
-        ));
-
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> registry.definitions(Set.of("applyPatch"))
-        );
-
-        assertEquals(
-                "Allowed tool is not registered: applyPatch",
-                exception.getMessage()
-        );
     }
 
     private ObjectNode schemaRequiringString(String fieldName) {

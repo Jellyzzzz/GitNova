@@ -14,17 +14,16 @@ import com.gitnova.service.agent.prompt.BudgetSection;
 import com.gitnova.service.agent.prompt.OutputContractSection;
 import com.gitnova.service.agent.prompt.PromptAssembler;
 import com.gitnova.service.agent.prompt.RepositoryScopeSection;
-import com.gitnova.service.agent.prompt.ReviewPolicySection;
+import com.gitnova.service.agent.prompt.QualityPolicySection;
 import com.gitnova.service.agent.prompt.RoleSection;
 import com.gitnova.service.agent.prompt.SecuritySection;
 import com.gitnova.service.agent.prompt.TaskSection;
 import com.gitnova.service.agent.prompt.ToolPolicySection;
-import com.gitnova.service.agent.review.ReviewVerifier;
 import com.gitnova.service.agent.tool.AgentTool;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
-import com.gitnova.service.agent.tools.FinalizeReviewTool;
+import com.gitnova.service.agent.tools.FinishTaskTool;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -45,7 +44,7 @@ class LiveAgentRuntimeSmokeTest {
         RecordingListChangesTool listChanges = new RecordingListChangesTool(objectMapper);
         ToolRegistry toolRegistry = new ToolRegistry(List.of(
                 listChanges,
-                new FinalizeReviewTool(objectMapper)
+                new FinishTaskTool(objectMapper)
         ));
 
         String baseUrl = environmentOrDefault(
@@ -78,7 +77,7 @@ class LiveAgentRuntimeSmokeTest {
                 new SecuritySection(),
                 new RepositoryScopeSection(),
                 new ToolPolicySection(),
-                new ReviewPolicySection(),
+                new QualityPolicySection(),
                 new BudgetSection(),
                 new OutputContractSection()
         ));
@@ -88,8 +87,7 @@ class LiveAgentRuntimeSmokeTest {
                 promptAssembler,
                 new MessageFactory(objectMapper),
                 toolRegistry,
-                new ReviewVerifier(),
-                objectMapper,
+                AgentRuntimeLiveTestSupport.inspector(objectMapper),
                 new AgentRuntimePolicy(
                         model,
                         6,
@@ -101,12 +99,15 @@ class LiveAgentRuntimeSmokeTest {
                 )
         );
 
-        AgentRunResult result = runtime.run(new AgentRunContext(
-                "live-runtime-smoke",
-                42L,
-                "7/42",
-                "base-smoke-sha",
-                "target-smoke-sha"
+        AgentRunResult result = runtime.run(AgentRuntimeLiveTestSupport.execution(
+                new AgentRunContext(
+                        "live-runtime-smoke",
+                        42L,
+                        "7/42",
+                        "a".repeat(40),
+                        "b".repeat(40)
+                ),
+                "Review the authorized change and report evidence-backed findings"
         ));
 
         System.out.printf(
@@ -132,11 +133,10 @@ class LiveAgentRuntimeSmokeTest {
 
         assertEquals(AgentRunStatus.COMPLETED, result.status());
         assertEquals(
-                AgentTerminationReason.FINALIZE_SUCCEEDED,
+                AgentTerminationReason.FINISH_SUCCEEDED,
                 result.terminationReason()
         );
-        assertNotNull(result.reviewDraft());
-        assertTrue(result.coverage().changesListed());
+        assertNotNull(AgentRuntimeLiveTestSupport.reviewDraft(result));
         assertEquals(1, listChanges.invocationCount);
         assertTrue(result.modelCallCount() >= 2);
         assertTrue(result.toolCallCount() >= 2);
@@ -148,7 +148,7 @@ class LiveAgentRuntimeSmokeTest {
                 result.terminationReason(),
                 result.modelCallCount(),
                 result.toolCallCount(),
-                result.reviewDraft().summary()
+                AgentRuntimeLiveTestSupport.reviewDraft(result).summary()
         );
     }
 

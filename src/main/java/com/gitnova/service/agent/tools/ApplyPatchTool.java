@@ -291,11 +291,11 @@ public final class ApplyPatchTool implements AgentTool {
                 ));
 
         ToolStatus status = switch (failure.errorCode()) {
-            case "INVALID_WORKSPACE_PATH", "UNSAFE_WORKSPACE_PATH" ->
+            case "INVALID_WORKSPACE_PATH", "UNSAFE_WORKSPACE_PATH", "RESERVED_WORKSPACE_PATH" ->
                     ToolStatus.PERMISSION_DENIED;
             case "FILE_NOT_FOUND" -> ToolStatus.NOT_FOUND;
             case "INVALID_UNIFIED_DIFF", "FILE_NOT_UTF8_TEXT", "MIXED_LINE_ENDINGS",
-                    "UNSUPPORTED_FILE_TYPE" -> ToolStatus.INVALID_ARGUMENT;
+                    "UNSUPPORTED_FILE_TYPE", "FILE_TOO_LARGE" -> ToolStatus.INVALID_ARGUMENT;
             case "FILESYSTEM_FAILURE", "ATOMIC_WRITE_UNAVAILABLE", "WORKSPACE_UNAVAILABLE" ->
                     ToolStatus.INTERNAL_ERROR;
             default -> ToolStatus.CONFLICT;

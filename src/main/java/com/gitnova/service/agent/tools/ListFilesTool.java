@@ -13,6 +13,8 @@ import com.gitnova.service.agent.workspace.WorkspaceOperationException;
 
 import java.util.Objects;
 
+import static com.gitnova.service.agent.workspace.WorkspaceGateway.MAX_PATH_CHARS;
+
 /** Lists the direct children of one Workspace directory. */
 public final class ListFilesTool implements AgentTool {
 
@@ -28,7 +30,10 @@ public final class ListFilesTool implements AgentTool {
     public ToolDefinition definition() {
         ObjectNode schema = JsonNodeFactory.instance.objectNode();
         schema.put("type", "object");
-        schema.putObject("properties").putObject("path").put("type", "string");
+        schema.putObject("properties")
+                .putObject("path")
+                .put("type", "string")
+                .put("maxLength", MAX_PATH_CHARS);
         schema.putArray("required").add("path");
         schema.put("additionalProperties", false);
         return new ToolDefinition(
@@ -45,9 +50,14 @@ public final class ListFilesTool implements AgentTool {
             return WorkspaceToolResults.invalid("INVALID_DIRECTORY_PATH", "path must not be blank");
         }
         try {
-            return ToolResult.success(objectMapper.valueToTree(
-                    workspaceGateway.listFiles(execution.requireWorkspaceId(), path)
-            ));
+            WorkspaceGateway.FileListing listing = workspaceGateway.listFiles(
+                    execution.requireWorkspaceId(),
+                    path
+            );
+            return ToolResult.success(
+                    objectMapper.valueToTree(listing),
+                    listing.truncated()
+            );
         } catch (IllegalStateException exception) {
             return WorkspaceToolResults.missingContext();
         } catch (WorkspaceOperationException exception) {

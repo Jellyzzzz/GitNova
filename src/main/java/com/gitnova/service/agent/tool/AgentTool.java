@@ -2,9 +2,9 @@ package com.gitnova.service.agent.tool;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.gitnova.dto.ToolDefinition;
-import com.gitnova.service.agent.tool.ToolExecutionContext;
+import com.gitnova.service.agent.runtime.AgentCapability;
 
-import java.util.Map;
+import java.util.Set;
 
 /**
  * Agent 可调用工具的统一执行契约。
@@ -39,6 +39,17 @@ public interface AgentTool {
         return ToolAccessMode.READ_ONLY;
     }
 
+    /** Coarse server authorization required before this tool may be exposed or executed. */
+    default Set<AgentCapability> requiredCapabilities() {
+        return switch (accessMode()) {
+            case READ_ONLY -> Set.of(AgentCapability.CODE_READ);
+            case WORKSPACE_WRITE -> Set.of(AgentCapability.WORKSPACE_MUTATION);
+            case REQUIRE_APPROVAL -> throw new IllegalStateException(
+                    "approval-gated tools must declare explicit capabilities"
+            );
+        };
+    }
+
     /**
      * 当前 Tool Bean 是否支持并发调用。
      */
@@ -48,5 +59,7 @@ public interface AgentTool {
     /**
      * 当前工具是否为terminal工具
      */
-    default boolean terminal() {return false;}
+    default boolean terminal() {
+        return false;
+    }
 }

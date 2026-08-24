@@ -8,6 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -18,6 +19,7 @@ import java.util.concurrent.locks.Lock;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,9 +30,13 @@ class LocalWorkspaceGatewayTest {
 
     @Test
     void shouldApplyOrderedBatchAndAdvanceGenerationExactlyOnce() throws Exception {
-        Fixture fixture = fixture(0);
-        Files.writeString(fixture.root().resolve("update.txt"), "before\n");
-        Files.writeString(fixture.root().resolve("delete.txt"), "remove\n");
+        Fixture fixture = fixture(
+                0,
+                Map.of(
+                        "update.txt", "before\n",
+                        "delete.txt", "remove\n"
+                )
+        );
 
         WorkspaceMutationCommand command = new WorkspaceMutationCommand(
                 0,
@@ -130,6 +136,48 @@ class LocalWorkspaceGatewayTest {
     }
 
     @Test
+    void shouldRefreshOutOfBandChangesExactlyOnceAndInvalidateValidation() throws Exception {
+        Fixture fixture = fixture(0);
+        fixture.state().markValidationSucceeded(0);
+        Files.writeString(fixture.root().resolve("external.txt"), "changed elsewhere\n");
+
+        WorkspaceGateway.WorkspaceRefresh first = fixture.gateway().refreshWorkspace(
+                fixture.workspaceId()
+        );
+        WorkspaceGateway.WorkspaceRefresh second = fixture.gateway().refreshWorkspace(
+                fixture.workspaceId()
+        );
+
+        assertEquals(0, first.generationBefore());
+        assertEquals(1, first.generationAfter());
+        assertTrue(first.changed());
+        assertEquals(1, second.generationBefore());
+        assertEquals(1, second.generationAfter());
+        assertFalse(second.changed());
+        assertEquals(1, fixture.state().generation());
+        assertNull(fixture.state().latestSuccessfulValidationGeneration());
+    }
+
+    @Test
+    void shouldRefreshBeforeMutationAndRejectNowStaleCommand() throws Exception {
+        Fixture fixture = fixture(0);
+        Files.writeString(fixture.root().resolve("external.txt"), "changed elsewhere\n");
+
+        PatchBatchResult result = fixture.gateway().applyPatch(
+                fixture.workspaceId(),
+                new WorkspaceMutationCommand(
+                        0,
+                        List.of(PatchOperation.create(0, "must-not-write.txt", "no\n"))
+                )
+        );
+
+        assertEquals(PatchBatchStatus.CONFLICT, result.status());
+        assertEquals(1, result.generationBefore());
+        assertEquals(1, result.generationAfter());
+        assertFalse(Files.exists(fixture.root().resolve("must-not-write.txt")));
+    }
+
+    @Test
     void shouldWaitForWorkspaceReadersBeforeStartingMutation() throws Exception {
         Fixture fixture = fixture(0);
         WorkspaceMutationCommand command = new WorkspaceMutationCommand(
@@ -179,10 +227,64 @@ class LocalWorkspaceGatewayTest {
         assertFalse(Files.exists(tempDir.resolve("escape.txt")));
     }
 
+    @Test
+    void shouldRejectPlatformAbsoluteInternalAndMalformedPaths() {
+        Fixture fixture = fixture(0);
+        List<String> invalidPaths = List.of(
+                "C:/outside.txt",
+                ".git/config",
+                ".gitnova/internal.txt",
+                "nested//file.txt",
+                "bad\0path.txt"
+        );
+
+        for (String invalidPath : invalidPaths) {
+            PatchBatchResult result = fixture.gateway().applyPatch(
+                    fixture.workspaceId(),
+                    new WorkspaceMutationCommand(
+                            0,
+                            List.of(PatchOperation.create(0, invalidPath, "no"))
+                    )
+            );
+
+            assertEquals(PatchBatchStatus.FAILED, result.status(), invalidPath);
+            assertEquals(0, result.generationAfter(), invalidPath);
+        }
+    }
+
+    @Test
+    void shouldRejectSymlinkTraversalWithoutWritingOutsideWorkspace() throws Exception {
+        Fixture fixture = fixture(0);
+        Path outside = Files.createDirectories(tempDir.resolve("outside"));
+        Files.createSymbolicLink(fixture.root().resolve("link"), outside);
+
+        PatchBatchResult result = fixture.gateway().applyPatch(
+                fixture.workspaceId(),
+                new WorkspaceMutationCommand(
+                        0,
+                        List.of(PatchOperation.create(0, "link/escape.txt", "no"))
+                )
+        );
+
+        assertEquals(PatchBatchStatus.FAILED, result.status());
+        assertEquals("UNSAFE_WORKSPACE_PATH", result.operationResults().get(0).errorCode());
+        assertFalse(Files.exists(outside.resolve("escape.txt")));
+        assertEquals(0, fixture.state().generation());
+    }
+
     private Fixture fixture(long generation) {
+        return fixture(generation, Map.of());
+    }
+
+    private Fixture fixture(long generation, Map<String, String> initialFiles) {
         Path root = tempDir.resolve("workspace-" + generation);
         try {
             Files.createDirectories(root);
+            for (Map.Entry<String, String> entry : initialFiles.entrySet()) {
+                Path target = root.resolve(entry.getKey());
+                Files.createDirectories(target.getParent());
+                Files.writeString(target, entry.getValue());
+            }
         } catch (Exception exception) {
             throw new IllegalStateException(exception);
         }

@@ -7,6 +7,7 @@ import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
+import com.gitnova.service.agent.workspace.SnapshotScope;
 import com.gitnova.storage.FakeObjectStorage;
 import org.junit.jupiter.api.Test;
 
@@ -91,6 +92,26 @@ class GetDiffToolTest {
         assertEquals("FILE_OUTSIDE_CHANGE_SCOPE", result.errorCode());
     }
 
+    @Test
+    void shouldRejectSnapshotScopeForReviewOnlyTool() {
+        GetDiffTool tool = new GetDiffTool(reader(new FakeObjectStorage()));
+        ToolExecutionContext execution = com.gitnova.service.agent.AgentTestContexts.toolExecution(
+                new AgentRunContext(
+                        "context-1",
+                        10L,
+                        REPO_KEY,
+                        SnapshotScope.of(BASE_SHA)
+                ),
+                0,
+                "call-1"
+        );
+
+        ToolResult result = tool.execute(execution, arguments());
+
+        assertEquals(ToolStatus.PERMISSION_DENIED, result.status());
+        assertEquals("REVIEW_DIFF_SCOPE_REQUIRED", result.errorCode());
+    }
+
     private ObjectNode arguments() {
         ObjectNode arguments = JsonNodeFactory.instance.objectNode();
         arguments.put("filePath", FILE_PATH);
@@ -100,9 +121,9 @@ class GetDiffToolTest {
     }
 
     private ToolExecutionContext execution() {
-        return new ToolExecutionContext(
+        return com.gitnova.service.agent.AgentTestContexts.toolExecution(
                 new AgentRunContext(
-                        "run-1",
+                        "context-1",
                         10L,
                         REPO_KEY,
                         BASE_SHA,

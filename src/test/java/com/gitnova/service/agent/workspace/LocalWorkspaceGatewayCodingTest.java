@@ -1,6 +1,7 @@
 package com.gitnova.service.agent.workspace;
 
 import com.gitnova.gitobject.GitObjectReader;
+import com.gitnova.gitobject.GitObjectHasher;
 import com.gitnova.storage.FakeObjectStorage;
 import com.gitnova.storage.RepoKey;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.gitnova.gitobject.GitObjectTestFixtures.objectId;
@@ -18,15 +25,13 @@ import static com.gitnova.gitobject.GitObjectTestFixtures.reader;
 import static com.gitnova.gitobject.GitObjectTestFixtures.writeCommit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LocalWorkspaceGatewayCodingTest {
 
     private static final String REPO_KEY = "1/10";
     private static final String BASE_SHA = objectId('a');
-    private static final String MAIN_BLOB = objectId('b');
-    private static final String README_BLOB = objectId('c');
-
     @TempDir
     Path tempDir;
 
@@ -69,6 +74,39 @@ class LocalWorkspaceGatewayCodingTest {
     }
 
     @Test
+    void shouldBoundSearchResultsAndWorkspaceReadOutput() throws Exception {
+        Fixture fixture = fixture(null);
+        StringBuilder matches = new StringBuilder();
+        for (int index = 0; index < WorkspaceGateway.MAX_SEARCH_RESULTS + 1; index++) {
+            matches.append("needle-").append(index).append('\n');
+        }
+        Files.writeString(fixture.root().resolve("src/Matches.txt"), matches);
+        Files.writeString(
+                fixture.root().resolve("src/HugeLine.txt"),
+                "x".repeat(WorkspaceGateway.MAX_READ_OUTPUT_BYTES + 1)
+        );
+
+        WorkspaceGateway.TextSearch search = fixture.gateway().searchText(
+                fixture.workspaceId(),
+                "needle",
+                true
+        );
+        WorkspaceOperationException readFailure = assertThrows(
+                WorkspaceOperationException.class,
+                () -> fixture.gateway().readFile(
+                        fixture.workspaceId(),
+                        "src/HugeLine.txt",
+                        1,
+                        1
+                )
+        );
+
+        assertEquals(WorkspaceGateway.MAX_SEARCH_RESULTS, search.matches().size());
+        assertTrue(search.truncated());
+        assertEquals("READ_OUTPUT_TOO_LARGE", readFailure.errorCode());
+    }
+
+    @Test
     void shouldComputeAuthoritativeBaseToWorkspaceDiff() throws Exception {
         Fixture fixture = fixture(null);
         Files.writeString(
@@ -108,7 +146,9 @@ class LocalWorkspaceGatewayCodingTest {
                     0,
                     25,
                     "tests passed",
-                    ""
+                    "",
+                    false,
+                    false
             );
         };
         Fixture fixture = fixture(executor);
@@ -117,7 +157,7 @@ class LocalWorkspaceGatewayCodingTest {
                 List.of("test-runner", "focused"),
                 "src",
                 30,
-                "run focused tests"
+                "context focused tests"
         );
 
         WorkspaceGateway.CommandResult first = fixture.gateway().runCommand(
@@ -147,7 +187,9 @@ class LocalWorkspaceGatewayCodingTest {
                         1,
                         10,
                         "",
-                        "test failure"
+                        "test failure",
+                        false,
+                        false
                 );
         Fixture fixture = fixture(executor);
 
@@ -158,7 +200,7 @@ class LocalWorkspaceGatewayCodingTest {
                         List.of("test-runner"),
                         ".",
                         30,
-                        "run tests"
+                        "context tests"
                 )
         );
 
@@ -168,14 +210,135 @@ class LocalWorkspaceGatewayCodingTest {
         assertFalse(result.stateChanged());
     }
 
+    @Test
+    void shouldRejectEscapingCommandDirectoryBeforeInvokingExecutor() {
+        AtomicInteger executions = new AtomicInteger();
+        WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) -> {
+            executions.incrementAndGet();
+            throw new AssertionError("escaping command must not execute");
+        };
+        Fixture fixture = fixture(executor);
+
+        WorkspaceOperationException exception = assertThrows(
+                WorkspaceOperationException.class,
+                () -> fixture.gateway().runCommand(
+                        fixture.workspaceId(),
+                        new WorkspaceGateway.CommandRequest(
+                                0,
+                                List.of("test-runner"),
+                                "../outside",
+                                30,
+                                "must be rejected"
+                        )
+                )
+        );
+
+        assertEquals("INVALID_WORKSPACE_PATH", exception.errorCode());
+        assertEquals(0, executions.get());
+        assertEquals(0, fixture.state().generation());
+    }
+
+    @Test
+    void shouldBoundCommandStreamsAndPreserveTruncationState() {
+        String oversized = "x".repeat(WorkspaceGateway.MAX_COMMAND_STREAM_BYTES + 100);
+        WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) ->
+                new WorkspaceCommandExecutor.ProcessResult(
+                        true,
+                        null,
+                        30_000,
+                        oversized,
+                        oversized,
+                        false,
+                        false
+                );
+        Fixture fixture = fixture(executor);
+
+        WorkspaceGateway.CommandResult result = fixture.gateway().runCommand(
+                fixture.workspaceId(),
+                new WorkspaceGateway.CommandRequest(
+                        0,
+                        List.of("test-runner"),
+                        ".",
+                        30,
+                        "exercise timeout result"
+                )
+        );
+
+        assertEquals(WorkspaceGateway.CommandStatus.TIMED_OUT, result.status());
+        assertTrue(result.stdoutTruncated());
+        assertTrue(result.stderrTruncated());
+        assertTrue(result.stdout().getBytes(StandardCharsets.UTF_8).length
+                <= WorkspaceGateway.MAX_COMMAND_STREAM_BYTES);
+        assertTrue(result.stderr().getBytes(StandardCharsets.UTF_8).length
+                <= WorkspaceGateway.MAX_COMMAND_STREAM_BYTES);
+    }
+
+    @Test
+    void shouldHoldWorkspaceWriteLockForTheWholeCommand() throws Exception {
+        CountDownLatch commandStarted = new CountDownLatch(1);
+        CountDownLatch releaseCommand = new CountDownLatch(1);
+        WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) -> {
+            commandStarted.countDown();
+            if (!releaseCommand.await(2, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("test did not release command");
+            }
+            return new WorkspaceCommandExecutor.ProcessResult(
+                    false,
+                    0,
+                    100,
+                    "",
+                    "",
+                    false,
+                    false
+            );
+        };
+        Fixture fixture = fixture(executor);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<WorkspaceGateway.CommandResult> command = pool.submit(() ->
+                    fixture.gateway().runCommand(
+                            fixture.workspaceId(),
+                            new WorkspaceGateway.CommandRequest(
+                                    0,
+                                    List.of("test-runner"),
+                                    ".",
+                                    30,
+                                    "hold mutation lock"
+                            )
+                    )
+            );
+            assertTrue(commandStarted.await(1, TimeUnit.SECONDS));
+
+            Future<PatchBatchResult> patch = pool.submit(() -> fixture.gateway().applyPatch(
+                    fixture.workspaceId(),
+                    new WorkspaceMutationCommand(
+                            0,
+                            List.of(PatchOperation.create(0, "blocked.txt", "later\n"))
+                    )
+            ));
+            assertThrows(TimeoutException.class, () -> patch.get(100, TimeUnit.MILLISECONDS));
+            assertFalse(Files.exists(fixture.root().resolve("blocked.txt")));
+
+            releaseCommand.countDown();
+            assertEquals(WorkspaceGateway.CommandStatus.COMPLETED, command.get().status());
+            assertEquals(PatchBatchStatus.SUCCESS, patch.get().status());
+            assertTrue(Files.exists(fixture.root().resolve("blocked.txt")));
+        } finally {
+            releaseCommand.countDown();
+            pool.shutdownNow();
+        }
+    }
+
     private Fixture fixture(WorkspaceCommandExecutor executor) {
         try {
             FakeObjectStorage storage = new FakeObjectStorage();
             byte[] main = "class Main {\n    String value = \"needle\";\n}\n"
                     .getBytes(StandardCharsets.UTF_8);
             byte[] readme = "base readme\n".getBytes(StandardCharsets.UTF_8);
-            storage.writeObject(REPO_KEY, MAIN_BLOB, main);
-            storage.writeObject(REPO_KEY, README_BLOB, readme);
+            String mainBlob = GitObjectHasher.sha1(main).value();
+            String readmeBlob = GitObjectHasher.sha1(readme).value();
+            storage.writeObject(REPO_KEY, mainBlob, main);
+            storage.writeObject(REPO_KEY, readmeBlob, readme);
             writeCommit(
                     storage,
                     REPO_KEY,
@@ -183,8 +346,8 @@ class LocalWorkspaceGatewayCodingTest {
                     null,
                     "base",
                     Map.of(
-                            "src/Main.java", MAIN_BLOB,
-                            "README.md", README_BLOB
+                            "src/Main.java", mainBlob,
+                            "README.md", readmeBlob
                     )
             );
 

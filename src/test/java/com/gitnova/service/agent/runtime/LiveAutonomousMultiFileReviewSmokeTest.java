@@ -19,18 +19,17 @@ import com.gitnova.service.agent.prompt.BudgetSection;
 import com.gitnova.service.agent.prompt.OutputContractSection;
 import com.gitnova.service.agent.prompt.PromptAssembler;
 import com.gitnova.service.agent.prompt.RepositoryScopeSection;
-import com.gitnova.service.agent.prompt.ReviewPolicySection;
+import com.gitnova.service.agent.prompt.QualityPolicySection;
 import com.gitnova.service.agent.prompt.RoleSection;
 import com.gitnova.service.agent.prompt.SecuritySection;
 import com.gitnova.service.agent.prompt.TaskSection;
 import com.gitnova.service.agent.prompt.ToolPolicySection;
 import com.gitnova.service.agent.review.ReviewIssueDraft;
-import com.gitnova.service.agent.review.ReviewVerifier;
 import com.gitnova.service.agent.tool.AgentTool;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
-import com.gitnova.service.agent.tools.FinalizeReviewTool;
+import com.gitnova.service.agent.tools.FinishTaskTool;
 import com.gitnova.service.agent.tools.GetDiffTool;
 import com.gitnova.service.agent.tools.ListChangesTool;
 import com.gitnova.service.agent.tools.ReadFileTool;
@@ -98,15 +97,15 @@ class LiveAutonomousMultiFileReviewSmokeTest {
         );
         RecordingTool getDiff = recording(new GetDiffTool(reader), toolSequence);
         RecordingTool readFile = recording(new ReadFileTool(reader), toolSequence);
-        RecordingTool finalizeReview = recording(
-                new FinalizeReviewTool(objectMapper),
+        RecordingTool finishTask = recording(
+                new FinishTaskTool(objectMapper),
                 toolSequence
         );
         ToolRegistry registry = new ToolRegistry(List.of(
                 listChanges,
                 getDiff,
                 readFile,
-                finalizeReview
+                finishTask
         ));
 
         String model = environmentOrDefault("LLM_MODEL", "deepseek-v4-flash");
@@ -128,7 +127,7 @@ class LiveAutonomousMultiFileReviewSmokeTest {
                 new SecuritySection(),
                 new RepositoryScopeSection(),
                 new ToolPolicySection(),
-                new ReviewPolicySection(),
+                new QualityPolicySection(),
                 new BudgetSection(),
                 new OutputContractSection()
         ));
@@ -137,22 +136,24 @@ class LiveAutonomousMultiFileReviewSmokeTest {
                 promptAssembler,
                 new MessageFactory(objectMapper),
                 registry,
-                new ReviewVerifier(),
-                objectMapper,
+                AgentRuntimeLiveTestSupport.inspector(objectMapper),
                 new AgentRuntimePolicy(model, 12, 24, 2, 2, 4096, 0.0)
         );
 
-        AgentRunResult result = runtime.run(new AgentRunContext(
-                "live-autonomous-multi-file",
-                42L,
-                REPO_KEY,
-                revision.baseSha1(),
-                revision.targetSha1()
+        AgentRunResult result = runtime.run(AgentRuntimeLiveTestSupport.execution(
+                new AgentRunContext(
+                        "live-autonomous-multi-file",
+                        42L,
+                        REPO_KEY,
+                        revision.baseSha1(),
+                        revision.targetSha1()
+                ),
+                "Review every changed file and report concrete correctness or security defects"
         ));
 
-        Set<String> actualIssuePaths = result.reviewDraft() == null
+        Set<String> actualIssuePaths = AgentRuntimeLiveTestSupport.reviewDraft(result) == null
                 ? Set.of()
-                : result.reviewDraft().issues().stream()
+                : AgentRuntimeLiveTestSupport.reviewDraft(result).issues().stream()
                         .map(ReviewIssueDraft::filePath)
                         .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         Set<String> falsePositivePaths = new LinkedHashSet<>(actualIssuePaths);
@@ -185,12 +186,12 @@ class LiveAutonomousMultiFileReviewSmokeTest {
                     failure.getMessage()
             );
         }
-        if (result.reviewDraft() != null) {
+        if (AgentRuntimeLiveTestSupport.reviewDraft(result) != null) {
             System.out.printf(
                     "LIVE_AUTONOMOUS_MULTI_REVIEW summary=%s%n",
-                    result.reviewDraft().summary()
+                    AgentRuntimeLiveTestSupport.reviewDraft(result).summary()
             );
-            for (ReviewIssueDraft issue : result.reviewDraft().issues()) {
+            for (ReviewIssueDraft issue : AgentRuntimeLiveTestSupport.reviewDraft(result).issues()) {
                 System.out.printf(
                         "LIVE_AUTONOMOUS_MULTI_ISSUE file=%s lines=%d-%d severity=%s category=%s confidence=%.2f evidence=%s explanation=%s suggestion=%s%n",
                         issue.filePath(),
@@ -208,23 +209,15 @@ class LiveAutonomousMultiFileReviewSmokeTest {
 
         assertEquals(AgentRunStatus.COMPLETED, result.status());
         assertEquals(
-                AgentTerminationReason.FINALIZE_SUCCEEDED,
+                AgentTerminationReason.FINISH_SUCCEEDED,
                 result.terminationReason()
         );
-        assertNotNull(result.reviewDraft());
-        assertTrue(result.coverage().changesListed());
+        assertNotNull(AgentRuntimeLiveTestSupport.reviewDraft(result));
         assertEquals(EXPECTED_ISSUE_PATHS, actualIssuePaths);
         assertFalse(actualIssuePaths.contains(SAFE_REFACTOR_PATH));
         assertTrue(listChanges.invocationCount >= 1);
         assertTrue(getDiff.invocationCount + readFile.invocationCount >= 1);
-        assertTrue(finalizeReview.invocationCount >= 1);
-        for (String issuePath : actualIssuePaths) {
-            assertTrue(
-                    result.coverage().diffedFiles().contains(issuePath)
-                            || result.coverage().readFiles().contains(issuePath),
-                    "reported issue must be backed by successful tool coverage: " + issuePath
-            );
-        }
+        assertTrue(finishTask.invocationCount >= 1);
     }
 
     private RevisionFixture writeMultiFileScenario(

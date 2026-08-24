@@ -9,7 +9,10 @@ import com.gitnova.gitobject.GitObjectId;
 import com.gitnova.gitobject.GitObjectReadException;
 import com.gitnova.gitobject.GitObjectReader;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
@@ -60,6 +63,24 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
     }
 
     @Override
+    public WorkspaceGateway.WorkspaceRefresh refreshWorkspace(WorkspaceId workspaceId) {
+        LocalWorkspaceRegistry.LocalWorkspaceState state = registry.require(workspaceId);
+        Lock writeLock = state.lock().writeLock();
+        writeLock.lock();
+        try {
+            long generationBefore = state.generation();
+            boolean changed = refreshStateFromDisk(state);
+            return new WorkspaceGateway.WorkspaceRefresh(
+                    generationBefore,
+                    state.generation(),
+                    changed
+            );
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    @Override
     public WorkspaceGateway.FileListing listFiles(
             WorkspaceId workspaceId,
             String directory
@@ -77,16 +98,27 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                 );
             }
             try (var entries = Files.list(resolved)) {
-                List<WorkspaceGateway.FileEntry> result = entries
-                        .filter(path -> !Files.isSymbolicLink(path))
-                        .filter(path -> !isInternalPath(state.root(), path))
-                        .sorted(Comparator.comparing(path -> repositoryPath(state.root(), path)))
-                        .map(path -> toFileEntry(state.root(), path))
+                List<WorkspaceGateway.FileEntry> collected = new ArrayList<>();
+                var iterator = entries.iterator();
+                while (iterator.hasNext() && collected.size() <= MAX_LIST_ENTRIES) {
+                    Path path = iterator.next();
+                    if (!Files.isSymbolicLink(path)
+                            && !isInternalPath(state.root(), path)) {
+                        collected.add(toFileEntry(state.root(), path));
+                    }
+                }
+                boolean truncated = collected.size() > MAX_LIST_ENTRIES;
+                List<WorkspaceGateway.FileEntry> result = truncated
+                        ? List.copyOf(collected.subList(0, MAX_LIST_ENTRIES))
+                        : collected;
+                result = result.stream()
+                        .sorted(Comparator.comparing(WorkspaceGateway.FileEntry::path))
                         .toList();
                 return new WorkspaceGateway.FileListing(
                         state.generation(),
                         normalizeDirectoryLabel(directory),
-                        result
+                        result,
+                        truncated
                 );
             } catch (IOException exception) {
                 throw workspaceFailure(
@@ -107,7 +139,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             String glob
     ) {
         Objects.requireNonNull(glob, "glob must not be null");
-        if (glob.isBlank()) {
+        if (glob.isBlank() || glob.length() > MAX_GLOB_CHARS || glob.indexOf('\0') >= 0) {
             throw workspaceFailure(
                     WorkspaceOperationException.Reason.INVALID_PATH,
                     "INVALID_FILE_GLOB",
@@ -131,29 +163,25 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                 );
             }
 
-            try (var paths = Files.walk(state.root())) {
-                List<String> matches = paths
+            List<String> collected = workspaceFiles(state.root())
+                        .stream()
                         .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
-                        .filter(path -> !Files.isSymbolicLink(path))
-                        .filter(path -> !isInternalPath(state.root(), path))
                         .map(state.root()::relativize)
                         .filter(matcher::matches)
                         .map(LocalWorkspaceGateway::portablePath)
                         .sorted()
+                        .limit(MAX_FIND_RESULTS + 1L)
                         .toList();
-                return new WorkspaceGateway.FileSearch(
-                        state.generation(),
-                        glob,
-                        matches
-                );
-            } catch (IOException exception) {
-                throw workspaceFailure(
-                        WorkspaceOperationException.Reason.FILESYSTEM_FAILURE,
-                        "WORKSPACE_SEARCH_FAILED",
-                        "Could not search Workspace files",
-                        exception
-                );
-            }
+            boolean truncated = collected.size() > MAX_FIND_RESULTS;
+            List<String> matches = truncated
+                    ? List.copyOf(collected.subList(0, MAX_FIND_RESULTS))
+                    : collected;
+            return new WorkspaceGateway.FileSearch(
+                    state.generation(),
+                    glob,
+                    matches,
+                    truncated
+            );
         } finally {
             readLock.unlock();
         }
@@ -166,7 +194,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             boolean caseSensitive
     ) {
         Objects.requireNonNull(query, "query must not be null");
-        if (query.isEmpty()) {
+        if (query.isEmpty() || query.length() > MAX_QUERY_CHARS) {
             throw workspaceFailure(
                     WorkspaceOperationException.Reason.UNSUPPORTED_CONTENT,
                     "EMPTY_SEARCH_QUERY",
@@ -181,16 +209,15 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             String expected = caseSensitive ? query : query.toLowerCase(Locale.ROOT);
             List<WorkspaceGateway.TextMatch> matches = new ArrayList<>();
 
-            try (var paths = Files.walk(state.root())) {
-                List<Path> files = paths
-                        .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
-                        .filter(path -> !Files.isSymbolicLink(path))
-                        .filter(path -> !isInternalPath(state.root(), path))
-                        .sorted(Comparator.comparing(path -> repositoryPath(state.root(), path)))
-                        .toList();
-
-                for (Path file : files) {
-                    byte[] bytes = Files.readAllBytes(file);
+            boolean truncated = false;
+            boolean stopSearch = false;
+            try {
+                for (Path file : workspaceFiles(state.root())) {
+                    if (Files.size(file) > MAX_SEARCH_FILE_BYTES) {
+                        truncated = true;
+                        continue;
+                    }
+                    byte[] bytes = readBoundedFile(file, MAX_SEARCH_FILE_BYTES);
                     String text = tryDecodeUtf8Text(bytes);
                     if (text == null) {
                         continue;
@@ -202,12 +229,22 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                                 ? line
                                 : line.toLowerCase(Locale.ROOT);
                         if (candidate.contains(expected)) {
+                            if (matches.size() == MAX_SEARCH_RESULTS) {
+                                truncated = true;
+                                stopSearch = true;
+                                break;
+                            }
+                            BoundedText preview = boundText(line, 1024);
+                            truncated = truncated || preview.truncated();
                             matches.add(new WorkspaceGateway.TextMatch(
                                     repositoryPath(state.root(), file),
                                     index + 1,
-                                    line
+                                    preview.value()
                             ));
                         }
+                    }
+                    if (stopSearch) {
+                        break;
                     }
                 }
             } catch (IOException exception) {
@@ -223,7 +260,8 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                     state.generation(),
                     query,
                     caseSensitive,
-                    matches
+                    matches,
+                    truncated
             );
         } finally {
             readLock.unlock();
@@ -270,10 +308,23 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             }
             int actualEnd = Math.min(endLine, allLines.size());
             List<WorkspaceGateway.FileLine> lines = new ArrayList<>();
+            int returnedBytes = 0;
             for (int lineNumber = startLine; lineNumber <= actualEnd; lineNumber++) {
+                String lineContent = allLines.get(lineNumber - 1);
+                returnedBytes = Math.addExact(
+                        returnedBytes,
+                        lineContent.getBytes(StandardCharsets.UTF_8).length
+                );
+                if (returnedBytes > MAX_READ_OUTPUT_BYTES) {
+                    throw workspaceFailure(
+                            WorkspaceOperationException.Reason.UNSUPPORTED_CONTENT,
+                            "READ_OUTPUT_TOO_LARGE",
+                            "Requested line range exceeds the Workspace read output limit"
+                    );
+                }
                 lines.add(new WorkspaceGateway.FileLine(
                         lineNumber,
-                        allLines.get(lineNumber - 1)
+                        lineContent
                 ));
             }
             return new WorkspaceGateway.FileContent(
@@ -317,12 +368,20 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             Set<String> paths = new TreeSet<>();
             paths.addAll(baseCommit.mapping().keySet());
             paths.addAll(currentFiles.keySet());
+            if (paths.size() > MAX_WORKSPACE_FILES) {
+                throw workspaceFailure(
+                        WorkspaceOperationException.Reason.UNSUPPORTED_CONTENT,
+                        "WORKSPACE_FILE_COUNT_EXCEEDED",
+                        "Workspace and base snapshot exceed the supported file count"
+                );
+            }
 
             List<WorkspaceGateway.DiffFile> changed = new ArrayList<>();
             StringBuilder unified = new StringBuilder();
             int totalAdded = 0;
             int totalDeleted = 0;
             int totalHunks = 0;
+            int unifiedBytes = 0;
             boolean containsBinary = false;
 
             for (String path : paths) {
@@ -330,6 +389,13 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                 byte[] after = currentFiles.get(path);
                 if (java.util.Arrays.equals(before, after)) {
                     continue;
+                }
+                if (changed.size() == MAX_DIFF_FILES) {
+                    throw workspaceFailure(
+                            WorkspaceOperationException.Reason.UNSUPPORTED_CONTENT,
+                            "WORKSPACE_DIFF_TOO_LARGE",
+                            "Workspace diff exceeds the changed-file limit"
+                    );
                 }
 
                 WorkspaceGateway.DiffChangeType changeType = before == null
@@ -361,10 +427,23 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                             3
                     );
                     if (!diffLines.isEmpty()) {
+                        String diffSection = String.join("\n", diffLines) + "\n";
+                        int sectionBytes = diffSection.getBytes(StandardCharsets.UTF_8).length;
+                        int separatorBytes = unified.length() > 0 ? 1 : 0;
+                        if ((long) unifiedBytes + separatorBytes + sectionBytes
+                                > MAX_DIFF_TEXT_BYTES) {
+                            throw workspaceFailure(
+                                    WorkspaceOperationException.Reason.UNSUPPORTED_CONTENT,
+                                    "WORKSPACE_DIFF_TOO_LARGE",
+                                    "Workspace unified diff exceeds the output limit"
+                            );
+                        }
                         if (unified.length() > 0) {
                             unified.append('\n');
+                            unifiedBytes++;
                         }
-                        unified.append(String.join("\n", diffLines)).append('\n');
+                        unified.append(diffSection);
+                        unifiedBytes += sectionBytes;
                     }
                 } else {
                     containsBinary = true;
@@ -407,6 +486,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
         Lock writeLock = state.lock().writeLock();
         writeLock.lock();
         try {
+            refreshStateFromDisk(state);
             long generationBefore = state.generation();
             if (request.expectedGeneration() != generationBefore) {
                 return new WorkspaceGateway.CommandResult(
@@ -418,6 +498,8 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                         0,
                         "",
                         "",
+                        false,
+                        false,
                         "STALE_WORKSPACE_GENERATION",
                         "Expected generation does not match the current Workspace"
                 );
@@ -432,6 +514,8 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                         0,
                         "",
                         "",
+                        false,
+                        false,
                         "COMMAND_EXECUTOR_UNAVAILABLE",
                         "No isolated Workspace command executor is configured"
                 );
@@ -450,7 +534,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                 );
             }
 
-            String fingerprintBefore = workspaceFingerprint(state.root());
+            String fingerprintBefore = state.contentFingerprint();
             WorkspaceCommandExecutor.ProcessResult execution;
             try {
                 execution = commandExecutor.execute(
@@ -459,10 +543,10 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                         Duration.ofSeconds(request.timeoutSeconds())
                 );
             } catch (Exception exception) {
-                String fingerprintAfter = workspaceFingerprint(state.root());
-                if (!fingerprintBefore.equals(fingerprintAfter)) {
-                    state.advanceGeneration();
-                }
+                boolean stateVerified = advanceGenerationAfterCommand(
+                        state,
+                        fingerprintBefore
+                );
                 return new WorkspaceGateway.CommandResult(
                         WorkspaceGateway.CommandStatus.EXECUTION_FAILED,
                         request.expectedGeneration(),
@@ -472,14 +556,41 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                         0,
                         "",
                         "",
-                        "COMMAND_EXECUTION_FAILED",
-                        "Workspace command could not be executed"
+                        false,
+                        false,
+                        stateVerified
+                                ? "COMMAND_EXECUTION_FAILED"
+                                : "WORKSPACE_STATE_UNVERIFIED",
+                        stateVerified
+                                ? "Workspace command could not be executed"
+                                : "Command failed and the resulting Workspace state could not be verified"
                 );
             }
 
-            String fingerprintAfter = workspaceFingerprint(state.root());
-            if (!fingerprintBefore.equals(fingerprintAfter)) {
-                state.advanceGeneration();
+            boolean stateVerified = advanceGenerationAfterCommand(state, fingerprintBefore);
+            BoundedText stdout = boundText(
+                    Objects.requireNonNullElse(execution.stdout(), ""),
+                    MAX_COMMAND_STREAM_BYTES
+            );
+            BoundedText stderr = boundText(
+                    Objects.requireNonNullElse(execution.stderr(), ""),
+                    MAX_COMMAND_STREAM_BYTES
+            );
+            if (!stateVerified) {
+                return new WorkspaceGateway.CommandResult(
+                        WorkspaceGateway.CommandStatus.EXECUTION_FAILED,
+                        request.expectedGeneration(),
+                        generationBefore,
+                        state.generation(),
+                        execution.exitCode(),
+                        execution.durationMillis(),
+                        stdout.value(),
+                        stderr.value(),
+                        true,
+                        true,
+                        "WORKSPACE_STATE_UNVERIFIED",
+                        "Command completed but the resulting Workspace state could not be verified"
+                );
             }
             return new WorkspaceGateway.CommandResult(
                     execution.timedOut()
@@ -490,8 +601,10 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                     state.generation(),
                     execution.exitCode(),
                     execution.durationMillis(),
-                    Objects.requireNonNullElse(execution.stdout(), ""),
-                    Objects.requireNonNullElse(execution.stderr(), ""),
+                    stdout.value(),
+                    stderr.value(),
+                    execution.stdoutTruncated() || stdout.truncated(),
+                    execution.stderrTruncated() || stderr.truncated(),
                     null,
                     null
             );
@@ -515,6 +628,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
         writeLock.lock();
 
         try {
+            refreshStateFromDisk(state);
             long generationBefore = state.generation();
 
             // stale command: no filesystem operation may occur.
@@ -573,6 +687,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
 
                     if (outcome.stateChanged()) {
                         state.advanceGeneration();
+                        recordCurrentFingerprint(state);
                     }
                     return outcome;
                 }
@@ -584,6 +699,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                     results
             );
             state.advanceGeneration();
+            recordCurrentFingerprint(state);
             return outcome;
 
         } finally {
@@ -634,6 +750,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             boolean allowRoot
     ) {
         Objects.requireNonNull(rawPath, "path must not be null");
+        requireReadableWorkspaceRoot(workspaceRoot);
         if (allowRoot && ".".equals(rawPath)) {
             return workspaceRoot;
         }
@@ -642,6 +759,19 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
         } catch (OperationFailure failure) {
             throw workspaceFailure(
                     WorkspaceOperationException.Reason.INVALID_PATH,
+                    failure.errorCode(),
+                    failure.getMessage(),
+                    failure
+            );
+        }
+    }
+
+    private void requireReadableWorkspaceRoot(Path workspaceRoot) {
+        try {
+            requireSafeWorkspaceRoot(workspaceRoot);
+        } catch (OperationFailure failure) {
+            throw workspaceFailure(
+                    WorkspaceOperationException.Reason.WORKSPACE_UNAVAILABLE,
                     failure.errorCode(),
                     failure.getMessage(),
                     failure
@@ -696,7 +826,8 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
 
     private byte[] readWorkspaceFile(Path root, Path target) {
         try {
-            return readExistingRegularFile(root, target);
+            requireExistingRegularFile(root, target);
+            return readBoundedFile(target, MAX_READ_FILE_BYTES);
         } catch (OperationFailure failure) {
             WorkspaceOperationException.Reason reason = "FILE_NOT_FOUND".equals(
                     failure.errorCode()
@@ -731,25 +862,20 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
 
     private Map<String, byte[]> readWorkspaceTree(Path root) {
         Map<String, byte[]> files = new LinkedHashMap<>();
-        try (var paths = Files.walk(root)) {
-            List<Path> ordered = paths
-                    .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
-                    .filter(path -> !Files.isSymbolicLink(path))
-                    .filter(path -> !isInternalPath(root, path))
-                    .sorted(Comparator.comparing(path -> repositoryPath(root, path)))
-                    .toList();
-            for (Path path : ordered) {
-                files.put(repositoryPath(root, path), Files.readAllBytes(path));
+        long totalBytes = 0;
+        for (Path path : workspaceFiles(root)) {
+            byte[] bytes = readBoundedFile(path, MAX_DIFF_FILE_BYTES);
+            totalBytes += bytes.length;
+            if (totalBytes > MAX_DIFF_TOTAL_BYTES) {
+                throw workspaceFailure(
+                        WorkspaceOperationException.Reason.UNSUPPORTED_CONTENT,
+                        "WORKSPACE_TREE_TOO_LARGE",
+                        "Workspace file tree exceeds the diff byte limit"
+                );
             }
-            return files;
-        } catch (IOException exception) {
-            throw workspaceFailure(
-                    WorkspaceOperationException.Reason.FILESYSTEM_FAILURE,
-                    "WORKSPACE_TREE_READ_FAILED",
-                    "Could not read Workspace file tree",
-                    exception
-            );
+            files.put(repositoryPath(root, path), bytes);
         }
+        return files;
     }
 
     private byte[] readBaseBlob(
@@ -760,9 +886,26 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             return null;
         }
         try {
-            return gitObjectReader.requireBlob(
+            BoundedOutput destination = new BoundedOutput(MAX_DIFF_FILE_BYTES);
+            gitObjectReader.copyBlobTo(
                     state.repoKey().value(),
-                    objectId.value()
+                    objectId.value(),
+                    destination
+            );
+            return destination.toByteArray();
+        } catch (SizeLimitExceededException exception) {
+            throw workspaceFailure(
+                    WorkspaceOperationException.Reason.UNSUPPORTED_CONTENT,
+                    "BASE_BLOB_TOO_LARGE",
+                    "Workspace base blob exceeds the diff file limit",
+                    exception
+            );
+        } catch (IOException exception) {
+            throw workspaceFailure(
+                    WorkspaceOperationException.Reason.FILESYSTEM_FAILURE,
+                    "BASE_BLOB_COLLECTION_FAILED",
+                    "Could not collect Workspace base blob",
+                    exception
             );
         } catch (GitObjectReadException exception) {
             throw mapSnapshotFailure(exception);
@@ -794,21 +937,122 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
         };
     }
 
-    private String workspaceFingerprint(Path root) {
-        MessageDigest digest;
-        try {
-            digest = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 must be available", exception);
+    private List<Path> workspaceFiles(Path root) {
+        requireReadableWorkspaceRoot(root);
+        try (var paths = Files.walk(root)) {
+            List<Path> collected = new ArrayList<>();
+            var iterator = paths.iterator();
+            while (iterator.hasNext()) {
+                Path path = iterator.next();
+                if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+                        && !Files.isSymbolicLink(path)
+                        && !isInternalPath(root, path)) {
+                    if (collected.size() == MAX_WORKSPACE_FILES) {
+                        throw workspaceFailure(
+                                WorkspaceOperationException.Reason.UNSUPPORTED_CONTENT,
+                                "WORKSPACE_FILE_COUNT_EXCEEDED",
+                                "Workspace exceeds the supported file count"
+                        );
+                    }
+                    collected.add(path);
+                }
+            }
+            collected.sort(Comparator.comparing(path -> repositoryPath(root, path)));
+            return collected;
+        } catch (IOException exception) {
+            throw workspaceFailure(
+                    WorkspaceOperationException.Reason.FILESYSTEM_FAILURE,
+                    "WORKSPACE_TREE_READ_FAILED",
+                    "Could not enumerate Workspace files",
+                    exception
+            );
         }
-        Map<String, byte[]> files = readWorkspaceTree(root);
-        files.forEach((path, bytes) -> {
-            digest.update(path.getBytes(StandardCharsets.UTF_8));
-            digest.update((byte) 0);
-            digest.update(bytes);
-            digest.update((byte) 0);
-        });
-        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private byte[] readBoundedFile(Path path, int maxBytes) {
+        try {
+            BoundedOutput destination = new BoundedOutput(maxBytes);
+            try (InputStream input = Files.newInputStream(path)) {
+                input.transferTo(destination);
+            }
+            return destination.toByteArray();
+        } catch (SizeLimitExceededException exception) {
+            throw workspaceFailure(
+                    WorkspaceOperationException.Reason.UNSUPPORTED_CONTENT,
+                    "WORKSPACE_FILE_TOO_LARGE",
+                    "Workspace file exceeds the supported byte limit",
+                    exception
+            );
+        } catch (IOException exception) {
+            throw workspaceFailure(
+                    WorkspaceOperationException.Reason.FILESYSTEM_FAILURE,
+                    "WORKSPACE_FILE_READ_FAILED",
+                    "Could not read Workspace file",
+                    exception
+            );
+        }
+    }
+
+    private boolean advanceGenerationAfterCommand(
+            LocalWorkspaceRegistry.LocalWorkspaceState state,
+            String fingerprintBefore
+    ) {
+        try {
+            String fingerprintAfter = WorkspaceTreeFingerprint.capture(state.root());
+            if (!fingerprintBefore.equals(fingerprintAfter)) {
+                state.advanceGeneration();
+            }
+            state.acceptFingerprint(fingerprintAfter);
+            return true;
+        } catch (WorkspaceOperationException exception) {
+            // The command may already have changed files. Advance conservatively so no old
+            // validation or expectedGeneration can be reused against an unknown state.
+            state.advanceGeneration();
+            state.forgetFingerprint();
+            return false;
+        }
+    }
+
+    private boolean refreshStateFromDisk(
+            LocalWorkspaceRegistry.LocalWorkspaceState state
+    ) {
+        return state.refreshFingerprint(WorkspaceTreeFingerprint.capture(state.root()));
+    }
+
+    private void recordCurrentFingerprint(
+            LocalWorkspaceRegistry.LocalWorkspaceState state
+    ) {
+        try {
+            state.acceptFingerprint(WorkspaceTreeFingerprint.capture(state.root()));
+        } catch (WorkspaceOperationException exception) {
+            // Mutation was already confirmed and generation already advanced. Preserve that
+            // truthful result, but require a later refresh to re-establish an observed baseline.
+            state.forgetFingerprint();
+        }
+    }
+
+    private BoundedText boundText(String value, int maxBytes) {
+        int usedBytes = 0;
+        int endIndex = 0;
+        while (endIndex < value.length()) {
+            int codePoint = value.codePointAt(endIndex);
+            int codePointBytes = codePoint <= 0x7f
+                    ? 1
+                    : codePoint <= 0x7ff
+                    ? 2
+                    : codePoint <= 0xffff
+                    ? 3
+                    : 4;
+            if (usedBytes + codePointBytes > maxBytes) {
+                break;
+            }
+            usedBytes += codePointBytes;
+            endIndex += Character.charCount(codePoint);
+        }
+        return new BoundedText(
+                value.substring(0, endIndex),
+                endIndex < value.length()
+        );
     }
 
     private static WorkspaceOperationException workspaceFailure(
@@ -943,8 +1187,13 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             String rawPath
     ) throws OperationFailure {
         try {
-            if (rawPath.startsWith("/")
+            if (rawPath == null
+                    || rawPath.isBlank()
+                    || rawPath.length() > MAX_PATH_CHARS
+                    || rawPath.indexOf('\0') >= 0
+                    || rawPath.startsWith("/")
                     || rawPath.startsWith("\\")
+                    || rawPath.matches("^[A-Za-z]:.*")
                     || rawPath.contains("\\")
                     || rawPath.contains("//")
                     || rawPath.endsWith("/")) {
@@ -1029,9 +1278,36 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             Path parent
     ) throws OperationFailure {
         try {
-            Files.createDirectories(parent);
-            rejectSymlinkComponents(workspaceRoot, parent);
-        } catch (IOException exception) {
+            Path normalizedRoot = workspaceRoot.toAbsolutePath().normalize();
+            Path normalizedParent = parent.toAbsolutePath().normalize();
+            if (!normalizedParent.startsWith(normalizedRoot)) {
+                throw failure(
+                        "INVALID_WORKSPACE_PATH",
+                        "Workspace parent path escapes the Workspace root",
+                        null,
+                        null
+                );
+            }
+            Path current = normalizedRoot;
+            for (Path part : normalizedRoot.relativize(normalizedParent)) {
+                current = current.resolve(part);
+                if (Files.exists(current, LinkOption.NOFOLLOW_LINKS)) {
+                    if (Files.isSymbolicLink(current)
+                            || !Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS)) {
+                        throw failure(
+                                "UNSAFE_WORKSPACE_PATH",
+                                "Workspace parent contains a symlink or non-directory",
+                                null,
+                                null
+                        );
+                    }
+                } else {
+                    Files.createDirectory(current);
+                }
+            }
+        } catch (OperationFailure exception) {
+            throw exception;
+        } catch (IOException | SecurityException exception) {
             throw failure(
                     "FILESYSTEM_FAILURE",
                     "Could not create workspace parent directories",
@@ -1076,6 +1352,35 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             Path workspaceRoot,
             Path target
     ) throws OperationFailure {
+        requireExistingRegularFile(workspaceRoot, target);
+
+        try {
+            BoundedOutput destination = new BoundedOutput(MAX_DIFF_FILE_BYTES);
+            try (InputStream input = Files.newInputStream(target)) {
+                input.transferTo(destination);
+            }
+            return destination.toByteArray();
+        } catch (SizeLimitExceededException exception) {
+            throw failure(
+                    "FILE_TOO_LARGE",
+                    "Workspace file exceeds the patch byte limit",
+                    null,
+                    exception
+            );
+        } catch (IOException exception) {
+            throw failure(
+                    "FILESYSTEM_FAILURE",
+                    "Could not read workspace file",
+                    null,
+                    exception
+            );
+        }
+    }
+
+    private void requireExistingRegularFile(
+            Path workspaceRoot,
+            Path target
+    ) throws OperationFailure {
         rejectSymlinkComponents(workspaceRoot, target);
 
         if (Files.notExists(target, LinkOption.NOFOLLOW_LINKS)) {
@@ -1096,16 +1401,6 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             );
         }
 
-        try {
-            return Files.readAllBytes(target);
-        } catch (IOException exception) {
-            throw failure(
-                    "FILESYSTEM_FAILURE",
-                    "Could not read workspace file",
-                    null,
-                    exception
-            );
-        }
     }
 
     private List<String> applyUnifiedDiff(
@@ -1272,6 +1567,46 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                     exception
             );
         }
+    }
+
+    private record BoundedText(String value, boolean truncated) {
+    }
+
+    private static final class BoundedOutput extends OutputStream {
+
+        private final int maxBytes;
+        private final ByteArrayOutputStream delegate;
+
+        private BoundedOutput(int maxBytes) {
+            this.maxBytes = maxBytes;
+            this.delegate = new ByteArrayOutputStream(Math.min(maxBytes, 8192));
+        }
+
+        @Override
+        public void write(int value) throws IOException {
+            requireCapacity(1);
+            delegate.write(value);
+        }
+
+        @Override
+        public void write(byte[] bytes, int offset, int length) throws IOException {
+            requireCapacity(length);
+            delegate.write(bytes, offset, length);
+        }
+
+        private void requireCapacity(int additionalBytes)
+                throws SizeLimitExceededException {
+            if ((long) delegate.size() + additionalBytes > maxBytes) {
+                throw new SizeLimitExceededException();
+            }
+        }
+
+        private byte[] toByteArray() {
+            return delegate.toByteArray();
+        }
+    }
+
+    private static final class SizeLimitExceededException extends IOException {
     }
 
     private static OperationFailure failure(

@@ -3,6 +3,9 @@ package com.gitnova.service.agent.tools;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.gitnova.service.agent.runtime.AgentCapability;
+import com.gitnova.service.agent.runtime.AgentCapabilityPolicy;
+import com.gitnova.service.agent.runtime.AgentExecutionContext;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.ToolAccessMode;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
@@ -12,8 +15,10 @@ import com.gitnova.service.agent.tool.ToolStatus;
 import com.gitnova.service.agent.workspace.PatchBatchResult;
 import com.gitnova.service.agent.workspace.PatchOperationResult;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
+import com.gitnova.service.agent.workspace.WorkspaceBinding;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 import com.gitnova.service.agent.workspace.WorkspaceMutationCommand;
+import com.gitnova.service.agent.workspace.SnapshotScope;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -63,7 +68,7 @@ class ApplyPatchToolTest {
     }
 
     @Test
-    void shouldRejectMissingTrustedWorkspaceWithoutInvokingGateway() {
+    void shouldRejectMissingWorkspaceMutationCapabilityWithoutInvokingGateway() {
         AtomicInteger invocations = new AtomicInteger();
         ApplyPatchTool tool = new ApplyPatchTool(
                 (workspaceId, command) -> {
@@ -73,13 +78,22 @@ class ApplyPatchToolTest {
                 objectMapper
         );
 
-        ToolResult result = tool.execute(
-                new ToolExecutionContext(run(), 0, "call-1"),
+        AgentExecutionContext readOnly = new AgentExecutionContext(
+                "session-read-only",
+                run(),
+                1L,
+                "Inspect without modifying",
+                new WorkspaceBinding(WORKSPACE_ID),
+                new AgentCapabilityPolicy(Set.of(AgentCapability.CODE_READ))
+        );
+        ToolResult result = new ToolRegistry(List.of(tool)).execute(
+                new ToolExecutionContext(readOnly, 0, "call-1"),
+                "applyPatch",
                 createArguments(0)
         );
 
         assertEquals(ToolStatus.PERMISSION_DENIED, result.status());
-        assertEquals("WORKSPACE_CONTEXT_REQUIRED", result.errorCode());
+        assertEquals("MISSING_TOOL_CAPABILITY", result.errorCode());
         assertEquals(0, invocations.get());
     }
 
@@ -154,9 +168,8 @@ class ApplyPatchToolTest {
         ObjectNode arguments = createArguments(0);
         arguments.put("workspaceId", WorkspaceId.generate().toString());
 
-        ToolResult result = registry.executeScoped(
+        ToolResult result = registry.execute(
                 workspaceExecution(),
-                Set.of("applyPatch"),
                 "applyPatch",
                 arguments
         );
@@ -178,7 +191,7 @@ class ApplyPatchToolTest {
     }
 
     private ToolExecutionContext workspaceExecution() {
-        return ToolExecutionContext.forWorkspace(
+        return com.gitnova.service.agent.AgentTestContexts.workspaceToolExecution(
                 run(),
                 0,
                 "call-1",
@@ -188,11 +201,10 @@ class ApplyPatchToolTest {
 
     private AgentRunContext run() {
         return new AgentRunContext(
-                "run-1",
+                "context-1",
                 10L,
                 "1/10",
-                "a".repeat(40),
-                "b".repeat(40)
+                SnapshotScope.of("a".repeat(40))
         );
     }
 }

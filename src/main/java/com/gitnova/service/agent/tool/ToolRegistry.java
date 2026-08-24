@@ -2,21 +2,19 @@ package com.gitnova.service.agent.tool;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.gitnova.dto.ToolDefinition;
-import com.gitnova.service.agent.tool.ToolExecutionContext;
+import com.gitnova.service.agent.runtime.AgentCapabilityPolicy;
 import com.gitnova.service.agent.tool.schema.ToolSchemaValidator;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * 工具注册表 — 管理所有 AgentTool 实例
  *
- * 利用 Spring 的集合注入自动收集所有 {@code @Component} 标注的 AgentTool，
- * 无需手动 register()。新增工具只需新建一个 {@code @Component} 类并实现
- * AgentTool 接口，ToolRegistry 不用改一行代码。
+ * 利用 Spring 的集合注入收集所有 AgentTool Bean；工具可以由组件扫描或条件化配置提供。
+ * Registry 本身不负责创建工具实例。
  *
  * 💡 这是开闭原则在工具注册场景的具体应用。
  */
@@ -50,21 +48,18 @@ public class ToolRegistry {
      * 返回暴露给模型的全部工具定义。
      */
     public List<ToolDefinition> definitions() {
-        return definitions(tools.keySet());
+        return tools.values().stream()
+                .map(AgentTool::definition)
+                .toList();
     }
 
-    /**
-     * Returns only the definitions authorized by the server-selected task profile.
-     */
-    public List<ToolDefinition> definitions(Set<String> allowedTools) {
-        Set<String> allowed = requireAllowedTools(allowedTools);
-        List<ToolDefinition>definitions=new ArrayList<>(tools.size());
-        for(AgentTool tool:tools.values()){
-            if (allowed.contains(tool.definition().name())) {
-                definitions.add(tool.definition());
-            }
-        }
-        return List.copyOf(definitions);
+    /** Returns only tools authorized by the Harness-owned capability policy. */
+    public List<ToolDefinition> definitions(AgentCapabilityPolicy policy) {
+        Objects.requireNonNull(policy, "policy must not be null");
+        return tools.values().stream()
+                .filter(tool -> policy.allowsAll(tool.requiredCapabilities()))
+                .map(AgentTool::definition)
+                .toList();
     }
 
     /**
@@ -83,6 +78,14 @@ public class ToolRegistry {
         }
         if(arguments==null){
             return ToolResult.error(ToolStatus.INVALID_ARGUMENT,"MISSING_TOOL_ARGUMENTS","Tool arguments must not be null",false);
+        }
+        if (!execution.capabilities().allowsAll(tool.requiredCapabilities())) {
+            return ToolResult.error(
+                    ToolStatus.PERMISSION_DENIED,
+                    "MISSING_TOOL_CAPABILITY",
+                    "Tool is not authorized by the current Agent capability policy",
+                    false
+            );
         }
         List<String>errors= ToolSchemaValidator.validate(tool.definition(),arguments);
         if(!errors.isEmpty()){
@@ -120,58 +123,6 @@ public class ToolRegistry {
         }
     }
 
-    /**
-     * Executes a tool only when it is authorized by the same task profile that produced the
-     * model-visible definitions. This second check prevents forged or stale tool calls from
-     * bypassing definition filtering.
-     */
-    public ToolResult executeScoped(
-            ToolExecutionContext execution,
-            Set<String> allowedTools,
-            String toolName,
-            JsonNode arguments
-    ) {
-        Objects.requireNonNull(execution, "execution must not be null");
-        Objects.requireNonNull(toolName, "toolName must not be null");
-        if (toolName.isBlank()) {
-            return ToolResult.error(
-                    ToolStatus.INVALID_ARGUMENT,
-                    "INVALID_TOOL_NAME",
-                    "Tool name must not be blank",
-                    false
-            );
-        }
-        Set<String> allowed = requireAllowedTools(allowedTools);
-        if (!allowed.contains(toolName)) {
-            return ToolResult.error(
-                    ToolStatus.PERMISSION_DENIED,
-                    "TOOL_NOT_ALLOWED",
-                    "Tool is not allowed for the current task profile",
-                    false
-            );
-        }
-        return execute(execution, toolName, arguments);
-    }
-
-    private Set<String> requireAllowedTools(Set<String> allowedTools) {
-        Objects.requireNonNull(allowedTools, "allowedTools must not be null");
-        LinkedHashSet<String> copied = new LinkedHashSet<>();
-        for (String name : allowedTools) {
-            Objects.requireNonNull(name, "allowed tool name must not be null");
-            if (name.isBlank()) {
-                throw new IllegalArgumentException(
-                        "allowed tool name must not be blank"
-                );
-            }
-            if (!tools.containsKey(name)) {
-                throw new IllegalArgumentException(
-                        "Allowed tool is not registered: " + name
-                );
-            }
-            copied.add(name);
-        }
-        return Collections.unmodifiableSet(copied);
-    }
     public boolean isTerminal(String name){
         AgentTool tool=tools.get(name);
         return tool!=null&&tool.terminal();

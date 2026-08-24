@@ -17,7 +17,7 @@ public class PromptAssembler {
      * Identifies the server-controlled instruction template, not a repository or revision.
      * Change it whenever a prompt policy change intentionally alters agent behavior.
      */
-    public static final String PROMPT_VERSION = "review-system-baseline-2026-08-10";
+    public static final String PROMPT_VERSION = "cloud-agent-system-baseline-2026-08-24";
 
     private final List<PromptSection> sections;
 

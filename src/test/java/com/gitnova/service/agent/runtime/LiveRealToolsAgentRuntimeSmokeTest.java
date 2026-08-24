@@ -20,18 +20,17 @@ import com.gitnova.service.agent.prompt.OutputContractSection;
 import com.gitnova.service.agent.prompt.PromptAssembler;
 import com.gitnova.service.agent.prompt.PromptSection;
 import com.gitnova.service.agent.prompt.RepositoryScopeSection;
-import com.gitnova.service.agent.prompt.ReviewPolicySection;
+import com.gitnova.service.agent.prompt.QualityPolicySection;
 import com.gitnova.service.agent.prompt.RoleSection;
 import com.gitnova.service.agent.prompt.SecuritySection;
 import com.gitnova.service.agent.prompt.TaskSection;
 import com.gitnova.service.agent.prompt.ToolPolicySection;
 import com.gitnova.service.agent.review.ReviewIssueDraft;
-import com.gitnova.service.agent.review.ReviewVerifier;
 import com.gitnova.service.agent.tool.AgentTool;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
-import com.gitnova.service.agent.tools.FinalizeReviewTool;
+import com.gitnova.service.agent.tools.FinishTaskTool;
 import com.gitnova.service.agent.tools.GetDiffTool;
 import com.gitnova.service.agent.tools.ListChangesTool;
 import com.gitnova.service.agent.tools.ReadFileTool;
@@ -85,14 +84,14 @@ class LiveRealToolsAgentRuntimeSmokeTest {
         );
         RecordingTool getDiff = new RecordingTool(new GetDiffTool(reader));
         RecordingTool readFile = new RecordingTool(new ReadFileTool(reader));
-        RecordingTool finalizeReview = new RecordingTool(
-                new FinalizeReviewTool(objectMapper)
+        RecordingTool finishTask = new RecordingTool(
+                new FinishTaskTool(objectMapper)
         );
         ToolRegistry toolRegistry = new ToolRegistry(List.of(
                 listChanges,
                 getDiff,
                 readFile,
-                finalizeReview
+                finishTask
         ));
 
         String baseUrl = environmentOrDefault(
@@ -124,7 +123,7 @@ class LiveRealToolsAgentRuntimeSmokeTest {
                 new SecuritySection(),
                 new RepositoryScopeSection(),
                 new ToolPolicySection(),
-                new ReviewPolicySection(),
+                new QualityPolicySection(),
                 new BudgetSection(),
                 new OutputContractSection()
         ));
@@ -133,17 +132,19 @@ class LiveRealToolsAgentRuntimeSmokeTest {
                 promptAssembler,
                 new MessageFactory(objectMapper),
                 toolRegistry,
-                new ReviewVerifier(),
-                objectMapper,
+                AgentRuntimeLiveTestSupport.inspector(objectMapper),
                 new AgentRuntimePolicy(model, 8, 12, 2, 2, 2048, 0.0)
         );
 
-        AgentRunResult result = runtime.run(new AgentRunContext(
-                "live-real-tools-smoke",
-                42L,
-                REPO_KEY,
-                revision.baseSha1(),
-                revision.targetSha1()
+        AgentRunResult result = runtime.run(AgentRuntimeLiveTestSupport.execution(
+                new AgentRunContext(
+                        "live-real-tools-smoke",
+                        42L,
+                        REPO_KEY,
+                        revision.baseSha1(),
+                        revision.targetSha1()
+                ),
+                "Review the authorized change and report evidence-backed findings"
         ));
 
         System.out.printf(
@@ -154,7 +155,9 @@ class LiveRealToolsAgentRuntimeSmokeTest {
                 result.modelCallCount(),
                 result.toolCallCount(),
                 modelGateway.requestCount,
-                result.reviewDraft() == null ? -1 : result.reviewDraft().issues().size()
+                AgentRuntimeLiveTestSupport.reviewDraft(result) == null
+                        ? -1
+                        : AgentRuntimeLiveTestSupport.reviewDraft(result).issues().size()
         );
         if (modelGateway.lastFailure != null) {
             ModelGatewayException failure = modelGateway.lastFailure;
@@ -170,27 +173,24 @@ class LiveRealToolsAgentRuntimeSmokeTest {
 
         assertEquals(AgentRunStatus.COMPLETED, result.status());
         assertEquals(
-                AgentTerminationReason.FINALIZE_SUCCEEDED,
+                AgentTerminationReason.FINISH_SUCCEEDED,
                 result.terminationReason()
         );
-        assertNotNull(result.reviewDraft());
-        assertTrue(result.coverage().changesListed());
-        assertTrue(result.coverage().diffedFiles().contains(FILE_PATH));
-        assertTrue(result.coverage().readFiles().contains(FILE_PATH));
+        assertNotNull(AgentRuntimeLiveTestSupport.reviewDraft(result));
         assertTrue(listChanges.invocationCount >= 1);
         assertTrue(getDiff.invocationCount >= 1);
         assertTrue(readFile.invocationCount >= 1);
-        assertTrue(finalizeReview.invocationCount >= 1);
-        assertFalse(result.reviewDraft().issues().isEmpty());
-        assertTrue(result.reviewDraft().issues().stream()
+        assertTrue(finishTask.invocationCount >= 1);
+        assertFalse(AgentRuntimeLiveTestSupport.reviewDraft(result).issues().isEmpty());
+        assertTrue(AgentRuntimeLiveTestSupport.reviewDraft(result).issues().stream()
                 .map(ReviewIssueDraft::filePath)
                 .anyMatch(FILE_PATH::equals));
 
         System.out.printf(
                 "LIVE_REAL_TOOLS_REVIEW summary=%s%n",
-                result.reviewDraft().summary()
+                AgentRuntimeLiveTestSupport.reviewDraft(result).summary()
         );
-        for (ReviewIssueDraft issue : result.reviewDraft().issues()) {
+        for (ReviewIssueDraft issue : AgentRuntimeLiveTestSupport.reviewDraft(result).issues()) {
             System.out.printf(
                     "LIVE_REAL_TOOLS_ISSUE file=%s lines=%d-%d severity=%s category=%s confidence=%.2f evidence=%s explanation=%s suggestion=%s%n",
                     issue.filePath(),

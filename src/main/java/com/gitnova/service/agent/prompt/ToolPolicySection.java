@@ -3,7 +3,7 @@ package com.gitnova.service.agent.prompt;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import org.springframework.stereotype.Component;
 
-/** Documents the current P0 workflow; schemas remain in ModelRequest.tools. */
+/** Describes progressive context acquisition and controlled Workspace actions. */
 @Component
 public final class ToolPolicySection implements PromptSection {
     @Override
@@ -20,9 +20,10 @@ public final class ToolPolicySection implements PromptSection {
     public String render(AgentRunContext context) {
         return """
                 <workflow>
-                Use only registered tools and only for their declared purpose. Start with listChanges.
-                Use getDiff for relevant changed files and readFile only for focused ranges when more context is needed.
-                Do not invent tools, parameters, repositories, revisions, or direct network access.
+                Use only the tools exposed in the current request and only for their declared purpose.
+                Acquire context progressively: explore paths, search, read focused ranges, inspect diffs, then act.
+                Before a Workspace mutation, base expectedGeneration on fresh tool evidence. After modifications,
+                inspect the canonical Workspace diff and run relevant validation before finishing.
                 </workflow>
                 """;
     }

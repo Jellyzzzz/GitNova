@@ -1,11 +1,9 @@
 package com.gitnova.service.agent.runtime;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.dto.ToolCall;
-import com.gitnova.dto.ToolDefinition;
+import com.gitnova.service.agent.completion.CompletionInspector;
 import com.gitnova.service.agent.model.FakeModelGateway;
 import com.gitnova.service.agent.model.MessageFactory;
 import com.gitnova.service.agent.model.ModelFinishReason;
@@ -16,161 +14,147 @@ import com.gitnova.service.agent.model.ModelRole;
 import com.gitnova.service.agent.model.ModelUsage;
 import com.gitnova.service.agent.prompt.PromptAssembler;
 import com.gitnova.service.agent.prompt.PromptSection;
-import com.gitnova.service.agent.review.ReviewVerifier;
 import com.gitnova.service.agent.tool.AgentTool;
-import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
-import com.gitnova.service.agent.tool.ToolResult;
-import com.gitnova.service.agent.tool.ToolStatus;
-import com.gitnova.service.agent.tools.FinalizeReviewTool;
+import com.gitnova.service.agent.tools.FinishTaskTool;
+import com.gitnova.service.agent.workspace.PatchBatchResult;
+import com.gitnova.service.agent.workspace.SnapshotScope;
+import com.gitnova.service.agent.workspace.WorkspaceBinding;
+import com.gitnova.service.agent.workspace.WorkspaceGateway;
+import com.gitnova.service.agent.workspace.WorkspaceId;
+import com.gitnova.service.agent.workspace.WorkspaceMutationCommand;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AgentRuntimeFinalDraftCorrectionTest {
 
-    private static final String ISSUE_PATH = "src/Risky.java";
-
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
-    void shouldReturnInvalidDraftObservationAndCompleteAfterModelCorrection()
-            throws JsonProcessingException {
+    void shouldReturnInvalidDraftObservationAndCompleteAfterModelCorrection() throws Exception {
+        ObjectNode invalid = validFinish(0);
+        invalid.put("summary", "");
         FakeModelGateway gateway = new FakeModelGateway()
-                .enqueueResponse(toolResponse(
-                        "response-list",
-                        call("call-list", "listChanges", objectMapper.createObjectNode())
-                ))
-                .enqueueResponse(toolResponse(
-                        "response-invalid-finalize",
-                        call("call-finalize-invalid", "finalizeReview", invalidDraftArguments())
-                ))
-                .enqueueResponse(toolResponse(
-                        "response-valid-finalize",
-                        call("call-finalize-valid", "finalizeReview", emptyValidDraftArguments())
-                ));
+                .enqueueResponse(toolResponse("response-invalid", finishCall("call-invalid", invalid)))
+                .enqueueResponse(toolResponse("response-valid", finishCall("call-valid", validFinish(0))));
 
-        AgentRunResult result = runtime(gateway, 1, List.of(
-                listChangesTool(),
-                new FinalizeReviewTool(objectMapper)
-        )).run(context());
+        AgentRunResult result = runtime(gateway, 1, 0).run(context());
 
         assertEquals(AgentRunStatus.COMPLETED, result.status());
-        assertEquals(AgentTerminationReason.FINALIZE_SUCCEEDED, result.terminationReason());
-        assertNotNull(result.reviewDraft());
-        assertEquals(3, result.modelCallCount());
-        assertEquals(3, result.toolCallCount());
-
-        ModelRequest correctionRequest = gateway.receivedRequests().get(2);
+        assertEquals(2, result.modelCallCount());
+        assertEquals(2, result.toolCallCount());
+        ModelRequest correctionRequest = gateway.receivedRequests().get(1);
         List<ModelMessage> messages = correctionRequest.messages();
-        assertEquals(7, messages.size());
-
-        ModelMessage rejectedCall = messages.get(4);
-        assertEquals(ModelRole.ASSISTANT, rejectedCall.role());
-        assertEquals("call-finalize-invalid", rejectedCall.toolCalls().get(0).id());
-
-        ModelMessage rejection = messages.get(5);
-        assertEquals(ModelRole.TOOL, rejection.role());
-        assertEquals("call-finalize-invalid", rejection.toolCallId());
-        JsonNode rejectionJson = objectMapper.readTree(rejection.content());
-        assertEquals(ToolStatus.INVALID_ARGUMENT.name(), rejectionJson.path("status").asText());
-        assertEquals("INVALID_REVIEW_DRAFT", rejectionJson.path("errorCode").asText());
-
-        ModelMessage feedback = messages.get(6);
+        ModelMessage toolRejection = messages.get(messages.size() - 2);
+        ModelMessage feedback = messages.get(messages.size() - 1);
+        assertEquals(ModelRole.TOOL, toolRejection.role());
+        assertEquals("call-invalid", toolRejection.toolCallId());
         assertEquals(ModelRole.USER, feedback.role());
-        assertTrue(feedback.content().contains("Correct the draft"));
-        assertTrue(feedback.content().contains("finalizeReview alone"));
+        assertTrue(feedback.content().contains("completion draft was rejected"));
+        assertTrue(feedback.content().contains("finishTask alone"));
     }
 
     @Test
-    void shouldTerminatePartialWhenFinalDraftCorrectionBudgetIsExhausted() {
+    void shouldCorrectStaleGenerationAndCompleteWithFreshGeneration() {
         FakeModelGateway gateway = new FakeModelGateway()
                 .enqueueResponse(toolResponse(
-                        "response-list",
-                        call("call-list", "listChanges", objectMapper.createObjectNode())
+                        "response-stale",
+                        finishCall("call-stale", validFinish(0))
                 ))
                 .enqueueResponse(toolResponse(
-                        "response-invalid-finalize-1",
-                        call("call-finalize-invalid-1", "finalizeReview", invalidDraftArguments())
-                ))
-                .enqueueResponse(toolResponse(
-                        "response-invalid-finalize-2",
-                        call("call-finalize-invalid-2", "finalizeReview", invalidDraftArguments())
+                        "response-fresh",
+                        finishCall("call-fresh", validFinish(1))
                 ));
 
-        AgentRunResult result = runtime(gateway, 1, List.of(
-                listChangesTool(),
-                new FinalizeReviewTool(objectMapper)
-        )).run(context());
-
-        assertEquals(AgentRunStatus.PARTIAL, result.status());
-        assertEquals(AgentTerminationReason.INVALID_FINAL_DRAFT, result.terminationReason());
-        assertNull(result.reviewDraft());
-        assertTrue(result.coverage().changesListed());
-        assertEquals(3, result.modelCallCount());
-        assertEquals(3, result.toolCallCount());
-        assertEquals(0, gateway.remainingOutcomes());
-    }
-
-    @Test
-    void shouldAllowEvidenceGatheringAfterVerifierRejectsUninspectedIssue() {
-        ObjectNode issueDraft = issueDraftArguments(ISSUE_PATH);
-        FakeModelGateway gateway = new FakeModelGateway()
-                .enqueueResponse(toolResponse(
-                        "response-list",
-                        call("call-list", "listChanges", objectMapper.createObjectNode())
-                ))
-                .enqueueResponse(toolResponse(
-                        "response-unverified-finalize",
-                        call("call-finalize-unverified", "finalizeReview", issueDraft)
-                ))
-                .enqueueResponse(toolResponse(
-                        "response-read-evidence",
-                        call("call-read", "readFile", readArguments(ISSUE_PATH))
-                ))
-                .enqueueResponse(toolResponse(
-                        "response-verified-finalize",
-                        call("call-finalize-verified", "finalizeReview", issueDraft.deepCopy())
-                ));
-
-        AgentRunResult result = runtime(gateway, 1, List.of(
-                listChangesTool(),
-                readFileTool(),
-                new FinalizeReviewTool(objectMapper)
-        )).run(context());
+        AgentRunResult result = runtime(gateway, 1, 1).run(context());
 
         assertEquals(AgentRunStatus.COMPLETED, result.status());
-        assertEquals(AgentTerminationReason.FINALIZE_SUCCEEDED, result.terminationReason());
-        assertNotNull(result.reviewDraft());
-        assertEquals(1, result.reviewDraft().issues().size());
-        assertTrue(result.coverage().readFiles().contains(ISSUE_PATH));
-        assertEquals(4, result.modelCallCount());
-        assertEquals(4, result.toolCallCount());
+        assertEquals(1, result.completionOutcome().canonicalDiff().generation());
+        ModelMessage feedback = gateway.receivedRequests().get(1).messages()
+                .get(gateway.receivedRequests().get(1).messages().size() - 1);
+        assertTrue(feedback.content().contains("generation 1"));
+    }
 
-        ModelRequest evidenceRequest = gateway.receivedRequests().get(2);
-        ModelMessage feedback = evidenceRequest.messages()
-                .get(evidenceRequest.messages().size() - 1);
-        assertEquals(ModelRole.USER, feedback.role());
-        assertTrue(feedback.content().contains("issue file was not inspected"));
-        assertTrue(feedback.content().contains("Gather any missing tool evidence"));
-        assertFalse(feedback.content().contains("Correct the draft and call finalizeReview alone"));
+    @Test
+    void shouldTerminatePartialWhenCompletionCorrectionBudgetIsExhausted() {
+        ObjectNode invalid = validFinish(0);
+        invalid.put("summary", "");
+        FakeModelGateway gateway = new FakeModelGateway()
+                .enqueueResponse(toolResponse("response-invalid-1", finishCall("call-1", invalid)))
+                .enqueueResponse(toolResponse("response-invalid-2", finishCall("call-2", invalid.deepCopy())));
+
+        AgentRunResult result = runtime(gateway, 1, 0).run(context());
+
+        assertEquals(AgentRunStatus.FAILED, result.status());
+        assertEquals(AgentTerminationReason.INVALID_COMPLETION_DRAFT, result.terminationReason());
+        assertNull(result.completionOutcome());
+        assertEquals(0, result.successfulToolCallCount());
+    }
+
+    @Test
+    void shouldRejectMixedTerminalCallsWithoutExecutingEitherTool() {
+        ToolCall finish = finishCall("call-finish", validFinish(0));
+        ToolCall other = new ToolCall(
+                "call-other",
+                "unknownTool",
+                objectMapper.createObjectNode()
+        );
+        FakeModelGateway gateway = new FakeModelGateway()
+                .enqueueResponse(new ModelResponse(
+                        "response-mixed",
+                        null,
+                        List.of(other, finish),
+                        ModelUsage.unknown(),
+                        ModelFinishReason.TOOL_CALLS
+                ))
+                .enqueueResponse(toolResponse(
+                        "response-corrected",
+                        finishCall("call-corrected", validFinish(0))
+                ));
+
+        AgentRunResult result = runtime(gateway, 1, 0).run(context());
+
+        assertEquals(AgentRunStatus.COMPLETED, result.status());
+        assertEquals(ProtocolDeviation.MIXED_TERMINAL_TOOL_CALLS, result.lastProtocolDeviation());
+        assertEquals(3, result.toolCallCount());
+        assertEquals(1, result.successfulToolCallCount());
     }
 
     private AgentRuntime runtime(
             FakeModelGateway gateway,
-            int maxFinalDraftCorrections,
-            List<AgentTool> tools
+            int maxCorrections,
+            long generation
     ) {
+        WorkspaceGateway workspace = new EmptyWorkspace(generation);
+        List<AgentTool> tools = List.of(new FinishTaskTool(objectMapper));
+        return new AgentRuntime(
+                gateway,
+                promptAssembler(),
+                new MessageFactory(objectMapper),
+                new ToolRegistry(tools),
+                new CompletionInspector(objectMapper, workspace),
+                new AgentRuntimePolicy(
+                        "fake-model",
+                        5,
+                        6,
+                        1,
+                        maxCorrections,
+                        1024,
+                        0.0
+                )
+        );
+    }
+
+    private PromptAssembler promptAssembler() {
         PromptSection section = new PromptSection() {
             @Override
             public String key() {
-                return "final-draft-correction-test";
+                return "correction-test";
             }
 
             @Override
@@ -180,122 +164,77 @@ class AgentRuntimeFinalDraftCorrectionTest {
 
             @Override
             public String render(AgentRunContext context) {
-                return "Inspect the trusted change and finish through finalizeReview.";
+                return "Call finishTask alone when done.";
             }
         };
-        return new AgentRuntime(
-                gateway,
-                new PromptAssembler(List.of(section)),
-                new MessageFactory(objectMapper),
-                new ToolRegistry(tools),
-                new ReviewVerifier(),
-                objectMapper,
-                new AgentRuntimePolicy(
-                        "fake-model",
-                        8,
-                        8,
-                        1,
-                        maxFinalDraftCorrections,
-                        1024,
-                        0.0
-                )
+        return new PromptAssembler(List.of(section));
+    }
+
+    private AgentExecutionContext context() {
+        return new AgentExecutionContext(
+                "session-1",
+                new AgentRunContext(
+                        "run-correction",
+                        42L,
+                        "7/42",
+                        SnapshotScope.of("a".repeat(40))
+                ),
+                7L,
+                "Explain the current implementation",
+                new WorkspaceBinding(WorkspaceId.generate()),
+                AgentCapabilityPolicy.cloudAgent()
         );
     }
 
-    private ModelResponse toolResponse(String responseId, ToolCall call) {
+    private ModelResponse toolResponse(String id, ToolCall call) {
         return new ModelResponse(
-                responseId,
+                id,
                 null,
                 List.of(call),
-                new ModelUsage(10, 5, 15),
+                ModelUsage.unknown(),
                 ModelFinishReason.TOOL_CALLS
         );
     }
 
-    private ToolCall call(String id, String name, ObjectNode arguments) {
-        return new ToolCall(id, name, arguments);
+    private ToolCall finishCall(String id, ObjectNode arguments) {
+        return new ToolCall(id, FinishTaskTool.NAME, arguments);
     }
 
-    private ObjectNode invalidDraftArguments() {
+    private ObjectNode validFinish(long generation) {
         ObjectNode arguments = objectMapper.createObjectNode();
-        arguments.put("summary", "");
-        arguments.putArray("issues");
+        arguments.put("expectedGeneration", generation);
+        arguments.put("summary", "Task completed");
+        arguments.putArray("findings");
+        arguments.putArray("claimedChangedFiles");
+        arguments.putArray("claimedValidations");
+        arguments.putArray("risks");
+        arguments.putArray("followUps");
         return arguments;
     }
 
-    private ObjectNode emptyValidDraftArguments() {
-        ObjectNode arguments = objectMapper.createObjectNode();
-        arguments.put("summary", "No actionable defects were found.");
-        arguments.putArray("issues");
-        return arguments;
-    }
+    private static final class EmptyWorkspace implements WorkspaceGateway {
+        private final long generation;
 
-    private ObjectNode issueDraftArguments(String filePath) {
-        ObjectNode arguments = objectMapper.createObjectNode();
-        arguments.put("summary", "Found one correctness issue.");
-        ObjectNode issue = arguments.putArray("issues").addObject();
-        issue.put("filePath", filePath);
-        issue.put("startLine", 10);
-        issue.put("endLine", 10);
-        issue.put("severity", "error");
-        issue.put("category", "correctness");
-        issue.put("evidence", "The changed branch returns the wrong value.");
-        issue.put("explanation", "The returned value violates the method contract.");
-        issue.put("suggestion", "Restore the contract-preserving branch.");
-        issue.put("confidence", 0.95);
-        return arguments;
-    }
+        private EmptyWorkspace(long generation) {
+            this.generation = generation;
+        }
 
-    private ObjectNode readArguments(String filePath) {
-        ObjectNode arguments = objectMapper.createObjectNode();
-        arguments.put("filePath", filePath);
-        return arguments;
-    }
-
-    private AgentTool listChangesTool() {
-        ObjectNode schema = objectMapper.createObjectNode();
-        schema.put("type", "object");
-        schema.putObject("properties");
-        schema.put("additionalProperties", false);
-        return new SuccessfulTool(
-                new ToolDefinition("listChanges", "List changed files", schema),
-                objectMapper.createObjectNode().put("totalFiles", 1)
-        );
-    }
-
-    private AgentTool readFileTool() {
-        ObjectNode schema = objectMapper.createObjectNode();
-        schema.put("type", "object");
-        ObjectNode properties = schema.putObject("properties");
-        properties.putObject("filePath").put("type", "string");
-        schema.putArray("required").add("filePath");
-        schema.put("additionalProperties", false);
-        return new SuccessfulTool(
-                new ToolDefinition("readFile", "Read one changed file", schema),
-                objectMapper.createObjectNode().put("content", "return wrongValue;")
-        );
-    }
-
-    private AgentRunContext context() {
-        return new AgentRunContext(
-                "run-final-draft-correction",
-                42L,
-                "7/42",
-                "base-sha",
-                "target-sha"
-        );
-    }
-
-    private record SuccessfulTool(
-            ToolDefinition definition,
-            JsonNode payload
-    ) implements AgentTool {
         @Override
-        public ToolResult execute(
-                ToolExecutionContext execution,
-                JsonNode arguments
+        public PatchBatchResult applyPatch(
+                WorkspaceId workspaceId,
+                WorkspaceMutationCommand command
         ) {
-            return ToolResult.success(payload);
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public WorkspaceRefresh refreshWorkspace(WorkspaceId workspaceId) {
+            return new WorkspaceRefresh(generation, generation, false);
+        }
+
+        @Override
+        public WorkspaceDiff getWorkspaceDiff(WorkspaceId workspaceId) {
+            return new WorkspaceDiff(generation, List.of(), 0, 0, 0, false, "");
         }
     }
 }

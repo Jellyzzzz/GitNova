@@ -58,13 +58,13 @@ class FinalizeReviewToolTest {
     }
 
     private ToolExecutionContext execution() {
-        return new ToolExecutionContext(
+        return com.gitnova.service.agent.AgentTestContexts.toolExecution(
                 new AgentRunContext(
-                        "run-1",
+                        "context-1",
                         10L,
                         "1/10",
-                        "base-sha",
-                        "target-sha"
+                        "a".repeat(40),
+                        "b".repeat(40)
                 ),
                 0,
                 "call-1"

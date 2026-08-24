@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.dto.ToolDefinition;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.AgentTool;
+import com.gitnova.service.agent.tool.ToolAccessMode;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolResult;
 
@@ -13,6 +14,7 @@ final class FakeAgentTool implements AgentTool {
 
     private final ToolDefinition definition;
     private final ToolResult resultToReturn;
+    private final ToolAccessMode accessMode;
 
     private ToolExecutionContext receivedExecution;
     private JsonNode receivedArguments;
@@ -22,13 +24,22 @@ final class FakeAgentTool implements AgentTool {
             String name,
             ToolResult resultToReturn
     ) {
-        this(name, defaultInputSchema(), resultToReturn);
+        this(name, defaultInputSchema(), resultToReturn, ToolAccessMode.READ_ONLY);
     }
 
     FakeAgentTool(
             String name,
             ObjectNode inputSchema,
             ToolResult resultToReturn
+    ) {
+        this(name, inputSchema, resultToReturn, ToolAccessMode.READ_ONLY);
+    }
+
+    FakeAgentTool(
+            String name,
+            ObjectNode inputSchema,
+            ToolResult resultToReturn,
+            ToolAccessMode accessMode
     ) {
         this.definition = new ToolDefinition(
                 name,
@@ -37,6 +48,7 @@ final class FakeAgentTool implements AgentTool {
         );
 
         this.resultToReturn = resultToReturn;
+        this.accessMode = accessMode;
     }
 
     private static ObjectNode defaultInputSchema() {
@@ -62,6 +74,11 @@ final class FakeAgentTool implements AgentTool {
         this.invocationCount++;
 
         return resultToReturn;
+    }
+
+    @Override
+    public ToolAccessMode accessMode() {
+        return accessMode;
     }
 
     ToolExecutionContext receivedExecution() {

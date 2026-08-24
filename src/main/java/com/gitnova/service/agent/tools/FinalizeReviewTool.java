@@ -12,14 +12,12 @@ import com.gitnova.service.agent.tool.AgentTool;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
-import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /** Parses the model's final review request into a side-effect-free draft. */
-@Component
 public class FinalizeReviewTool implements AgentTool {
 
     private static final ToolDefinition DEFINITION = definitionSchema();

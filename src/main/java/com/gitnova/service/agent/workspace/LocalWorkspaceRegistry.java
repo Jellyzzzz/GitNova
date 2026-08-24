@@ -15,13 +15,15 @@ public final class LocalWorkspaceRegistry {
         private final Path root;
         private final ReentrantReadWriteLock lock;
         private long generation;
+        private String contentFingerprint;
         private Long latestSuccessfulValidationGeneration;
         public LocalWorkspaceState(
                 WorkspaceId workspaceId,
                 RepoKey repoKey,
                 SnapshotScope source,
                 Path root,
-                long generation
+                long generation,
+                String contentFingerprint
         ) {
             this.workspaceId=Objects.requireNonNull(workspaceId,"workspaceId must not be null");
             this.repoKey=Objects.requireNonNull(repoKey,"repoKey must not be null");
@@ -30,6 +32,10 @@ public final class LocalWorkspaceRegistry {
             lock=new ReentrantReadWriteLock(true);
             if(generation<0) throw new IllegalArgumentException("generation must not be negative");
             this.generation=generation;
+            this.contentFingerprint = Objects.requireNonNull(
+                    contentFingerprint,
+                    "contentFingerprint must not be null"
+            );
             this.latestSuccessfulValidationGeneration=null;
         }
         WorkspaceId workspaceId() {
@@ -61,6 +67,41 @@ public final class LocalWorkspaceRegistry {
             latestSuccessfulValidationGeneration = null;
         }
 
+        String contentFingerprint() {
+            return contentFingerprint;
+        }
+
+        /** Caller must hold this Workspace's write lock. */
+        boolean refreshFingerprint(String observedFingerprint) {
+            Objects.requireNonNull(observedFingerprint, "observedFingerprint must not be null");
+            if (contentFingerprint == null) {
+                // An earlier mutation already advanced generation conservatively when its
+                // final tree could not be observed. Re-establish the baseline without
+                // counting the same unknown mutation a second time.
+                contentFingerprint = observedFingerprint;
+                return false;
+            }
+            if (contentFingerprint.equals(observedFingerprint)) {
+                return false;
+            }
+            advanceGeneration();
+            contentFingerprint = observedFingerprint;
+            return true;
+        }
+
+        /** Caller must hold this Workspace's write lock. */
+        void acceptFingerprint(String observedFingerprint) {
+            contentFingerprint = Objects.requireNonNull(
+                    observedFingerprint,
+                    "observedFingerprint must not be null"
+            );
+        }
+
+        /** Caller must hold this Workspace's write lock. */
+        void forgetFingerprint() {
+            contentFingerprint = null;
+        }
+
         Long latestSuccessfulValidationGeneration() {
             return latestSuccessfulValidationGeneration;
         }
@@ -80,12 +121,14 @@ public final class LocalWorkspaceRegistry {
     }
     public void register(WorkspaceHandle handle){
         Objects.requireNonNull(handle,"handle must not be null");
+        String contentFingerprint = WorkspaceTreeFingerprint.capture(handle.root());
         LocalWorkspaceState state = new LocalWorkspaceState(
                 handle.workspaceId(),
                 handle.repoKey(),
                 handle.source(),
                 handle.root(),
-                handle.generation()
+                handle.generation(),
+                contentFingerprint
         );
         LocalWorkspaceState previous=states.putIfAbsent(handle.workspaceId(),state);
         if(previous!=null){

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.gitobject.CommitObject;
 import com.gitnova.gitobject.GitObjectReader;
+import com.gitnova.service.agent.runtime.AgentCapabilityPolicy;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.AgentTool;
 import com.gitnova.service.agent.tool.ToolAccessMode;
@@ -17,15 +18,16 @@ import com.gitnova.service.agent.workspace.PatchBatchResult;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 import com.gitnova.service.agent.workspace.WorkspaceMutationCommand;
+import com.gitnova.service.agent.workspace.SnapshotScope;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CodingWorkspaceToolsTest {
@@ -35,7 +37,7 @@ class CodingWorkspaceToolsTest {
     private final WorkspaceGateway gateway = new FakeGateway();
 
     @Test
-    void shouldExecuteAllReadAndValidationToolsThroughScopedRegistry() {
+    void shouldExecuteAllReadAndValidationToolsThroughCapabilityRegistry() {
         List<AgentTool> tools = List.of(
                 new ListFilesTool(gateway, objectMapper),
                 new FindFilesTool(gateway, objectMapper),
@@ -43,37 +45,25 @@ class CodingWorkspaceToolsTest {
                 new ReadFileTool(unusedObjectReader(), gateway),
                 new GetWorkspaceDiffTool(gateway, objectMapper),
                 new RunCommandTool(gateway, objectMapper),
-                new FinalizeTaskTool(objectMapper)
+                new FinishTaskTool(objectMapper)
         );
         ToolRegistry registry = new ToolRegistry(tools);
-        Set<String> allowed = Set.of(
-                "listFiles",
-                "findFiles",
-                "searchText",
-                "readFile",
-                "getWorkspaceDiff",
-                "runCommand",
-                "finalizeTask"
-        );
 
-        ToolResult listed = registry.executeScoped(
+        ToolResult listed = registry.execute(
                 execution("call-list"),
-                allowed,
                 "listFiles",
                 objectMapper.createObjectNode().put("path", ".")
         );
-        ToolResult found = registry.executeScoped(
+        ToolResult found = registry.execute(
                 execution("call-find"),
-                allowed,
                 "findFiles",
                 objectMapper.createObjectNode().put("glob", "**/*.java")
         );
         ObjectNode searchArguments = objectMapper.createObjectNode();
         searchArguments.put("query", "Main");
         searchArguments.put("caseSensitive", true);
-        ToolResult searched = registry.executeScoped(
+        ToolResult searched = registry.execute(
                 execution("call-search"),
-                allowed,
                 "searchText",
                 searchArguments
         );
@@ -82,35 +72,32 @@ class CodingWorkspaceToolsTest {
         readArguments.put("filePath", "src/Main.java");
         readArguments.put("startLine", 1);
         readArguments.put("endLine", 10);
-        ToolResult read = registry.executeScoped(
+        ToolResult read = registry.execute(
                 execution("call-read"),
-                allowed,
                 "readFile",
                 readArguments
         );
-        ToolResult diff = registry.executeScoped(
+        ToolResult diff = registry.execute(
                 execution("call-diff"),
-                allowed,
                 "getWorkspaceDiff",
                 objectMapper.createObjectNode()
         );
-        ToolResult command = registry.executeScoped(
+        ToolResult command = registry.execute(
                 execution("call-command"),
-                allowed,
                 "runCommand",
                 commandArguments()
         );
-        ToolResult finalized = registry.executeScoped(
+        ToolResult finalized = registry.execute(
                 execution("call-finalize"),
-                allowed,
-                "finalizeTask",
+                FinishTaskTool.NAME,
                 finalizeArguments()
         );
 
-        assertEquals(7, registry.definitions(allowed).size());
+        assertEquals(7, registry.definitions(AgentCapabilityPolicy.cloudAgent()).size());
         assertEquals(ToolStatus.SUCCESS, listed.status());
         assertEquals("src/Main.java", found.payload().path("paths").get(0).asText());
         assertEquals(2, searched.payload().path("matches").get(0).path("lineNumber").asInt());
+        assertTrue(searched.truncated());
         assertEquals("WORKSPACE", read.payload().path("revision").asText());
         assertEquals(4, read.payload().path("generation").asLong());
         assertEquals(1, diff.payload().path("files").size());
@@ -118,7 +105,7 @@ class CodingWorkspaceToolsTest {
         assertEquals(1, command.payload().path("exitCode").asInt());
         assertEquals(ToolStatus.SUCCESS, finalized.status());
         assertEquals(4, finalized.payload().path("expectedGeneration").asLong());
-        assertTrue(registry.isTerminal("finalizeTask"));
+        assertTrue(registry.isTerminal(FinishTaskTool.NAME));
     }
 
     @Test
@@ -138,17 +125,44 @@ class CodingWorkspaceToolsTest {
     }
 
     @Test
-    void shouldRejectInvalidCodingDraftAndNotTreatClaimsAsVerifiedFacts() {
-        FinalizeTaskTool tool = new FinalizeTaskTool(objectMapper);
+    void shouldRejectInvalidCompletionDraftAndNotTreatClaimsAsVerifiedFacts() {
+        FinishTaskTool tool = new FinishTaskTool(objectMapper);
         ObjectNode invalid = finalizeArguments();
-        ((ArrayNode) invalid.path("changedFiles")).add("../escape.java");
+        ((ArrayNode) invalid.path("claimedChangedFiles")).add("../escape.java");
 
         ToolResult result = tool.execute(execution("call-finalize"), invalid);
 
         assertEquals(ToolStatus.INVALID_ARGUMENT, result.status());
-        assertEquals("INVALID_CODING_DRAFT", result.errorCode());
+        assertEquals("INVALID_COMPLETION_DRAFT", result.errorCode());
         assertFalse(result.retryable());
         assertTrue(tool.terminal());
+    }
+
+    @Test
+    void shouldRejectCommandInputsOutsideGatewayContractLimits() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new WorkspaceGateway.CommandRequest(
+                        4,
+                        java.util.Collections.nCopies(
+                                WorkspaceGateway.MAX_COMMAND_ARG_COUNT + 1,
+                                "argument"
+                        ),
+                        ".",
+                        30,
+                        "too many arguments"
+                )
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new WorkspaceGateway.CommandRequest(
+                        4,
+                        List.of("test-runner"),
+                        ".",
+                        WorkspaceGateway.MAX_COMMAND_TIMEOUT_SECONDS + 1,
+                        "timeout too large"
+                )
+        );
     }
 
     private ObjectNode commandArguments() {
@@ -157,7 +171,7 @@ class CodingWorkspaceToolsTest {
         arguments.putArray("argv").add("./mvnw").add("test");
         arguments.put("workingDirectory", ".");
         arguments.put("timeoutSeconds", 120);
-        arguments.put("purpose", "run tests");
+        arguments.put("purpose", "context tests");
         return arguments;
     }
 
@@ -165,8 +179,9 @@ class CodingWorkspaceToolsTest {
         ObjectNode arguments = objectMapper.createObjectNode();
         arguments.put("expectedGeneration", 4);
         arguments.put("summary", "Updated Main and ran focused tests");
-        arguments.putArray("changedFiles").add("src/Main.java");
-        ObjectNode validation = arguments.putArray("validations").addObject();
+        arguments.putArray("findings");
+        arguments.putArray("claimedChangedFiles").add("src/Main.java");
+        ObjectNode validation = arguments.putArray("claimedValidations").addObject();
         validation.putArray("argv").add("./mvnw").add("test");
         validation.put("result", "FAILED");
         arguments.putArray("risks").add("Test fixture still fails");
@@ -175,13 +190,12 @@ class CodingWorkspaceToolsTest {
     }
 
     private ToolExecutionContext execution(String callId) {
-        return ToolExecutionContext.forWorkspace(
+        return com.gitnova.service.agent.AgentTestContexts.workspaceToolExecution(
                 new AgentRunContext(
-                        "run-1",
+                        "context-1",
                         10L,
                         "1/10",
-                        "a".repeat(40),
-                        "b".repeat(40)
+                        SnapshotScope.of("a".repeat(40))
                 ),
                 0,
                 callId,
@@ -227,13 +241,14 @@ class CodingWorkspaceToolsTest {
             return new FileListing(
                     4,
                     directory,
-                    List.of(new FileEntry("src", FileType.DIRECTORY, 0))
+                    List.of(new FileEntry("src", FileType.DIRECTORY, 0)),
+                    false
             );
         }
 
         @Override
         public FileSearch findFiles(WorkspaceId workspaceId, String glob) {
-            return new FileSearch(4, glob, List.of("src/Main.java"));
+            return new FileSearch(4, glob, List.of("src/Main.java"), false);
         }
 
         @Override
@@ -246,7 +261,8 @@ class CodingWorkspaceToolsTest {
                     4,
                     query,
                     caseSensitive,
-                    List.of(new TextMatch("src/Main.java", 2, "class Main {}"))
+                    List.of(new TextMatch("src/Main.java", 2, "class Main {}")),
+                    true
             );
         }
 
@@ -299,6 +315,8 @@ class CodingWorkspaceToolsTest {
                         0,
                         "",
                         "",
+                        false,
+                        false,
                         "STALE_WORKSPACE_GENERATION",
                         "Expected generation is stale"
                 );
@@ -312,6 +330,8 @@ class CodingWorkspaceToolsTest {
                     25,
                     "",
                     "test failed",
+                    false,
+                    false,
                     null,
                     null
             );

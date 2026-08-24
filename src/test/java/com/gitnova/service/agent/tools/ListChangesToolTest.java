@@ -7,6 +7,7 @@ import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
+import com.gitnova.service.agent.workspace.SnapshotScope;
 import com.gitnova.storage.FakeObjectStorage;
 import org.junit.jupiter.api.Test;
 
@@ -43,9 +44,9 @@ class ListChangesToolTest {
         );
 
         ToolResult result = tool.execute(
-                new ToolExecutionContext(
+                com.gitnova.service.agent.AgentTestContexts.toolExecution(
                         new AgentRunContext(
-                                "run-1",
+                                "context-1",
                                 10L,
                                 REPO_KEY,
                                 BASE_SHA,
@@ -139,19 +140,18 @@ class ListChangesToolTest {
     }
 
     @Test
-    void shouldRejectMissingBaseRevision() {
+    void shouldRejectSnapshotScopeForReviewOnlyTool() {
         ListChangesTool tool = new ListChangesTool(
                 reader(new FakeObjectStorage()),
                 new ObjectMapper()
         );
         ToolResult result = tool.execute(
-                new ToolExecutionContext(
+                com.gitnova.service.agent.AgentTestContexts.toolExecution(
                         new AgentRunContext(
-                                "run-1",
+                                "context-1",
                                 10L,
                                 REPO_KEY,
-                                null,
-                                TARGET_SHA
+                                SnapshotScope.of(BASE_SHA)
                         ),
                         0,
                         "call-1"
@@ -159,8 +159,8 @@ class ListChangesToolTest {
                 JsonNodeFactory.instance.objectNode()
         );
 
-        assertEquals(ToolStatus.CONFLICT, result.status());
-        assertEquals("BASE_REVISION_MISSING", result.errorCode());
+        assertEquals(ToolStatus.PERMISSION_DENIED, result.status());
+        assertEquals("REVIEW_DIFF_SCOPE_REQUIRED", result.errorCode());
     }
 
     @Test
@@ -178,9 +178,9 @@ class ListChangesToolTest {
         arguments.put("targetSha1", "model-target");
 
         ToolResult result = registry.execute(
-                new ToolExecutionContext(
+                com.gitnova.service.agent.AgentTestContexts.toolExecution(
                         new AgentRunContext(
-                                "run-1",
+                                "context-1",
                                 10L,
                                 REPO_KEY,
                                 BASE_SHA,
@@ -203,9 +203,9 @@ class ListChangesToolTest {
                 new ObjectMapper()
         );
         return tool.execute(
-                new ToolExecutionContext(
+                com.gitnova.service.agent.AgentTestContexts.toolExecution(
                         new AgentRunContext(
-                                "run-1",
+                                "context-1",
                                 10L,
                                 REPO_KEY,
                                 BASE_SHA,

@@ -17,10 +17,14 @@ import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.workspace.WorkspaceOperationException;
+import com.gitnova.service.agent.workspace.DiffScope;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
@@ -28,12 +32,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 
-/** Reads a bounded line range from a trusted BASE or TARGET snapshot. */
+/** Reads a bounded line range from a trusted BASE, TARGET, or Workspace snapshot. */
 @Component
 public class ReadFileTool implements AgentTool {
 
     private static final int MAX_LINES_PER_CALL = 200;
     private static final int MAX_FILE_BYTES = 1024 * 1024;
+    private static final int MAX_RETURNED_BYTES = 24 * 1024;
 
     private final GitObjectReader gitObjectReader;
     private final WorkspaceGateway workspaceGateway;
@@ -64,9 +69,15 @@ public class ReadFileTool implements AgentTool {
         schema.put("type", "object");
         ObjectNode properties = schema.putObject("properties");
         properties.putObject("revision").put("type", "string");
-        properties.putObject("filePath").put("type", "string");
-        properties.putObject("startLine").put("type", "integer");
-        properties.putObject("endLine").put("type", "integer");
+        properties.putObject("filePath")
+                .put("type", "string")
+                .put("maxLength", 4096);
+        properties.putObject("startLine")
+                .put("type", "integer")
+                .put("minimum", 1);
+        properties.putObject("endLine")
+                .put("type", "integer")
+                .put("minimum", 1);
         schema.putArray("required")
                 .add("revision")
                 .add("filePath")
@@ -126,16 +137,13 @@ public class ReadFileTool implements AgentTool {
             return readWorkspace(execution, filePath, startLine, requestedEndLine);
         }
 
-        String revisionSha = revision == Revision.TARGET
-                ? run.targetSha1()
-                : run.baseSha1();
-        if (revisionSha == null) {
-            return ToolResult.error(
-                    ToolStatus.CONFLICT,
-                    "BASE_REVISION_MISSING",
-                    "Review context does not contain a BASE revision",
-                    false
-            );
+        String revisionSha;
+        if (revision == Revision.BASE) {
+            revisionSha = run.revisionScope().baseSha1().value();
+        } else if (run.revisionScope() instanceof DiffScope diffScope) {
+            revisionSha = diffScope.targetSha1().value();
+        } else {
+            return missingRevision(Revision.TARGET);
         }
 
         try {
@@ -152,13 +160,7 @@ public class ReadFileTool implements AgentTool {
                         false
                 );
             }
-            byte[] content = gitObjectReader.requireBlob(run.repoKey(), blobSha.value());
-            if (content.length > MAX_FILE_BYTES) {
-                return invalidArgument(
-                        "FILE_TOO_LARGE",
-                        "File exceeds the readFile size limit"
-                );
-            }
+            byte[] content = readBoundedBlob(run.repoKey(), blobSha.value());
             if (isBinary(content)) {
                 return invalidArgument(
                         "BINARY_FILE_UNSUPPORTED",
@@ -180,12 +182,29 @@ public class ReadFileTool implements AgentTool {
             payload.put("endLine", actualEndLine);
             payload.put("totalLines", allLines.size());
             ArrayNode lines = payload.putArray("lines");
+            int returnedBytes = 0;
             for (int lineNumber = startLine; lineNumber <= actualEndLine; lineNumber++) {
+                String lineContent = allLines.get(lineNumber - 1);
+                returnedBytes = Math.addExact(
+                        returnedBytes,
+                        lineContent.getBytes(StandardCharsets.UTF_8).length
+                );
+                if (returnedBytes > MAX_RETURNED_BYTES) {
+                    return invalidArgument(
+                            "READ_OUTPUT_TOO_LARGE",
+                            "Requested line range exceeds the readFile output limit"
+                    );
+                }
                 ObjectNode line = lines.addObject();
                 line.put("lineNumber", lineNumber);
-                line.put("content", allLines.get(lineNumber - 1));
+                line.put("content", lineContent);
             }
             return ToolResult.success(payload);
+        } catch (BlobSizeLimitExceededException e) {
+            return invalidArgument(
+                    "FILE_TOO_LARGE",
+                    "File exceeds the readFile size limit"
+            );
         } catch (GitObjectReadException e) {
             return mapReadFailure(e);
         } catch (CharacterCodingException e) {
@@ -193,7 +212,42 @@ public class ReadFileTool implements AgentTool {
                     "UNSUPPORTED_FILE_ENCODING",
                     "readFile only supports valid UTF-8 text files"
             );
+        } catch (IOException e) {
+            return ToolResult.error(
+                    ToolStatus.INTERNAL_ERROR,
+                    "FILE_STREAM_COLLECTION_FAILED",
+                    "Could not collect the bounded file stream",
+                    false
+            );
         }
+    }
+
+    private byte[] readBoundedBlob(String repoKey, String blobSha1)
+            throws IOException {
+        BoundedByteArrayOutputStream destination =
+                new BoundedByteArrayOutputStream(MAX_FILE_BYTES);
+        gitObjectReader.copyBlobTo(repoKey, blobSha1, destination);
+        return destination.toByteArray();
+    }
+
+    private ToolResult missingRevision(Revision revision) {
+        return switch (revision) {
+            case BASE -> ToolResult.error(
+                    ToolStatus.CONFLICT,
+                    "BASE_REVISION_MISSING",
+                    "Execution context does not contain a BASE revision",
+                    false
+            );
+            case TARGET -> ToolResult.error(
+                    ToolStatus.CONFLICT,
+                    "TARGET_REVISION_MISSING",
+                    "Execution context does not contain a TARGET revision",
+                    false
+            );
+            case WORKSPACE -> throw new IllegalArgumentException(
+                    "WORKSPACE does not use an immutable revision SHA"
+            );
+        };
     }
 
     private ToolResult readWorkspace(
@@ -309,5 +363,42 @@ public class ReadFileTool implements AgentTool {
                 message,
                 false
         );
+    }
+
+    private static final class BoundedByteArrayOutputStream extends OutputStream {
+
+        private final int maxBytes;
+        private final ByteArrayOutputStream delegate;
+
+        private BoundedByteArrayOutputStream(int maxBytes) {
+            this.maxBytes = maxBytes;
+            this.delegate = new ByteArrayOutputStream(Math.min(maxBytes, 8192));
+        }
+
+        @Override
+        public void write(int value) throws IOException {
+            requireCapacity(1);
+            delegate.write(value);
+        }
+
+        @Override
+        public void write(byte[] bytes, int offset, int length) throws IOException {
+            requireCapacity(length);
+            delegate.write(bytes, offset, length);
+        }
+
+        private void requireCapacity(int additionalBytes)
+                throws BlobSizeLimitExceededException {
+            if ((long) delegate.size() + additionalBytes > maxBytes) {
+                throw new BlobSizeLimitExceededException();
+            }
+        }
+
+        private byte[] toByteArray() {
+            return delegate.toByteArray();
+        }
+    }
+
+    private static final class BlobSizeLimitExceededException extends IOException {
     }
 }

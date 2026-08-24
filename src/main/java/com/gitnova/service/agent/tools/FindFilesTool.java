@@ -13,6 +13,8 @@ import com.gitnova.service.agent.workspace.WorkspaceOperationException;
 
 import java.util.Objects;
 
+import static com.gitnova.service.agent.workspace.WorkspaceGateway.MAX_GLOB_CHARS;
+
 /** Finds Workspace files by repository-relative glob. */
 public final class FindFilesTool implements AgentTool {
 
@@ -28,7 +30,10 @@ public final class FindFilesTool implements AgentTool {
     public ToolDefinition definition() {
         ObjectNode schema = JsonNodeFactory.instance.objectNode();
         schema.put("type", "object");
-        schema.putObject("properties").putObject("glob").put("type", "string");
+        schema.putObject("properties")
+                .putObject("glob")
+                .put("type", "string")
+                .put("maxLength", MAX_GLOB_CHARS);
         schema.putArray("required").add("glob");
         schema.put("additionalProperties", false);
         return new ToolDefinition(
@@ -45,9 +50,14 @@ public final class FindFilesTool implements AgentTool {
             return WorkspaceToolResults.invalid("INVALID_FILE_GLOB", "glob must not be blank");
         }
         try {
-            return ToolResult.success(objectMapper.valueToTree(
-                    workspaceGateway.findFiles(execution.requireWorkspaceId(), glob)
-            ));
+            WorkspaceGateway.FileSearch search = workspaceGateway.findFiles(
+                    execution.requireWorkspaceId(),
+                    glob
+            );
+            return ToolResult.success(
+                    objectMapper.valueToTree(search),
+                    search.truncated()
+            );
         } catch (IllegalStateException exception) {
             return WorkspaceToolResults.missingContext();
         } catch (WorkspaceOperationException exception) {

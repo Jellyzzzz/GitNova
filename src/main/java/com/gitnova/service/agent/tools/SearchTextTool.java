@@ -13,6 +13,8 @@ import com.gitnova.service.agent.workspace.WorkspaceOperationException;
 
 import java.util.Objects;
 
+import static com.gitnova.service.agent.workspace.WorkspaceGateway.MAX_QUERY_CHARS;
+
 /** Performs literal text search across UTF-8 Workspace files. */
 public final class SearchTextTool implements AgentTool {
 
@@ -29,7 +31,9 @@ public final class SearchTextTool implements AgentTool {
         ObjectNode schema = JsonNodeFactory.instance.objectNode();
         schema.put("type", "object");
         ObjectNode properties = schema.putObject("properties");
-        properties.putObject("query").put("type", "string");
+        properties.putObject("query")
+                .put("type", "string")
+                .put("maxLength", MAX_QUERY_CHARS);
         properties.putObject("caseSensitive").put("type", "boolean");
         schema.putArray("required").add("query").add("caseSensitive");
         schema.put("additionalProperties", false);
@@ -47,13 +51,15 @@ public final class SearchTextTool implements AgentTool {
             return WorkspaceToolResults.invalid("EMPTY_SEARCH_QUERY", "query must not be empty");
         }
         try {
-            return ToolResult.success(objectMapper.valueToTree(
-                    workspaceGateway.searchText(
-                            execution.requireWorkspaceId(),
-                            query,
-                            arguments.path("caseSensitive").asBoolean()
-                    )
-            ));
+            WorkspaceGateway.TextSearch search = workspaceGateway.searchText(
+                    execution.requireWorkspaceId(),
+                    query,
+                    arguments.path("caseSensitive").asBoolean()
+            );
+            return ToolResult.success(
+                    objectMapper.valueToTree(search),
+                    search.truncated()
+            );
         } catch (IllegalStateException exception) {
             return WorkspaceToolResults.missingContext();
         } catch (WorkspaceOperationException exception) {

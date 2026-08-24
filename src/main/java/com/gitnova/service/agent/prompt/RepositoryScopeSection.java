@@ -20,9 +20,9 @@ public final class RepositoryScopeSection implements PromptSection {
     public String render(AgentRunContext context) {
         return """
                 <scope>
-                Inspect only the current repository and only the server-authorized BASE or TARGET revisions.
-                The Harness selects the repository and revisions; do not request raw commit hashes, repository
-                keys, absolute paths, environment variables, direct network access, or shell execution.
+                Operate only on the current server-authorized repository, revisions, and isolated Workspace.
+                The Harness selects their identities. Never invent or request repository keys, raw revisions,
+                Workspace IDs, host paths, environment secrets, network access, or external write access.
                 </scope>
                 """;
     }

@@ -44,7 +44,13 @@ class ReviewVerifierTest {
     }
 
     private AgentRunContext context() {
-        return new AgentRunContext("run-1", 10L, "1/10", "base-sha", "target-sha");
+        return new AgentRunContext(
+                "context-1",
+                10L,
+                "1/10",
+                "a".repeat(40),
+                "b".repeat(40)
+        );
     }
 
     private ReviewIssueDraft issue(String filePath) {

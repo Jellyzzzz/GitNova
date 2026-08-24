@@ -17,6 +17,7 @@ import com.gitnova.service.agent.tool.AgentTool;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
+import com.gitnova.service.agent.workspace.DiffScope;
 import org.springframework.stereotype.Component;
 
 import java.nio.ByteBuffer;
@@ -89,11 +90,11 @@ public class GetDiffTool implements AgentTool {
         if (validationError != null) {
             return validationError;
         }
-        if (run.baseSha1() == null) {
+        if (!(run.revisionScope() instanceof DiffScope diffScope)) {
             return ToolResult.error(
-                    ToolStatus.CONFLICT,
-                    "BASE_REVISION_MISSING",
-                    "Review context does not contain a BASE revision",
+                    ToolStatus.PERMISSION_DENIED,
+                    "REVIEW_DIFF_SCOPE_REQUIRED",
+                    "getDiff requires a server-authorized Review DiffScope",
                     false
             );
         }
@@ -101,11 +102,11 @@ public class GetDiffTool implements AgentTool {
         try {
             CommitObject base = gitObjectReader.requireCommit(
                     run.repoKey(),
-                    run.baseSha1()
+                    diffScope.baseSha1().value()
             );
             CommitObject target = gitObjectReader.requireCommit(
                     run.repoKey(),
-                    run.targetSha1()
+                    diffScope.targetSha1().value()
             );
             GitObjectId oldBlob = base.mapping().get(filePath);
             GitObjectId newBlob = target.mapping().get(filePath);

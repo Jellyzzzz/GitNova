@@ -19,14 +19,18 @@ public final class MessageFactory {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
     }
 
-    /** Creates the server-controlled system instruction and initial review request. */
-    public List<ModelMessage> initialMessages(AssembledPrompt prompt) {
+    /** Creates the server-controlled system instruction and the explicit user task. */
+    public List<ModelMessage> initialMessages(AssembledPrompt prompt, String taskText) {
         Objects.requireNonNull(prompt, "prompt must not be null");
+        Objects.requireNonNull(taskText, "taskText must not be null");
+        if (taskText.isBlank()) {
+            throw new IllegalArgumentException("taskText must not be blank");
+        }
         return List.of(
                 new ModelMessage(ModelRole.SYSTEM, prompt.systemText(), List.of(), null),
                 new ModelMessage(
                         ModelRole.USER,
-                        "Begin the server-authorized code review. Follow the system workflow and start with listChanges.",
+                        taskText,
                         List.of(),
                         null
                 )

@@ -1,5 +1,8 @@
 package com.gitnova.service.agent.runtime;
 
+import com.gitnova.service.agent.workspace.DiffScope;
+import com.gitnova.service.agent.workspace.RevisionScope;
+
 import java.util.Objects;
 
 public record AgentRunContext
@@ -7,14 +10,14 @@ public record AgentRunContext
             String runId,
             Long repoId,
             String repoKey,
-            String baseSha1,
-            String targetSha1
+            RevisionScope revisionScope
+
     ) {
         public AgentRunContext {
             Objects.requireNonNull(runId, "runId must not be null");
             Objects.requireNonNull(repoId, "repoId must not be null");
             Objects.requireNonNull(repoKey, "repoKey must not be null");
-            Objects.requireNonNull(targetSha1, "targetSha1 must not be null");
+            Objects.requireNonNull(revisionScope, "revisionScope must not be null");
             repoKey = repoKey.replace('\\', '/');
 
             if (runId.isBlank()) {
@@ -35,11 +38,17 @@ public record AgentRunContext
                         "repoKey repoId must match context repoId"
                 );
             }
-            if (targetSha1.isBlank()) {
-                throw new IllegalArgumentException(
-                        "targetSha1 must not be blank"
-                );
-            }
         }
+
+    /** Compatibility constructor for existing Review call sites during the scope migration. */
+    public AgentRunContext(
+            String runId,
+            Long repoId,
+            String repoKey,
+            String baseSha1,
+            String targetSha1
+    ) {
+        this(runId, repoId, repoKey, DiffScope.of(baseSha1, targetSha1));
+    }
 
 }

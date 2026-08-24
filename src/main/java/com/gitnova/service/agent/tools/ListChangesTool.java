@@ -18,6 +18,7 @@ import com.gitnova.service.agent.tool.AgentTool;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
+import com.gitnova.service.agent.workspace.DiffScope;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -59,16 +60,16 @@ public class ListChangesTool implements AgentTool {
     public ToolResult execute(ToolExecutionContext execution, JsonNode arguments) {
         AgentRunContext run = execution.run();
         String repoKey = run.repoKey();
-        String baseSha1 = run.baseSha1();
-        String targetSha1 = run.targetSha1();
-        if (baseSha1 == null) {
+        if (!(run.revisionScope() instanceof DiffScope diffScope)) {
             return ToolResult.error(
-                    ToolStatus.CONFLICT,
-                    "BASE_REVISION_MISSING",
-                    "Review context does not contain a BASE revision",
+                    ToolStatus.PERMISSION_DENIED,
+                    "REVIEW_DIFF_SCOPE_REQUIRED",
+                    "listChanges requires a server-authorized Review DiffScope",
                     false
             );
         }
+        String baseSha1 = diffScope.baseSha1().value();
+        String targetSha1 = diffScope.targetSha1().value();
         try {
             CommitObject baseCommit = gitObjectReader.requireCommit(repoKey, baseSha1);
             CommitObject targetCommit = gitObjectReader.requireCommit(repoKey, targetSha1);

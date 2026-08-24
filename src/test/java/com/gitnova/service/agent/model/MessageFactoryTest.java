@@ -22,16 +22,17 @@ class MessageFactoryTest {
     private final MessageFactory factory = new MessageFactory(objectMapper);
 
     @Test
-    void shouldCreateSystemAndInitialReviewRequest() {
+    void shouldCreateSystemAndPreserveExplicitUserTask() {
         List<ModelMessage> messages = factory.initialMessages(
-                new AssembledPrompt("prompt-1", "Review only the authorized change.")
+                new AssembledPrompt("prompt-1", "Operate only in the authorized Workspace."),
+                "Explain how generation works"
         );
 
         assertEquals(2, messages.size());
         assertEquals(ModelRole.SYSTEM, messages.get(0).role());
-        assertEquals("Review only the authorized change.", messages.get(0).content());
+        assertEquals("Operate only in the authorized Workspace.", messages.get(0).content());
         assertEquals(ModelRole.USER, messages.get(1).role());
-        assertTrue(messages.get(1).content().contains("start with listChanges"));
+        assertEquals("Explain how generation works", messages.get(1).content());
         assertTrue(messages.stream().allMatch(message -> message.toolCalls().isEmpty()));
         assertTrue(messages.stream().allMatch(message -> message.toolCallId() == null));
     }
@@ -120,11 +121,11 @@ class MessageFactoryTest {
 
     @Test
     void shouldCreateTaggedHarnessFeedbackWithoutToolBinding() {
-        ModelMessage message = factory.harnessFeedback("Call finalizeReview alone after evidence gathering.");
+        ModelMessage message = factory.harnessFeedback("Call finishTask alone after evidence gathering.");
 
         assertEquals(ModelRole.USER, message.role());
         assertTrue(message.content().startsWith("<runtime_feedback>"));
-        assertTrue(message.content().contains("Call finalizeReview alone"));
+        assertTrue(message.content().contains("Call finishTask alone"));
         assertTrue(message.content().endsWith("</runtime_feedback>"));
         assertTrue(message.toolCalls().isEmpty());
         assertNull(message.toolCallId());

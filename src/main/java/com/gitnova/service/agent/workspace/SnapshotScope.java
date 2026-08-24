@@ -4,7 +4,7 @@ import com.gitnova.gitobject.GitObjectId;
 
 import java.util.Objects;
 
-public record SnapshotScope(GitObjectId baseSha1) {
+public record SnapshotScope(GitObjectId baseSha1) implements RevisionScope {
     public SnapshotScope{
         Objects.requireNonNull(baseSha1,"baseSha1 must not be null");
     }
