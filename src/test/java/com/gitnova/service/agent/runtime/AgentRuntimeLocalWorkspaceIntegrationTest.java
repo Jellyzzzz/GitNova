@@ -87,6 +87,8 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
     private static final String BASE_SHA = objectId('a');
     private static final String CALCULATOR_PATH = "src/Calculator.java";
     private static final String README_PATH = "README.md";
+    private static final String USER_NOTE_PATH = "USER_NOTE.md";
+    private static final String USER_NOTE_CONTENT = "owner-note: preserve this concurrent edit\n";
     private static final List<String> VALIDATION_COMMAND =
             List.of("test-runner", "CalculatorTest");
     private static final String PRICE_PATH = "src/services/PriceService.java";
@@ -204,7 +206,8 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                         environmentOrDefault("LLM_BASE_URL", "https://api.deepseek.com"),
                         90,
                         environmentOrDefault("LLM_THINKING_MODE", "disabled")
-                )
+                ),
+                fixture
         );
         AgentRuntime runtime = runtime(
                 modelGateway,
@@ -269,6 +272,99 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
     @Test
     @Tag("live-model")
     @EnabledIfEnvironmentVariable(named = "LLM_API_KEY", matches = "\\S+")
+    void shouldLetRealModelRecoverFromConcurrentUserWorkspaceEdit() throws Exception {
+        Fixture fixture = provisionWorkspace();
+        String model = environmentOrDefault("LLM_MODEL", "deepseek-v4-flash");
+        ModelGateway provider = new OpenAiCompatibleModelGateway(
+                objectMapper,
+                System.getenv("LLM_API_KEY"),
+                environmentOrDefault("LLM_BASE_URL", "https://api.deepseek.com"),
+                90,
+                environmentOrDefault("LLM_THINKING_MODE", "disabled")
+        );
+        RecordingModelGateway modelGateway = new RecordingModelGateway(
+                new DriftInjectingModelGateway(
+                        provider,
+                        fixture.handle().root().resolve(USER_NOTE_PATH),
+                        USER_NOTE_CONTENT
+                ),
+                fixture
+        );
+        AgentRuntime runtime = runtime(
+                modelGateway,
+                fixture,
+                productionPromptAssembler(),
+                new AgentRuntimePolicy(model, 16, 32, 2, 3, 4096, 0.0)
+        );
+
+        AgentRunResult result = runtime.run(concurrentEditExecutionContext(
+                fixture.handle().workspaceId()
+        ));
+
+        System.out.printf(
+                "LIVE_WORKSPACE_DRIFT_RESULT model=%s status=%s reason=%s "
+                        + "modelCalls=%d toolCalls=%d sequence=%s%n",
+                model,
+                result.status(),
+                result.terminationReason(),
+                result.modelCallCount(),
+                result.toolCallCount(),
+                modelGateway.toolSequence
+        );
+        if (modelGateway.lastFailure != null) {
+            ModelGatewayException failure = modelGateway.lastFailure;
+            System.out.printf(
+                    "LIVE_WORKSPACE_DRIFT_GATEWAY_FAILURE code=%s retryable=%s "
+                            + "providerStatus=%s providerCode=%s message=%s%n",
+                    failure.errorCode(),
+                    failure.retryable(),
+                    failure.providerStatusCode(),
+                    failure.providerErrorCode(),
+                    failure.getMessage()
+            );
+        }
+
+        assertEquals(AgentRunStatus.COMPLETED, result.status());
+        assertEquals(AgentTerminationReason.FINISH_SUCCEEDED, result.terminationReason());
+        assertEquals(USER_NOTE_CONTENT, Files.readString(
+                fixture.handle().root().resolve(USER_NOTE_PATH)
+        ));
+        assertEquals(FIXED_CALCULATOR, Files.readString(
+                fixture.handle().root().resolve(CALCULATOR_PATH)
+        ));
+        assertEquals("status: passing\n", Files.readString(
+                fixture.handle().root().resolve(README_PATH)
+        ));
+        assertEquals(
+                Set.of(CALCULATOR_PATH, README_PATH, USER_NOTE_PATH),
+                Set.copyOf(result.completionOutcome().canonicalDiff().files().stream()
+                        .map(WorkspaceGateway.DiffFile::filePath)
+                        .toList())
+        );
+        assertEquals(
+                Set.of(CALCULATOR_PATH, README_PATH),
+                Set.copyOf(result.completionOutcome().draft().agentModifiedFiles())
+        );
+        assertTrue(result.completionOutcome().canonicalDiff().generation() >= 2);
+        assertEquals(
+                result.completionOutcome().canonicalDiff().generation(),
+                result.completionOutcome().validation().generation()
+        );
+        assertTrue(modelGateway.receivedRequests.stream()
+                .flatMap(request -> request.messages().stream())
+                .anyMatch(message -> message.role() == ModelRole.USER
+                        && message.content().contains("authoritative at generation 1")));
+        assertTrue(modelGateway.toolSequence.contains("applyPatch"));
+        assertTrue(modelGateway.toolSequence.contains("runCommand"));
+        assertEquals(
+                FinishTaskTool.NAME,
+                modelGateway.toolSequence.get(modelGateway.toolSequence.size() - 1)
+        );
+    }
+
+    @Test
+    @Tag("live-model")
+    @EnabledIfEnvironmentVariable(named = "LLM_API_KEY", matches = "\\S+")
     void shouldLetRealModelFixOnlyTheDefectiveFilesInAMediumBatch() throws Exception {
         Fixture fixture = provisionMediumBatchWorkspace();
         String model = environmentOrDefault("LLM_MODEL", "deepseek-v4-flash");
@@ -279,7 +375,8 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                         environmentOrDefault("LLM_BASE_URL", "https://api.deepseek.com"),
                         90,
                         environmentOrDefault("LLM_THINKING_MODE", "disabled")
-                )
+                ),
+                fixture
         );
         AgentRuntime runtime = runtime(
                 modelGateway,
@@ -601,6 +698,7 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                 promptAssembler,
                 new MessageFactory(objectMapper),
                 new ToolRegistry(tools),
+                fixture.gateway(),
                 new CompletionInspector(objectMapper, fixture.gateway()),
                 policy
         );
@@ -681,6 +779,27 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
         );
     }
 
+    private AgentExecutionContext concurrentEditExecutionContext(WorkspaceId workspaceId) {
+        return new AgentExecutionContext(
+                "session-workspace-drift",
+                new AgentRunContext(
+                        "run-workspace-drift",
+                        10L,
+                        REPO_KEY,
+                        SnapshotScope.of(BASE_SHA)
+                ),
+                7L,
+                "Fix Calculator.add so it returns the sum, update README.md from status: failing "
+                        + "to status: passing, and preserve every concurrent user-created file. "
+                        + "If the Workspace generation changes while you reason, accept the latest "
+                        + "Workspace as authoritative, refresh your evidence, and retry stale writes. "
+                        + "Validate with argv [\"test-runner\", \"CalculatorTest\"] from working "
+                        + "directory '.', inspect the final Workspace diff, and finish the task.",
+                new WorkspaceBinding(workspaceId),
+                AgentCapabilityPolicy.cloudAgent()
+        );
+    }
+
     private ObjectNode readArguments(String path, int startLine, int endLine) {
         ObjectNode arguments = objectMapper.createObjectNode();
         arguments.put("revision", "WORKSPACE");
@@ -729,7 +848,7 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
         arguments.put("expectedGeneration", 1);
         arguments.put("summary", "Fixed Calculator.add and updated the status document");
         arguments.putArray("findings");
-        arguments.putArray("claimedChangedFiles")
+        arguments.putArray("agentModifiedFiles")
                 .add(CALCULATOR_PATH)
                 .add(README_PATH);
         ObjectNode validation = arguments.putArray("claimedValidations").addObject();
@@ -766,21 +885,58 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
 
     private static final class RecordingModelGateway implements ModelGateway {
         private final ModelGateway delegate;
+        private final Fixture fixture;
         private final List<String> toolSequence = new java.util.ArrayList<>();
+        private final List<ModelRequest> receivedRequests = new java.util.ArrayList<>();
         private ModelGatewayException lastFailure;
 
-        private RecordingModelGateway(ModelGateway delegate) {
+        private RecordingModelGateway(ModelGateway delegate, Fixture fixture) {
             this.delegate = delegate;
+            this.fixture = fixture;
         }
 
         @Override
         public ModelResponse complete(ModelRequest request) {
+            WorkspaceGateway.WorkspaceDiff canonicalDiff = fixture.gateway()
+                    .getWorkspaceDiff(fixture.handle().workspaceId());
+            long generationAtRequest = canonicalDiff.generation();
+            request.messages().stream()
+                    .filter(message -> message.role() == ModelRole.USER)
+                    .map(ModelMessage::content)
+                    .filter(content -> content.contains("The completion draft was rejected:"))
+                    .reduce((first, second) -> second)
+                    .ifPresent(feedback -> System.out.printf(
+                            "LIVE_COMPLETION_CORRECTION request=%s currentGeneration=%d "
+                                    + "canonicalFiles=%s feedback=%s%n",
+                            request.requestId(),
+                            generationAtRequest,
+                            canonicalDiff.files().stream()
+                                    .map(WorkspaceGateway.DiffFile::filePath)
+                                    .toList(),
+                            feedback.replace('\n', ' ')
+                    ));
+            receivedRequests.add(request);
             try {
                 ModelResponse response = delegate.complete(request);
                 response.toolCalls().forEach(call -> toolSequence.add(call.name()));
+                response.toolCalls().stream()
+                        .filter(call -> FinishTaskTool.NAME.equals(call.name()))
+                        .forEach(call -> System.out.printf(
+                                "LIVE_FINISH_DRAFT request=%s toolCallId=%s "
+                                        + "currentGeneration=%d expectedGeneration=%s "
+                                        + "agentModifiedFiles=%s claimedValidations=%s%n",
+                                request.requestId(),
+                                call.id(),
+                                generationAtRequest,
+                                call.arguments().path("expectedGeneration"),
+                                call.arguments().path("agentModifiedFiles"),
+                                call.arguments().path("claimedValidations")
+                        ));
                 System.out.printf(
-                        "LIVE_LOCAL_CODING_TURN request=%s finish=%s tools=%s usage=%s%n",
+                        "LIVE_LOCAL_CODING_TURN request=%s generationAtRequest=%d "
+                                + "finish=%s tools=%s usage=%s%n",
                         request.requestId(),
+                        generationAtRequest,
                         response.finishReason(),
                         response.toolCalls().stream().map(ToolCall::name).toList(),
                         response.usage()
@@ -790,6 +946,37 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                 lastFailure = exception;
                 throw exception;
             }
+        }
+    }
+
+    private static final class DriftInjectingModelGateway implements ModelGateway {
+        private final ModelGateway delegate;
+        private final Path userFile;
+        private final String content;
+        private boolean injected;
+
+        private DriftInjectingModelGateway(
+                ModelGateway delegate,
+                Path userFile,
+                String content
+        ) {
+            this.delegate = delegate;
+            this.userFile = userFile;
+            this.content = content;
+        }
+
+        @Override
+        public ModelResponse complete(ModelRequest request) {
+            ModelResponse response = delegate.complete(request);
+            if (!injected) {
+                try {
+                    Files.writeString(userFile, content);
+                    injected = true;
+                } catch (java.io.IOException exception) {
+                    throw new java.io.UncheckedIOException(exception);
+                }
+            }
+            return response;
         }
     }
 

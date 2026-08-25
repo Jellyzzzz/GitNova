@@ -34,6 +34,7 @@ public class AgentRuntimeConfiguration {
                 promptAssembler,
                 messageFactory,
                 toolRegistry,
+                workspaceGateway,
                 new CompletionInspector(objectMapper, workspaceGateway),
                 policy);
     }

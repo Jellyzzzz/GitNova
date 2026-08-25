@@ -84,6 +84,57 @@ class LocalWorkspaceGatewayTest {
     }
 
     @Test
+    void shouldCreateEmptyFileAndRejectBothRequestReplayAndSemanticReplay() throws Exception {
+        Fixture fixture = fixture(0);
+        WorkspaceMutationCommand original = new WorkspaceMutationCommand(
+                0,
+                List.of(PatchOperation.create(0, "empty.txt", ""))
+        );
+
+        PatchBatchResult first = fixture.gateway().applyPatch(fixture.workspaceId(), original);
+        PatchBatchResult requestReplay = fixture.gateway().applyPatch(
+                fixture.workspaceId(),
+                original
+        );
+        PatchBatchResult semanticReplay = fixture.gateway().applyPatch(
+                fixture.workspaceId(),
+                new WorkspaceMutationCommand(
+                        1,
+                        List.of(PatchOperation.create(0, "empty.txt", ""))
+                )
+        );
+
+        assertEquals(PatchBatchStatus.SUCCESS, first.status());
+        assertEquals(0, Files.size(fixture.root().resolve("empty.txt")));
+        assertEquals(PatchBatchStatus.CONFLICT, requestReplay.status());
+        assertEquals(PatchBatchStatus.FAILED, semanticReplay.status());
+        assertEquals(
+                "FILE_ALREADY_EXISTS",
+                semanticReplay.operationResults().get(0).errorCode()
+        );
+        assertEquals(1, fixture.state().generation());
+    }
+
+    @Test
+    void shouldAtomicallyWriteMaximumToolSupportedCreateSize() throws Exception {
+        Fixture fixture = fixture(0);
+        String content = "x".repeat(1024 * 1024);
+
+        PatchBatchResult result = fixture.gateway().applyPatch(
+                fixture.workspaceId(),
+                new WorkspaceMutationCommand(
+                        0,
+                        List.of(PatchOperation.create(0, "maximum.txt", content))
+                )
+        );
+
+        assertEquals(PatchBatchStatus.SUCCESS, result.status());
+        assertEquals(1, result.generationAfter());
+        assertEquals(1024 * 1024, Files.size(fixture.root().resolve("maximum.txt")));
+        assertEquals(content, Files.readString(fixture.root().resolve("maximum.txt")));
+    }
+
+    @Test
     void shouldExposePartialSuccessAndPreserveAppliedPrefix() throws Exception {
         Fixture fixture = fixture(0);
         WorkspaceMutationCommand command = new WorkspaceMutationCommand(
@@ -136,6 +187,34 @@ class LocalWorkspaceGatewayTest {
     }
 
     @Test
+    void shouldMapMalformedUnifiedDiffHeaderToARejectedPatch() throws Exception {
+        Fixture fixture = fixture(0, Map.of("update.txt", "before\n"));
+        WorkspaceMutationCommand command = new WorkspaceMutationCommand(
+                0,
+                List.of(PatchOperation.update(
+                        0,
+                        "update.txt",
+                        "@@ malformed @@\n-before\n+after\n"
+                ))
+        );
+
+        PatchBatchResult result = fixture.gateway().applyPatch(
+                fixture.workspaceId(),
+                command
+        );
+
+        assertEquals(PatchBatchStatus.FAILED, result.status());
+        assertEquals(0, result.generationBefore());
+        assertEquals(0, result.generationAfter());
+        assertEquals(0, fixture.state().generation());
+        assertEquals(
+                "PATCH_DOES_NOT_APPLY",
+                result.operationResults().get(0).errorCode()
+        );
+        assertEquals("before\n", Files.readString(fixture.root().resolve("update.txt")));
+    }
+
+    @Test
     void shouldRefreshOutOfBandChangesExactlyOnceAndInvalidateValidation() throws Exception {
         Fixture fixture = fixture(0);
         fixture.state().markValidationSucceeded(0);
@@ -175,6 +254,21 @@ class LocalWorkspaceGatewayTest {
         assertEquals(1, result.generationBefore());
         assertEquals(1, result.generationAfter());
         assertFalse(Files.exists(fixture.root().resolve("must-not-write.txt")));
+    }
+
+    @Test
+    void shouldRejectDeletedWorkspaceRootWithoutRecreatingIt() throws Exception {
+        Fixture fixture = fixture(0);
+        Files.delete(fixture.root());
+
+        WorkspaceOperationException exception = assertThrows(
+                WorkspaceOperationException.class,
+                () -> fixture.gateway().refreshWorkspace(fixture.workspaceId())
+        );
+
+        assertEquals("WORKSPACE_ROOT_UNAVAILABLE", exception.errorCode());
+        assertFalse(Files.exists(fixture.root()));
+        assertEquals(0, fixture.state().generation());
     }
 
     @Test

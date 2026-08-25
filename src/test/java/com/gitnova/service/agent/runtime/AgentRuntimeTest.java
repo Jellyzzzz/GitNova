@@ -10,6 +10,8 @@ import com.gitnova.service.agent.completion.CompletionInspector;
 import com.gitnova.service.agent.model.FakeModelGateway;
 import com.gitnova.service.agent.model.MessageFactory;
 import com.gitnova.service.agent.model.ModelFinishReason;
+import com.gitnova.service.agent.model.ModelGatewayErrorCode;
+import com.gitnova.service.agent.model.ModelGatewayException;
 import com.gitnova.service.agent.model.ModelMessage;
 import com.gitnova.service.agent.model.ModelRequest;
 import com.gitnova.service.agent.model.ModelResponse;
@@ -145,6 +147,40 @@ class AgentRuntimeTest {
         assertEquals(1, result.completionOutcome().validation().generation());
     }
 
+    @Test
+    void shouldTerminatePartialWithoutReplayingToolAfterRetryableModelTimeout() {
+        RecordingTool readTool = new RecordingTool(
+                definition("readContext"),
+                ToolResult.success(objectMapper.createObjectNode().put("fact", "observed"))
+        );
+        FakeModelGateway modelGateway = new FakeModelGateway()
+                .enqueueResponse(toolResponse(
+                        "response-read",
+                        call("call-read", "readContext", objectMapper.createObjectNode()),
+                        ModelUsage.unknown()
+                ))
+                .enqueueFailure(new ModelGatewayException(
+                        ModelGatewayErrorCode.TIMEOUT,
+                        "provider thinking timed out",
+                        true,
+                        null
+                ));
+        AgentRuntime runtime = runtime(
+                modelGateway,
+                new InspectingWorkspace(0, List.of()),
+                List.of(readTool, new FinishTaskTool(objectMapper))
+        );
+
+        AgentRunResult result = runtime.run(context("Inspect before provider timeout"));
+
+        assertEquals(AgentRunStatus.PARTIAL, result.status());
+        assertEquals(AgentTerminationReason.MODEL_GATEWAY_FAILURE, result.terminationReason());
+        assertEquals(2, result.modelCallCount());
+        assertEquals(1, result.toolCallCount());
+        assertEquals(1, readTool.invocationCount);
+        assertEquals(2, modelGateway.receivedRequests().size());
+    }
+
     private AgentRuntime runtime(
             FakeModelGateway modelGateway,
             WorkspaceGateway workspace,
@@ -155,6 +191,7 @@ class AgentRuntimeTest {
                 promptAssembler(),
                 new MessageFactory(objectMapper),
                 new ToolRegistry(tools),
+                workspace,
                 new CompletionInspector(objectMapper, workspace),
                 new AgentRuntimePolicy("fake-model", 6, 8, 1, 1, 1024, 0.0)
         );
@@ -223,7 +260,7 @@ class AgentRuntimeTest {
         arguments.put("expectedGeneration", generation);
         arguments.put("summary", "Task completed");
         arguments.putArray("findings");
-        changedFiles.forEach(arguments.putArray("claimedChangedFiles")::add);
+        changedFiles.forEach(arguments.putArray("agentModifiedFiles")::add);
         var validations = arguments.putArray("claimedValidations");
         if (validationArgv != null) {
             ObjectNode validation = validations.addObject();

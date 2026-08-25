@@ -155,6 +155,31 @@ class ApplyPatchToolTest {
     }
 
     @Test
+    void shouldExposeNonApplyingUnifiedDiffAsAModelCorrectableConflict() {
+        WorkspaceGateway gateway = (workspaceId, command) -> PatchBatchResult.failed(
+                command,
+                command.expectedGeneration(),
+                List.of(PatchOperationResult.failed(
+                        command.operations().get(0),
+                        SHA_A,
+                        "PATCH_DOES_NOT_APPLY",
+                        "UPDATE patch does not apply to the current file content"
+                )),
+                "PATCH_OPERATION_FAILED",
+                "The first workspace operation failed"
+        );
+        ApplyPatchTool tool = new ApplyPatchTool(gateway, objectMapper);
+
+        ToolResult result = tool.execute(workspaceExecution(), createArguments(3));
+
+        assertEquals(ToolStatus.CONFLICT, result.status());
+        assertEquals("PATCH_DOES_NOT_APPLY", result.errorCode());
+        assertFalse(result.retryable());
+        assertEquals(3, result.payload().path("generationBefore").asLong());
+        assertEquals(3, result.payload().path("generationAfter").asLong());
+    }
+
+    @Test
     void shouldRejectModelSuppliedWorkspaceIdentityAtRegistryBoundary() {
         AtomicInteger invocations = new AtomicInteger();
         ApplyPatchTool tool = new ApplyPatchTool(
@@ -177,6 +202,100 @@ class ApplyPatchToolTest {
         assertEquals(ToolStatus.INVALID_ARGUMENT, result.status());
         assertEquals("SCHEMA_VALIDATION_FAILED", result.errorCode());
         assertEquals(0, invocations.get());
+    }
+
+    @Test
+    void shouldAcceptEmptyCreateContentAndExactOperationByteLimit() {
+        AtomicReference<WorkspaceMutationCommand> captured = new AtomicReference<>();
+        AtomicInteger invocations = new AtomicInteger();
+        WorkspaceGateway gateway = (workspaceId, command) -> {
+            invocations.incrementAndGet();
+            captured.set(command);
+            return PatchBatchResult.conflict(
+                    command,
+                    command.expectedGeneration(),
+                    "TEST_CONFLICT",
+                    "Parsing reached the Workspace boundary"
+            );
+        };
+        ApplyPatchTool tool = new ApplyPatchTool(gateway, objectMapper);
+
+        ObjectNode empty = createArguments(0);
+        ((ObjectNode) empty.path("operations").get(0)).put("content", "");
+        ToolResult emptyResult = tool.execute(workspaceExecution(), empty);
+
+        ObjectNode exactLimit = createArguments(0);
+        ((ObjectNode) exactLimit.path("operations").get(0))
+                .put("content", "x".repeat(1024 * 1024));
+        ToolResult exactResult = tool.execute(workspaceExecution(), exactLimit);
+
+        assertEquals(ToolStatus.CONFLICT, emptyResult.status());
+        assertEquals(ToolStatus.CONFLICT, exactResult.status());
+        assertEquals(2, invocations.get());
+        assertEquals(1024 * 1024, captured.get().operations().get(0).content().length());
+    }
+
+    @Test
+    void shouldRejectOperationBytesAndOperationCountAboveLimitsWithoutInvokingGateway() {
+        AtomicInteger invocations = new AtomicInteger();
+        ApplyPatchTool tool = new ApplyPatchTool(
+                (workspaceId, command) -> {
+                    invocations.incrementAndGet();
+                    throw new AssertionError("invalid input must not reach Workspace");
+                },
+                objectMapper
+        );
+
+        ObjectNode tooLarge = createArguments(0);
+        ((ObjectNode) tooLarge.path("operations").get(0))
+                .put("content", "x".repeat(1024 * 1024 + 1));
+        ToolResult tooLargeResult = tool.execute(workspaceExecution(), tooLarge);
+
+        ObjectNode tooMany = createArguments(0);
+        var operations = (com.fasterxml.jackson.databind.node.ArrayNode) tooMany.path("operations");
+        for (int index = 1; index <= 32; index++) {
+            operations.addObject()
+                    .put("type", "CREATE")
+                    .put("filePath", "src/File" + index + ".java")
+                    .put("content", "");
+        }
+        ToolResult tooManyResult = tool.execute(workspaceExecution(), tooMany);
+
+        assertEquals(ToolStatus.INVALID_ARGUMENT, tooLargeResult.status());
+        assertEquals("PATCH_OPERATION_TOO_LARGE", tooLargeResult.errorCode());
+        assertEquals(ToolStatus.INVALID_ARGUMENT, tooManyResult.status());
+        assertEquals("INVALID_PATCH_OPERATION_COUNT", tooManyResult.errorCode());
+        assertEquals(0, invocations.get());
+    }
+
+    @Test
+    void shouldAcceptExactlyMaximumOperationCount() {
+        AtomicInteger invocations = new AtomicInteger();
+        ApplyPatchTool tool = new ApplyPatchTool(
+                (workspaceId, command) -> {
+                    invocations.incrementAndGet();
+                    return PatchBatchResult.conflict(
+                            command,
+                            command.expectedGeneration(),
+                            "TEST_CONFLICT",
+                            "Parsing reached the Workspace boundary"
+                    );
+                },
+                objectMapper
+        );
+        ObjectNode arguments = createArguments(0);
+        var operations = (com.fasterxml.jackson.databind.node.ArrayNode) arguments.path("operations");
+        for (int index = 1; index < 32; index++) {
+            operations.addObject()
+                    .put("type", "CREATE")
+                    .put("filePath", "src/File" + index + ".java")
+                    .put("content", "");
+        }
+
+        ToolResult result = tool.execute(workspaceExecution(), arguments);
+
+        assertEquals(ToolStatus.CONFLICT, result.status());
+        assertEquals(1, invocations.get());
     }
 
     private ObjectNode createArguments(long expectedGeneration) {

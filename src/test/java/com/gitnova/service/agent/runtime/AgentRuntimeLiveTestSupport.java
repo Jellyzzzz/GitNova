@@ -29,8 +29,15 @@ final class AgentRuntimeLiveTestSupport {
         );
     }
 
-    static CompletionInspector inspector(ObjectMapper objectMapper) {
-        return new CompletionInspector(objectMapper, new NoChangesWorkspace());
+    static WorkspaceGateway workspace() {
+        return new NoChangesWorkspace();
+    }
+
+    static CompletionInspector inspector(
+            ObjectMapper objectMapper,
+            WorkspaceGateway workspaceGateway
+    ) {
+        return new CompletionInspector(objectMapper, workspaceGateway);
     }
 
     static ReviewDraft reviewDraft(AgentRunResult result) {

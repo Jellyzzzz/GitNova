@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.PathMatcher;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -1383,16 +1384,30 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
     ) throws OperationFailure {
         rejectSymlinkComponents(workspaceRoot, target);
 
-        if (Files.notExists(target, LinkOption.NOFOLLOW_LINKS)) {
+        BasicFileAttributes attributes;
+        try {
+            attributes = Files.readAttributes(
+                    target,
+                    BasicFileAttributes.class,
+                    LinkOption.NOFOLLOW_LINKS
+            );
+        } catch (NoSuchFileException exception) {
             throw failure(
                     "FILE_NOT_FOUND",
                     "Target file does not exist",
                     null,
-                    null
+                    exception
+            );
+        } catch (IOException | SecurityException exception) {
+            throw failure(
+                    "FILESYSTEM_FAILURE",
+                    "Could not inspect target file",
+                    null,
+                    exception
             );
         }
 
-        if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
+        if (!attributes.isRegularFile()) {
             throw failure(
                     "UNSUPPORTED_FILE_TYPE",
                     "Target must be a regular file",
@@ -1416,7 +1431,13 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             // 精确 apply；不使用 applyFuzzy，避免模型把 patch 应用到错误位置。
             return patch.applyTo(originalLines);
 
-        } catch (PatchFailedException | IllegalArgumentException exception) {
+        } catch (PatchFailedException
+                 | IllegalArgumentException
+                 | IndexOutOfBoundsException exception) {
+            // java-diff-utils may expose a malformed or unrecognized hunk header as a
+            // negative Chunk position and then throw IndexOutOfBoundsException while
+            // verifying the target. Model-authored patch text is untrusted input, so this
+            // remains a normal, state-preserving patch rejection rather than an internal error.
             throw failure(
                     "PATCH_DOES_NOT_APPLY",
                     "UPDATE patch does not apply to the current file content",

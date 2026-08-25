@@ -9,6 +9,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
+import okhttp3.mockwebserver.SocketPolicy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -190,6 +191,41 @@ class OpenAiCompatibleModelGatewayTest {
         assertEquals(503, exception.providerStatusCode());
         assertNull(exception.providerErrorCode());
         assertEquals("Model provider returned HTTP 503", exception.getMessage());
+    }
+
+    @Test
+    void shouldClassifyProviderSilenceAsRetryableTimeout() {
+        gateway = new OpenAiCompatibleModelGateway(
+                objectMapper,
+                new OkHttpClient.Builder()
+                        .callTimeout(Duration.ofMillis(150))
+                        .build(),
+                "test-api-key",
+                server.url("/v1/chat/completions")
+        );
+        server.enqueue(new MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE));
+
+        ModelGatewayException exception = assertThrows(
+                ModelGatewayException.class,
+                () -> gateway.complete(simpleRequest())
+        );
+
+        assertEquals(ModelGatewayErrorCode.TIMEOUT, exception.errorCode());
+        assertTrue(exception.retryable());
+        assertNull(exception.providerStatusCode());
+    }
+
+    @Test
+    void shouldClassifyAbruptDisconnectAsRetryableNetworkFailure() {
+        server.enqueue(new MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START));
+
+        ModelGatewayException exception = assertThrows(
+                ModelGatewayException.class,
+                () -> gateway.complete(simpleRequest())
+        );
+
+        assertEquals(ModelGatewayErrorCode.NETWORK_ERROR, exception.errorCode());
+        assertTrue(exception.retryable());
     }
 
     @Test

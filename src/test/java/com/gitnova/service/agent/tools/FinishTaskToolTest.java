@@ -36,7 +36,7 @@ class FinishTaskToolTest {
         assertEquals(3, result.payload().path("expectedGeneration").asLong());
         assertEquals("Explained how generation protects mutations", result.payload().path("summary").asText());
         assertTrue(result.payload().path("findings").isEmpty());
-        assertTrue(result.payload().path("claimedChangedFiles").isEmpty());
+        assertTrue(result.payload().path("agentModifiedFiles").isEmpty());
         assertTrue(result.payload().path("claimedValidations").isEmpty());
         assertTrue(tool.terminal());
         assertTrue(tool.concurrencySafe());
@@ -57,7 +57,7 @@ class FinishTaskToolTest {
         finding.put("explanation", "A stale run could overwrite newer Workspace state");
         finding.put("suggestion", "Reject the mutation unless both generations match");
         finding.put("confidence", 0.97);
-        ((ArrayNode) arguments.path("claimedChangedFiles"))
+        ((ArrayNode) arguments.path("agentModifiedFiles"))
                 .add("src/main/java/WorkspaceGateway.java")
                 .add("src/test/java/WorkspaceGatewayTest.java");
         ObjectNode validation = ((ArrayNode) arguments.path("claimedValidations")).addObject();
@@ -70,7 +70,7 @@ class FinishTaskToolTest {
 
         assertEquals(ToolStatus.SUCCESS, result.status());
         assertEquals("ERROR", result.payload().path("findings").get(0).path("severity").asText());
-        assertEquals(2, result.payload().path("claimedChangedFiles").size());
+        assertEquals(2, result.payload().path("agentModifiedFiles").size());
         assertEquals("mvn", result.payload().path("claimedValidations").get(0).path("argv").get(0).asText());
         assertEquals("passed", result.payload().path("claimedValidations").get(0).path("result").asText());
         assertFalse(result.retryable());
@@ -79,7 +79,7 @@ class FinishTaskToolTest {
     @Test
     void shouldRejectUnsafeOrDuplicateClaimedPaths() {
         ObjectNode unsafe = emptyCompletion();
-        ((ArrayNode) unsafe.path("claimedChangedFiles")).add("../outside.java");
+        ((ArrayNode) unsafe.path("agentModifiedFiles")).add("../outside.java");
 
         ToolResult unsafeResult = tool.execute(execution(), unsafe);
 
@@ -87,7 +87,7 @@ class FinishTaskToolTest {
         assertEquals("INVALID_COMPLETION_DRAFT", unsafeResult.errorCode());
 
         ObjectNode duplicate = emptyCompletion();
-        ((ArrayNode) duplicate.path("claimedChangedFiles"))
+        ((ArrayNode) duplicate.path("agentModifiedFiles"))
                 .add("src/App.java")
                 .add("src/App.java");
 
@@ -160,7 +160,7 @@ class FinishTaskToolTest {
         arguments.put("expectedGeneration", 3);
         arguments.put("summary", "Explained how generation protects mutations");
         arguments.putArray("findings");
-        arguments.putArray("claimedChangedFiles");
+        arguments.putArray("agentModifiedFiles");
         arguments.putArray("claimedValidations");
         arguments.putArray("risks");
         arguments.putArray("followUps");

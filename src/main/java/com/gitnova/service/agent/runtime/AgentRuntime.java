@@ -20,6 +20,8 @@ import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
 import com.gitnova.service.agent.tools.FinishTaskTool;
+import com.gitnova.service.agent.workspace.WorkspaceGateway;
+import com.gitnova.service.agent.workspace.WorkspaceOperationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,6 +71,7 @@ public final class AgentRuntime {
     private final PromptAssembler promptAssembler;
     private final MessageFactory messageFactory;
     private final ToolRegistry toolRegistry;
+    private final WorkspaceGateway workspaceGateway;
     private final CompletionInspector completionInspector;
     private final AgentRuntimePolicy policy;
 
@@ -77,6 +80,7 @@ public final class AgentRuntime {
             PromptAssembler promptAssembler,
             MessageFactory messageFactory,
             ToolRegistry toolRegistry,
+            WorkspaceGateway workspaceGateway,
             CompletionInspector completionInspector,
             AgentRuntimePolicy policy
     ) {
@@ -90,6 +94,10 @@ public final class AgentRuntime {
                 "messageFactory must not be null"
         );
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry must not be null");
+        this.workspaceGateway = Objects.requireNonNull(
+                workspaceGateway,
+                "workspaceGateway must not be null"
+        );
         this.completionInspector = Objects.requireNonNull(
                 completionInspector,
                 "completionInspector must not be null"
@@ -113,6 +121,15 @@ public final class AgentRuntime {
             if (state.modelCallCount >= policy.maxModelCalls()) {
                 return terminate(state, AgentTerminationReason.MAX_MODEL_CALLS_REACHED);
             }
+
+            WorkspaceGateway.WorkspaceRefresh beforeModel = synchronizeWorkspace(
+                    context,
+                    state
+            );
+            if (beforeModel == null) {
+                return terminate(state, AgentTerminationReason.WORKSPACE_SYNC_FAILURE);
+            }
+            appendWorkspaceDriftFeedback(state, beforeModel);
 
             ModelRequest request = buildRequest(context, state, toolDefinitions);
             state.modelCallCount++;
@@ -147,6 +164,52 @@ public final class AgentRuntime {
             }
             state.turn++;
         }
+    }
+
+    /**
+     * Reconciles out-of-band filesystem changes at Runtime execution boundaries.
+     *
+     * <p>The Workspace remains authoritative: a detected drift advances its generation and
+     * invalidates Runtime-held validation evidence. A stale model write is then rejected by the
+     * normal expectedGeneration contract instead of overwriting the newer state.</p>
+     */
+    private WorkspaceGateway.WorkspaceRefresh synchronizeWorkspace(
+            AgentExecutionContext context,
+            RunState state
+    ) {
+        try {
+            WorkspaceGateway.WorkspaceRefresh refresh = workspaceGateway.refreshWorkspace(
+                    context.workspace().workspaceId()
+            );
+            if (refresh.changed()) {
+                state.latestSuccessfulValidation = null;
+            }
+            return refresh;
+        } catch (WorkspaceOperationException | IllegalArgumentException exception) {
+            logger.error(
+                    "Workspace synchronization failed: runId={}, turn={}, workspaceId={}",
+                    context.context().runId(),
+                    state.turn,
+                    context.workspace().workspaceId(),
+                    exception
+            );
+            return null;
+        }
+    }
+
+    private void appendWorkspaceDriftFeedback(
+            RunState state,
+            WorkspaceGateway.WorkspaceRefresh refresh
+    ) {
+        if (!refresh.changed()) {
+            return;
+        }
+        state.messages.add(messageFactory.harnessFeedback(
+                "The Workspace changed outside the current Agent tool execution and is now "
+                        + "authoritative at generation " + refresh.generationAfter() + ". "
+                        + "Any validation or write prepared against an earlier generation is "
+                        + "stale. Read the latest files or diff before retrying a mutation."
+        ));
     }
 
     private ModelRequest buildRequest(
@@ -190,13 +253,64 @@ public final class AgentRuntime {
             if (!FinishTaskTool.NAME.equals(terminalCall.name())) {
                 return rejectUnsupportedTerminalCall(state, terminalCall);
             }
-            return handleFinish(context, state, terminalCall);
+            WorkspaceGateway.WorkspaceRefresh refresh = synchronizeWorkspace(context, state);
+            if (refresh == null) {
+                rejectForWorkspaceSyncFailure(state, List.of(terminalCall));
+                return Optional.of(terminate(
+                        state,
+                        AgentTerminationReason.WORKSPACE_SYNC_FAILURE
+                ));
+            }
+            Optional<AgentRunResult> finish = handleFinish(context, state, terminalCall);
+            if (finish.isEmpty()) {
+                appendWorkspaceDriftFeedback(state, refresh);
+            }
+            return finish;
         }
 
-        for (ToolCall toolCall : toolCalls) {
+        WorkspaceGateway.WorkspaceRefresh latestDrift = null;
+        for (int index = 0; index < toolCalls.size(); index++) {
+            ToolCall toolCall = toolCalls.get(index);
+            WorkspaceGateway.WorkspaceRefresh refresh = synchronizeWorkspace(context, state);
+            if (refresh == null) {
+                rejectForWorkspaceSyncFailure(
+                        state,
+                        toolCalls.subList(index, toolCalls.size())
+                );
+                return Optional.of(terminate(
+                        state,
+                        AgentTerminationReason.WORKSPACE_SYNC_FAILURE
+                ));
+            }
+            if (refresh.changed()) {
+                latestDrift = refresh;
+            }
             executeOrdinaryTool(state, context, toolCall);
         }
+        if (latestDrift != null) {
+            appendWorkspaceDriftFeedback(state, latestDrift);
+        }
         return Optional.empty();
+    }
+
+    /**
+     * Completes the assistant tool-call protocol when Workspace synchronization fails.
+     * No rejected call is dispatched to its AgentTool.
+     */
+    private void rejectForWorkspaceSyncFailure(
+            RunState state,
+            List<ToolCall> rejectedCalls
+    ) {
+        ToolResult rejection = ToolResult.error(
+                ToolStatus.CONFLICT,
+                "WORKSPACE_SYNC_FAILED",
+                "Workspace could not be synchronized before tool execution",
+                false
+        );
+        for (ToolCall call : rejectedCalls) {
+            state.toolCallCount++;
+            state.messages.add(messageFactory.tool(call, rejection));
+        }
     }
 
     private Optional<AgentRunResult> handleStopWithoutFinish(RunState state) {

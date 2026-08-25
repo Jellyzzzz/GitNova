@@ -35,7 +35,8 @@ public interface WorkspaceGateway {
 
     /**
      * Reconciles the in-memory Workspace generation with repository-visible files on disk.
-     * Runtime calls this at a turn boundary, never while a model request is in flight.
+     * Runtime calls this before model requests and before every tool dispatch, never while a
+     * model request is in flight.
      */
     default WorkspaceRefresh refreshWorkspace(WorkspaceId workspaceId) {
         throw new UnsupportedOperationException("refreshWorkspace is not supported");

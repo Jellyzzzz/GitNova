@@ -24,6 +24,7 @@ import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tools.FinishTaskTool;
+import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -82,12 +83,14 @@ class LiveAgentRuntimeSmokeTest {
                 new OutputContractSection()
         ));
 
+        WorkspaceGateway workspaceGateway = AgentRuntimeLiveTestSupport.workspace();
         AgentRuntime runtime = new AgentRuntime(
                 modelGateway,
                 promptAssembler,
                 new MessageFactory(objectMapper),
                 toolRegistry,
-                AgentRuntimeLiveTestSupport.inspector(objectMapper),
+                workspaceGateway,
+                AgentRuntimeLiveTestSupport.inspector(objectMapper, workspaceGateway),
                 new AgentRuntimePolicy(
                         model,
                         6,

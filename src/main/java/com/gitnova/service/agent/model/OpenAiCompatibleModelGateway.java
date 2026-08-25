@@ -15,7 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.net.SocketTimeoutException;
+import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.ZonedDateTime;
@@ -103,7 +103,7 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
 
         } catch (ModelGatewayException exception) {
             throw exception;
-        } catch (SocketTimeoutException exception) {
+        } catch (InterruptedIOException exception) {
             throw new ModelGatewayException(
                     ModelGatewayErrorCode.TIMEOUT,
                     "Model provider request timed out",

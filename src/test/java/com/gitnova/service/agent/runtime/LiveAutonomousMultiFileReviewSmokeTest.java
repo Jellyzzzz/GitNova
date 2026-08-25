@@ -30,6 +30,7 @@ import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tools.FinishTaskTool;
+import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.tools.GetDiffTool;
 import com.gitnova.service.agent.tools.ListChangesTool;
 import com.gitnova.service.agent.tools.ReadFileTool;
@@ -131,12 +132,14 @@ class LiveAutonomousMultiFileReviewSmokeTest {
                 new BudgetSection(),
                 new OutputContractSection()
         ));
+        WorkspaceGateway workspaceGateway = AgentRuntimeLiveTestSupport.workspace();
         AgentRuntime runtime = new AgentRuntime(
                 gateway,
                 promptAssembler,
                 new MessageFactory(objectMapper),
                 registry,
-                AgentRuntimeLiveTestSupport.inspector(objectMapper),
+                workspaceGateway,
+                AgentRuntimeLiveTestSupport.inspector(objectMapper, workspaceGateway),
                 new AgentRuntimePolicy(model, 12, 24, 2, 2, 4096, 0.0)
         );
 

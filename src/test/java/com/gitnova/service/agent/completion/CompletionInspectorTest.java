@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CompletionInspectorTest {
 
     private static final String CHANGED_FILE = "src/App.java";
+    private static final String EXTERNAL_FILE = "USER_NOTE.md";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -90,7 +91,7 @@ class CompletionInspectorTest {
     }
 
     @Test
-    void shouldAcceptChangedCompletionOnlyWithMatchingCanonicalClaimsAndEvidence() {
+    void shouldSeparateAgentModifiedFilesFromTheCompleteCanonicalDiff() {
         ValidationEvidence validation = validation(7);
         AgentCompletionDraft draft = draft(
                 7,
@@ -99,7 +100,7 @@ class CompletionInspectorTest {
         );
 
         CompletionDecision decision = inspector(
-                new InspectingGateway(7, diff(7, List.of(CHANGED_FILE)))
+                new InspectingGateway(7, diff(7, List.of(CHANGED_FILE, EXTERNAL_FILE)))
         ).inspect(
                 context(),
                 new RunStateView(Optional.of(validation)),
@@ -109,22 +110,24 @@ class CompletionInspectorTest {
         assertTrue(decision.accepted());
         assertEquals(CompletionDisposition.CHANGES_READY, decision.outcome().disposition());
         assertEquals(validation, decision.outcome().validation());
-        assertEquals(List.of(CHANGED_FILE), decision.outcome().canonicalDiff().files()
+        assertEquals(List.of(CHANGED_FILE), decision.outcome().draft().agentModifiedFiles());
+        assertEquals(List.of(CHANGED_FILE, EXTERNAL_FILE),
+                decision.outcome().canonicalDiff().files()
                 .stream().map(WorkspaceGateway.DiffFile::filePath).toList());
     }
 
     @Test
-    void shouldCorrectChangedFileOrValidationClaimMismatch() {
+    void shouldCorrectAgentFileOutsideCanonicalDiffOrValidationClaimMismatch() {
         ValidationEvidence validation = validation(7);
         CompletionDecision fileMismatch = inspector(
                 new InspectingGateway(7, diff(7, List.of(CHANGED_FILE)))
         ).inspect(
                 context(),
                 new RunStateView(Optional.of(validation)),
-                finishResult(draft(7, List.of(), List.of()))
+                finishResult(draft(7, List.of("src/NotChanged.java"), List.of()))
         );
         assertTrue(fileMismatch.correctable());
-        assertTrue(fileMismatch.feedback().get(0).contains("claimedChangedFiles"));
+        assertTrue(fileMismatch.feedback().get(0).contains("agentModifiedFiles"));
 
         CompletionDecision validationMismatch = inspector(
                 new InspectingGateway(7, diff(7, List.of(CHANGED_FILE)))

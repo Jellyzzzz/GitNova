@@ -79,10 +79,10 @@ public final class CompletionInspector {
         Set<String> actualFiles = diff.files().stream()
                 .map(WorkspaceGateway.DiffFile::filePath)
                 .collect(toUnmodifiableSet());
-        Set<String> claimedFiles = Set.copyOf(draft.claimedChangedFiles());
-        if (!actualFiles.equals(claimedFiles)) {
+        Set<String> agentModifiedFiles = Set.copyOf(draft.agentModifiedFiles());
+        if (!actualFiles.containsAll(agentModifiedFiles)) {
             return correctable(
-                    "claimedChangedFiles does not match "
+                    "agentModifiedFiles contains a path that is absent from "
                             + "the canonical Workspace diff"
             );
         }

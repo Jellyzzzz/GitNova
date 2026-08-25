@@ -136,6 +136,99 @@ class LocalWorkspaceGatewayCodingTest {
     }
 
     @Test
+    void shouldReturnNotFoundWhenFileWasExternallyDeletedBeforeRead() throws Exception {
+        Fixture fixture = fixture(null);
+        Files.delete(fixture.root().resolve("src/Main.java"));
+
+        WorkspaceOperationException exception = assertThrows(
+                WorkspaceOperationException.class,
+                () -> fixture.gateway().readFile(
+                        fixture.workspaceId(),
+                        "src/Main.java",
+                        1,
+                        10
+                )
+        );
+
+        assertEquals("FILE_NOT_FOUND", exception.errorCode());
+    }
+
+    @Test
+    void shouldExposeExternallyModifiedFileAndDiffAtRefreshedGeneration() throws Exception {
+        Fixture fixture = fixture(null);
+        Files.writeString(
+                fixture.root().resolve("src/Main.java"),
+                "class Main {\n    String value = \"latest\";\n}\n"
+        );
+
+        WorkspaceGateway.WorkspaceRefresh refresh = fixture.gateway().refreshWorkspace(
+                fixture.workspaceId()
+        );
+        WorkspaceGateway.FileContent content = fixture.gateway().readFile(
+                fixture.workspaceId(),
+                "src/Main.java",
+                1,
+                10
+        );
+        WorkspaceGateway.WorkspaceDiff diff = fixture.gateway().getWorkspaceDiff(
+                fixture.workspaceId()
+        );
+
+        assertTrue(refresh.changed());
+        assertEquals(1, refresh.generationAfter());
+        assertEquals(1, content.generation());
+        assertEquals(1, diff.generation());
+        assertTrue(content.lines().stream().anyMatch(line -> line.content().contains("latest")));
+        assertTrue(diff.unifiedDiff().contains("+    String value = \"latest\";"));
+    }
+
+    @Test
+    void shouldNeverReturnPartialSuccessWhenExternalDeleteRacesWithRead() throws Exception {
+        Fixture fixture = fixture(null);
+        Path target = fixture.root().resolve("src/Racing.txt");
+        StringBuilder contentBuilder = new StringBuilder();
+        for (int line = 0; line < 50_000; line++) {
+            contentBuilder.append("line-").append(line).append('\n');
+        }
+        String completeContent = contentBuilder.toString();
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            for (int attempt = 0; attempt < 20; attempt++) {
+                Files.writeString(target, completeContent);
+                CountDownLatch readSubmitted = new CountDownLatch(1);
+                Future<WorkspaceGateway.FileContent> read = pool.submit(() -> {
+                    readSubmitted.countDown();
+                    return fixture.gateway().readFile(
+                            fixture.workspaceId(),
+                            "src/Racing.txt",
+                            1,
+                            1
+                    );
+                });
+                assertTrue(readSubmitted.await(1, TimeUnit.SECONDS));
+                Files.deleteIfExists(target);
+
+                try {
+                    WorkspaceGateway.FileContent result = read.get(2, TimeUnit.SECONDS);
+                    assertEquals(50_000, result.totalLines());
+                    assertEquals("line-0", result.lines().get(0).content());
+                } catch (java.util.concurrent.ExecutionException exception) {
+                    assertTrue(exception.getCause() instanceof WorkspaceOperationException);
+                    WorkspaceOperationException failure =
+                            (WorkspaceOperationException) exception.getCause();
+                    assertTrue(
+                            "FILE_NOT_FOUND".equals(failure.errorCode())
+                                    || "WORKSPACE_FILE_READ_FAILED".equals(failure.errorCode()),
+                            failure.errorCode()
+                    );
+                }
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
     void shouldSerializeCommandMutationAndAdvanceGenerationWhenTreeChanges() throws Exception {
         AtomicInteger executions = new AtomicInteger();
         WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) -> {
@@ -271,6 +364,43 @@ class LocalWorkspaceGatewayCodingTest {
                 <= WorkspaceGateway.MAX_COMMAND_STREAM_BYTES);
         assertTrue(result.stderr().getBytes(StandardCharsets.UTF_8).length
                 <= WorkspaceGateway.MAX_COMMAND_STREAM_BYTES);
+    }
+
+    @Test
+    void shouldAdvanceGenerationWhenTimedOutCommandStillChangedWorkspace() throws Exception {
+        WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) -> {
+            Files.writeString(workingDirectory.resolve("timeout-output.txt"), "partial output\n");
+            return new WorkspaceCommandExecutor.ProcessResult(
+                    true,
+                    null,
+                    30_000,
+                    "",
+                    "timed out",
+                    false,
+                    false
+            );
+        };
+        Fixture fixture = fixture(executor);
+
+        WorkspaceGateway.CommandResult result = fixture.gateway().runCommand(
+                fixture.workspaceId(),
+                new WorkspaceGateway.CommandRequest(
+                        0,
+                        List.of("test-runner"),
+                        ".",
+                        30,
+                        "exercise timeout side effects"
+                )
+        );
+
+        assertEquals(WorkspaceGateway.CommandStatus.TIMED_OUT, result.status());
+        assertEquals(0, result.generationBefore());
+        assertEquals(1, result.generationAfter());
+        assertTrue(result.stateChanged());
+        assertEquals(
+                "partial output\n",
+                Files.readString(fixture.root().resolve("timeout-output.txt"))
+        );
     }
 
     @Test

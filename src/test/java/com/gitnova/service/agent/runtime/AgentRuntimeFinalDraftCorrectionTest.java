@@ -137,6 +137,7 @@ class AgentRuntimeFinalDraftCorrectionTest {
                 promptAssembler(),
                 new MessageFactory(objectMapper),
                 new ToolRegistry(tools),
+                workspace,
                 new CompletionInspector(objectMapper, workspace),
                 new AgentRuntimePolicy(
                         "fake-model",
@@ -205,7 +206,7 @@ class AgentRuntimeFinalDraftCorrectionTest {
         arguments.put("expectedGeneration", generation);
         arguments.put("summary", "Task completed");
         arguments.putArray("findings");
-        arguments.putArray("claimedChangedFiles");
+        arguments.putArray("agentModifiedFiles");
         arguments.putArray("claimedValidations");
         arguments.putArray("risks");
         arguments.putArray("followUps");

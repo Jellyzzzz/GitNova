@@ -36,7 +36,7 @@ public final class FinishTaskTool implements AgentTool {
 
     private static final int MAX_SUMMARY_CHARS = 16_000;
     private static final int MAX_FINDINGS = 200;
-    private static final int MAX_CHANGED_FILES = 1_000;
+    private static final int MAX_AGENT_MODIFIED_FILES = 1_000;
     private static final int MAX_VALIDATIONS = 100;
     private static final int MAX_COMMAND_ARGUMENTS = 128;
     private static final int MAX_LIST_ITEMS = 200;
@@ -94,7 +94,7 @@ public final class FinishTaskTool implements AgentTool {
                 "completion draft",
                 List.of(
                         "expectedGeneration", "summary", "findings",
-                        "claimedChangedFiles", "claimedValidations", "risks", "followUps"
+                        "agentModifiedFiles", "claimedValidations", "risks", "followUps"
                 )
         );
         JsonNode generation = arguments.path("expectedGeneration");
@@ -108,10 +108,10 @@ public final class FinishTaskTool implements AgentTool {
 
         String summary = requiredText(arguments, "summary", MAX_SUMMARY_CHARS);
         List<AgentFindingDraft> findings = parseFindings(arguments.path("findings"));
-        List<String> changedFiles = parseStringArray(
-                arguments.path("claimedChangedFiles"),
-                "claimedChangedFiles",
-                MAX_CHANGED_FILES,
+        List<String> agentModifiedFiles = parseStringArray(
+                arguments.path("agentModifiedFiles"),
+                "agentModifiedFiles",
+                MAX_AGENT_MODIFIED_FILES,
                 AgentFindingDraft.MAX_PATH_CHARS
         );
         List<ValidationClaim> validations = parseValidations(
@@ -134,7 +134,7 @@ public final class FinishTaskTool implements AgentTool {
                 generation.longValue(),
                 summary,
                 findings,
-                changedFiles,
+                agentModifiedFiles,
                 validations,
                 risks,
                 followUps
@@ -317,10 +317,16 @@ public final class FinishTaskTool implements AgentTool {
 
         arrayOfStrings(
                 properties,
-                "claimedChangedFiles",
-                MAX_CHANGED_FILES,
+                "agentModifiedFiles",
+                MAX_AGENT_MODIFIED_FILES,
                 AgentFindingDraft.MAX_PATH_CHARS,
                 true
+        );
+        ((ObjectNode) properties.get("agentModifiedFiles")).put(
+                "description",
+                "Repository-relative files intentionally modified by the Agent. Do not include "
+                        + "preserved user or external changes; the server computes the complete "
+                        + "canonical Workspace diff independently."
         );
 
         ObjectNode validations = properties.putObject("claimedValidations");
@@ -346,7 +352,7 @@ public final class FinishTaskTool implements AgentTool {
                 .add("expectedGeneration")
                 .add("summary")
                 .add("findings")
-                .add("claimedChangedFiles")
+                .add("agentModifiedFiles")
                 .add("claimedValidations")
                 .add("risks")
                 .add("followUps");

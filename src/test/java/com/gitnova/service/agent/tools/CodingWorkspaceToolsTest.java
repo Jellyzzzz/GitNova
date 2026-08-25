@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -128,7 +129,7 @@ class CodingWorkspaceToolsTest {
     void shouldRejectInvalidCompletionDraftAndNotTreatClaimsAsVerifiedFacts() {
         FinishTaskTool tool = new FinishTaskTool(objectMapper);
         ObjectNode invalid = finalizeArguments();
-        ((ArrayNode) invalid.path("claimedChangedFiles")).add("../escape.java");
+        ((ArrayNode) invalid.path("agentModifiedFiles")).add("../escape.java");
 
         ToolResult result = tool.execute(execution("call-finalize"), invalid);
 
@@ -140,6 +141,32 @@ class CodingWorkspaceToolsTest {
 
     @Test
     void shouldRejectCommandInputsOutsideGatewayContractLimits() {
+        WorkspaceGateway.CommandRequest exactBoundary = new WorkspaceGateway.CommandRequest(
+                4,
+                java.util.Collections.nCopies(
+                        WorkspaceGateway.MAX_COMMAND_ARG_COUNT,
+                        "argument"
+                ),
+                ".",
+                WorkspaceGateway.MAX_COMMAND_TIMEOUT_SECONDS,
+                "exact boundary"
+        );
+        assertEquals(WorkspaceGateway.MAX_COMMAND_ARG_COUNT, exactBoundary.argv().size());
+        assertEquals(
+                WorkspaceGateway.MAX_COMMAND_TIMEOUT_SECONDS,
+                exactBoundary.timeoutSeconds()
+        );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new WorkspaceGateway.CommandRequest(
+                        4,
+                        List.of(),
+                        ".",
+                        30,
+                        "empty command"
+                )
+        );
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new WorkspaceGateway.CommandRequest(
@@ -165,6 +192,35 @@ class CodingWorkspaceToolsTest {
         );
     }
 
+    @Test
+    void shouldRejectEmptyCommandBeforeInvokingWorkspace() {
+        AtomicInteger invocations = new AtomicInteger();
+        WorkspaceGateway recordingGateway = new WorkspaceGateway() {
+            @Override
+            public PatchBatchResult applyPatch(
+                    WorkspaceId workspaceId,
+                    WorkspaceMutationCommand command
+            ) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public CommandResult runCommand(WorkspaceId workspaceId, CommandRequest request) {
+                invocations.incrementAndGet();
+                throw new AssertionError("empty command must not execute");
+            }
+        };
+        RunCommandTool tool = new RunCommandTool(recordingGateway, objectMapper);
+        ObjectNode arguments = commandArguments();
+        arguments.putArray("argv");
+
+        ToolResult result = tool.execute(execution("call-empty-command"), arguments);
+
+        assertEquals(ToolStatus.INVALID_ARGUMENT, result.status());
+        assertEquals("INVALID_COMMAND_ARGV", result.errorCode());
+        assertEquals(0, invocations.get());
+    }
+
     private ObjectNode commandArguments() {
         ObjectNode arguments = objectMapper.createObjectNode();
         arguments.put("expectedGeneration", 4);
@@ -180,7 +236,7 @@ class CodingWorkspaceToolsTest {
         arguments.put("expectedGeneration", 4);
         arguments.put("summary", "Updated Main and ran focused tests");
         arguments.putArray("findings");
-        arguments.putArray("claimedChangedFiles").add("src/Main.java");
+        arguments.putArray("agentModifiedFiles").add("src/Main.java");
         ObjectNode validation = arguments.putArray("claimedValidations").addObject();
         validation.putArray("argv").add("./mvnw").add("test");
         validation.put("result", "FAILED");

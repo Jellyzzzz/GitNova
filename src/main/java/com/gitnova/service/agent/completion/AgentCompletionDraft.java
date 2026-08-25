@@ -15,7 +15,7 @@ public record AgentCompletionDraft(
         long expectedGeneration,
         String summary,
         List<AgentFindingDraft> findings,
-        List<String> claimedChangedFiles,
+        List<String> agentModifiedFiles,
         List<ValidationClaim> claimedValidations,
         List<String> risks,
         List<String> followUps
@@ -31,7 +31,7 @@ public record AgentCompletionDraft(
 
         findings = copyObjects(findings, "findings");
         claimedValidations = copyObjects(claimedValidations, "claimedValidations");
-        claimedChangedFiles = copyClaimedPaths(claimedChangedFiles);
+        agentModifiedFiles = copyAgentModifiedPaths(agentModifiedFiles);
         risks = copyStrings(risks, "risks");
         followUps = copyStrings(followUps, "followUps");
     }
@@ -44,13 +44,13 @@ public record AgentCompletionDraft(
         return List.copyOf(values);
     }
 
-    private static List<String> copyClaimedPaths(List<String> values) {
-        Objects.requireNonNull(values, "claimedChangedFiles must not be null");
+    private static List<String> copyAgentModifiedPaths(List<String> values) {
+        Objects.requireNonNull(values, "agentModifiedFiles must not be null");
         Set<String> unique = new HashSet<>();
         for (String value : values) {
             if (!AgentFindingDraft.isNormalizedRepositoryPath(value) || !unique.add(value)) {
                 throw new IllegalArgumentException(
-                        "claimedChangedFiles must contain unique normalized repository paths"
+                        "agentModifiedFiles must contain unique normalized repository paths"
                 );
             }
         }

@@ -31,6 +31,7 @@ import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tools.FinishTaskTool;
+import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.tools.GetDiffTool;
 import com.gitnova.service.agent.tools.ListChangesTool;
 import com.gitnova.service.agent.tools.ReadFileTool;
@@ -127,12 +128,14 @@ class LiveRealToolsAgentRuntimeSmokeTest {
                 new BudgetSection(),
                 new OutputContractSection()
         ));
+        WorkspaceGateway workspaceGateway = AgentRuntimeLiveTestSupport.workspace();
         AgentRuntime runtime = new AgentRuntime(
                 modelGateway,
                 promptAssembler,
                 new MessageFactory(objectMapper),
                 toolRegistry,
-                AgentRuntimeLiveTestSupport.inspector(objectMapper),
+                workspaceGateway,
+                AgentRuntimeLiveTestSupport.inspector(objectMapper, workspaceGateway),
                 new AgentRuntimePolicy(model, 8, 12, 2, 2, 2048, 0.0)
         );
 
