@@ -51,6 +51,16 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Flyway is the only production schema migration mechanism. -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+
         <!-- MyBatis-Plus：注意3.5.x需要手动指定版本，不在SpringBoot BOM里 -->
         <dependency>
             <groupId>com.baomidou</groupId>

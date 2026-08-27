@@ -60,6 +60,22 @@ class LocalWorkspaceProviderTest {
     }
 
     @Test
+    void shouldIdempotentlyReuseAnAlreadyPublishedEquivalentWorkspace() throws IOException {
+        byte[] app = "class App {}\n".getBytes(StandardCharsets.UTF_8);
+        Fixture fixture = fixture(Map.of("src/App.java", app));
+        WorkspaceId workspaceId = WorkspaceId.generate();
+        WorkspaceSpec spec = spec(workspaceId, fixture.commitId());
+
+        WorkspaceHandle first = fixture.provider().provision(spec);
+        WorkspaceHandle retry = fixture.provider().provision(spec);
+
+        assertEquals(first.root(), retry.root());
+        assertEquals(WorkspaceStatus.READY, retry.status());
+        assertArrayEquals(app, Files.readAllBytes(retry.root().resolve("src/App.java")));
+        assertNoStagingDirectories(fixture.workspaceBase());
+    }
+
+    @Test
     void shouldRejectExistingWorkspaceWithoutOverwritingIt() throws IOException {
         Fixture fixture = fixture(Map.of(
                 "src/App.java", "class App {}\n".getBytes(StandardCharsets.UTF_8)

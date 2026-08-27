@@ -9,13 +9,13 @@ New schema changes belong in this directory and must follow this convention:
 V<ordered-version>__<short_snake_case_description>.sql
 ```
 
-Examples:
+Current sequence:
 
 ```text
-V1__agent_session_and_run.sql
-V2__agent_step_and_checkpoint.sql
+V1__baseline_existing_schema.sql
+V2__agent_session_foundation.sql
 ```
 
-The migration runner is intentionally not introduced by V5-00. V5-00C will add and configure a single
-migration mechanism, then migrate existing development schemas in a dedicated change. Runtime services must
+Flyway is the single migration mechanism. `baseline-on-migrate=1` adopts a legacy non-empty development
+database without replaying V1; a new empty database executes V1 before applying V2. Runtime services must
 not create or alter tables programmatically.

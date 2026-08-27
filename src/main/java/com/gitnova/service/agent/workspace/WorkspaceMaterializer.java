@@ -4,12 +4,14 @@ import com.gitnova.gitobject.CommitObject;
 import com.gitnova.gitobject.GitObjectId;
 import com.gitnova.gitobject.GitObjectReader;
 import com.gitnova.storage.RepoKey;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.*;
 import java.util.*;
 
+@Component
 public final class WorkspaceMaterializer {
     private final GitObjectReader gitObjectReader;
     public WorkspaceMaterializer(GitObjectReader gitObjectReader){

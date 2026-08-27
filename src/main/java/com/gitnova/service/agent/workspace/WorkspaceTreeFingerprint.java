@@ -16,12 +16,12 @@ import java.util.HexFormat;
 import java.util.List;
 
 /** Captures the repository-visible file content of a local Workspace. */
-final class WorkspaceTreeFingerprint {
+public final class WorkspaceTreeFingerprint {
 
     private WorkspaceTreeFingerprint() {
     }
 
-    static String capture(Path workspaceRoot) {
+    public static String capture(Path workspaceRoot) {
         Path root = requireSafeRoot(workspaceRoot);
         MessageDigest digest = sha256Digest();
         long totalBytes = 0;

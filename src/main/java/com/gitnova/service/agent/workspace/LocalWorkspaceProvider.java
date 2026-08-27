@@ -2,12 +2,14 @@ package com.gitnova.service.agent.workspace;
 
 import com.gitnova.gitobject.GitObjectReadException;
 import com.gitnova.storage.config.WorkspaceStorageProperties;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
 
+@Component
 public final class LocalWorkspaceProvider implements WorkspaceProvider{
     private static final String STAGING_PREFIX = ".provisioning-";
     private final Path workspaceBase;
@@ -19,11 +21,15 @@ public final class LocalWorkspaceProvider implements WorkspaceProvider{
     }
 
     @Override
+    public String providerType() {
+        return "local-filesystem";
+    }
+
+    @Override
     public WorkspaceHandle provision(WorkspaceSpec trustedSpec) {
         Objects.requireNonNull(trustedSpec,"trustedSpec must not be null");
         Path safeBase=requireSafeWorkspaceBase();
         Path finalRoot=resolveFinalRoot(safeBase,trustedSpec.workspaceId());
-        requireFinalRootAbsent(finalRoot);
         Path stagingRoot=createStagingRoot(safeBase,trustedSpec.workspaceId());
         try{
             materializer.materialize(trustedSpec.repoKey(),stagingRoot,trustedSpec.snapshotScope());
@@ -36,7 +42,7 @@ public final class LocalWorkspaceProvider implements WorkspaceProvider{
                             WorkspaceStatus.READY,
                             0
                     );
-            publish(stagingRoot,finalRoot);
+            publishOrReuse(stagingRoot,finalRoot);
             return readyHandle;
         }catch (GitObjectReadException exception) {
             cleanupStaging(
@@ -98,20 +104,6 @@ public final class LocalWorkspaceProvider implements WorkspaceProvider{
         }
         return finalRoot;
     }
-    private void requireFinalRootAbsent(
-            Path finalRoot
-    ) {
-        if (Files.exists(
-                finalRoot,
-                LinkOption.NOFOLLOW_LINKS
-        )) {
-            throw new WorkspaceProvisionException(
-                    "workspace already exists",
-                    WorkspaceProvisionException.Reason
-                            .WORKSPACE_CONFLICT
-            );
-        }
-    }
     private Path createStagingRoot(Path safeBase,WorkspaceId workspaceId){
         try{
             return Files.createTempDirectory(safeBase,STAGING_PREFIX+workspaceId+"-");
@@ -124,7 +116,11 @@ public final class LocalWorkspaceProvider implements WorkspaceProvider{
             );
         }
     }
-    private void publish(Path stagingRoot,Path finalRoot){
+    private void publishOrReuse(Path stagingRoot,Path finalRoot){
+        if (Files.exists(finalRoot, LinkOption.NOFOLLOW_LINKS)) {
+            reuseEquivalentWorkspace(stagingRoot, finalRoot);
+            return;
+        }
         try{
             Files.move(stagingRoot,finalRoot, StandardCopyOption.ATOMIC_MOVE);
         }catch (AtomicMoveNotSupportedException exception){
@@ -133,15 +129,54 @@ public final class LocalWorkspaceProvider implements WorkspaceProvider{
                             .ATOMIC_PUBLISH_UNAVAILABLE,
                     exception);
         }catch(FileAlreadyExistsException exception){
-            throw new WorkspaceProvisionException("workspace already exists",
-                    WorkspaceProvisionException.Reason
-                            .WORKSPACE_CONFLICT,
-                    exception);
+            reuseEquivalentWorkspace(stagingRoot, finalRoot);
         }catch(IOException exception){
             throw new WorkspaceProvisionException(
                     "failed to publish workspace",
                     WorkspaceProvisionException.Reason
                             .FILESYSTEM_FAILURE,
+                    exception
+            );
+        }
+    }
+
+    /**
+     * Handles the crash window where the directory was atomically published but
+     * Session activation was not committed. An arbitrary pre-existing directory
+     * is never accepted: it must have exactly the materialized snapshot content.
+     */
+    private void reuseEquivalentWorkspace(Path stagingRoot, Path finalRoot) {
+        if (Files.isSymbolicLink(finalRoot)
+                || !Files.isDirectory(finalRoot, LinkOption.NOFOLLOW_LINKS)) {
+            throw new WorkspaceProvisionException(
+                    "workspace already exists but is not a safe directory",
+                    WorkspaceProvisionException.Reason.WORKSPACE_CONFLICT
+            );
+        }
+        final String expectedFingerprint;
+        final String actualFingerprint;
+        try {
+            expectedFingerprint = WorkspaceTreeFingerprint.capture(stagingRoot);
+            actualFingerprint = WorkspaceTreeFingerprint.capture(finalRoot);
+        } catch (WorkspaceOperationException exception) {
+            throw new WorkspaceProvisionException(
+                    "workspace already exists but cannot be verified",
+                    WorkspaceProvisionException.Reason.WORKSPACE_CONFLICT,
+                    exception
+            );
+        }
+        if (!expectedFingerprint.equals(actualFingerprint)) {
+            throw new WorkspaceProvisionException(
+                    "workspace already exists with different content",
+                    WorkspaceProvisionException.Reason.WORKSPACE_CONFLICT
+            );
+        }
+        try {
+            guardedDeleteStaging(stagingRoot);
+        } catch (IOException exception) {
+            throw new WorkspaceProvisionException(
+                    "failed to clean equivalent staging workspace",
+                    WorkspaceProvisionException.Reason.FILESYSTEM_FAILURE,
                     exception
             );
         }
