@@ -41,10 +41,6 @@ public class AgentWorkspaceEntity {
 
     private String writerRunId;
 
-    private String leaseOwner;
-
-    private LocalDateTime leaseUntil;
-
     private Long version;
 
     private LocalDateTime createdAt;
