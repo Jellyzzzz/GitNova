@@ -8,8 +8,8 @@ import java.util.Optional;
 /**
  * Shared append-only event boundary used by Session, Task, Run and Tool persistence.
  *
- * <p>The current Session milestone supports Session-level events. Run-local sequence
- * allocation is added when the Run aggregate is introduced without changing this contract.</p>
+ * <p>Every Step receives a Session-wide sequence. Run-scoped Steps additionally receive
+ * a Run-local sequence; both counters and the Step row are committed in one transaction.</p>
  */
 public interface AgentEventAppender {
 
@@ -38,6 +38,9 @@ public interface AgentEventAppender {
             }
             requireOptionalNonBlank(taskId, "taskId");
             requireOptionalNonBlank(runId, "runId");
+            if (runId != null && taskId == null) {
+                throw new IllegalArgumentException("runId requires taskId");
+            }
             requireOptionalNonBlank(causationEventId, "causationEventId");
             requireOptionalNonBlank(correlationId, "correlationId");
             if ((workspaceEpoch == null) != (workspaceGeneration == null)) {

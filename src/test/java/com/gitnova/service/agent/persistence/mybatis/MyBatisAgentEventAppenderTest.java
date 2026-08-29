@@ -4,10 +4,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.entity.agent.AgentSessionEntity;
 import com.gitnova.entity.agent.AgentStepEntity;
+import com.gitnova.entity.agent.AgentTaskEntity;
+import com.gitnova.entity.agent.AgentRunEntity;
+import com.gitnova.mapper.agent.AgentRunMapper;
 import com.gitnova.mapper.agent.AgentSessionMapper;
 import com.gitnova.mapper.agent.AgentStepMapper;
+import com.gitnova.mapper.agent.AgentTaskMapper;
+import com.gitnova.service.agent.execution.AgentExecutionPersistenceException;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.AgentStepType;
+import com.gitnova.service.agent.persistence.CanonicalJsonCodec;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -32,6 +38,12 @@ class MyBatisAgentEventAppenderTest {
 
     @Mock
     AgentSessionMapper sessionMapper;
+
+    @Mock
+    AgentTaskMapper taskMapper;
+
+    @Mock
+    AgentRunMapper runMapper;
 
     @Mock
     AgentStepMapper stepMapper;
@@ -102,16 +114,64 @@ class MyBatisAgentEventAppenderTest {
         when(stepMapper.selectByEventId("event-1")).thenReturn(existing);
 
         assertThrows(
-                IllegalStateException.class,
+                AgentExecutionPersistenceException.class,
                 () -> appender().append(command(payload(2, 1)))
         );
+    }
+
+    @Test
+    void shouldAllocateSessionAndRunSequencesForOneRunStep() {
+        AgentSessionEntity session = session(7L);
+        AgentTaskEntity task = task();
+        AgentRunEntity run = run(3L);
+        when(sessionMapper.selectForUpdate("session-1")).thenReturn(session);
+        when(taskMapper.selectForUpdate("task-1")).thenReturn(task);
+        when(runMapper.selectForUpdate("run-1")).thenReturn(run);
+        when(stepMapper.selectByEventId("run-event-1")).thenReturn(null);
+        when(sessionMapper.advanceSequence("session-1", 7L, 8L)).thenReturn(1);
+        when(runMapper.advanceStepSequence("run-1", 3L, 4L)).thenReturn(1);
+        when(stepMapper.insert(any())).thenAnswer(invocation -> {
+            AgentStepEntity inserted = invocation.getArgument(0);
+            inserted.setStepId(43L);
+            return 1;
+        });
+
+        AgentEventAppender.AppendResult result = appender().append(runCommand());
+
+        assertEquals(8L, result.sessionSequence());
+        assertEquals(4L, result.runStepSequence());
+        ArgumentCaptor<AgentStepEntity> step = ArgumentCaptor.forClass(AgentStepEntity.class);
+        verify(stepMapper).insert(step.capture());
+        assertEquals("task-1", step.getValue().getTaskId());
+        assertEquals("run-1", step.getValue().getRunId());
+        assertEquals(4L, step.getValue().getRunStepSequence());
+    }
+
+    @Test
+    void shouldStopBeforeInsertWhenRunSequenceCasIsLost() {
+        when(sessionMapper.selectForUpdate("session-1")).thenReturn(session(7L));
+        when(taskMapper.selectForUpdate("task-1")).thenReturn(task());
+        when(runMapper.selectForUpdate("run-1")).thenReturn(run(3L));
+        when(stepMapper.selectByEventId("run-event-1")).thenReturn(null);
+        when(sessionMapper.advanceSequence("session-1", 7L, 8L)).thenReturn(1);
+        when(runMapper.advanceStepSequence("run-1", 3L, 4L)).thenReturn(0);
+
+        AgentExecutionPersistenceException error = assertThrows(
+                AgentExecutionPersistenceException.class,
+                () -> appender().append(runCommand())
+        );
+
+        assertEquals(AgentExecutionPersistenceException.Code.STATE_CONFLICT, error.code());
+        verify(stepMapper, times(0)).insert(any());
     }
 
     private MyBatisAgentEventAppender appender() {
         return new MyBatisAgentEventAppender(
                 sessionMapper,
+                taskMapper,
+                runMapper,
                 stepMapper,
-                new ObjectMapper()
+                new CanonicalJsonCodec(new ObjectMapper())
         );
     }
 
@@ -131,6 +191,38 @@ class MyBatisAgentEventAppenderTest {
         payload.put("z", z);
         payload.put("a", a);
         return payload;
+    }
+
+    private AgentEventAppender.AppendCommand runCommand() {
+        return new AgentEventAppender.AppendCommand(
+                "run-event-1",
+                "session-1",
+                "task-1",
+                "run-1",
+                AgentStepType.RUN_CLAIMED,
+                1,
+                payload(2, 1),
+                null,
+                "task-1",
+                0L,
+                0L
+        );
+    }
+
+    private AgentTaskEntity task() {
+        AgentTaskEntity task = new AgentTaskEntity();
+        task.setTaskId("task-1");
+        task.setSessionId("session-1");
+        return task;
+    }
+
+    private AgentRunEntity run(long sequence) {
+        AgentRunEntity run = new AgentRunEntity();
+        run.setRunId("run-1");
+        run.setTaskId("task-1");
+        run.setSessionId("session-1");
+        run.setLastRunStepSequence(sequence);
+        return run;
     }
 
     private AgentSessionEntity session(long sequence) {
