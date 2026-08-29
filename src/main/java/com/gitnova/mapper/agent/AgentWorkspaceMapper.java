@@ -61,4 +61,57 @@ public interface AgentWorkspaceMapper
               AND status = 'PROVISIONING'
             """)
     int failProvisioning(@Param("workspaceId") String workspaceId);
+
+    @Update("""
+            UPDATE agent_workspace
+            SET writer_run_id = #{runId},
+                last_accepted_fencing_token = #{nextFencingToken},
+                version = version + 1,
+                updated_at = UTC_TIMESTAMP(6)
+            WHERE workspace_id = #{workspaceId}
+              AND status = 'READY'
+              AND writer_run_id IS NULL
+              AND last_accepted_fencing_token = #{expectedFencingToken}
+            """)
+    int claimWriter(
+            @Param("workspaceId") String workspaceId,
+            @Param("runId") String runId,
+            @Param("expectedFencingToken") long expectedFencingToken,
+            @Param("nextFencingToken") long nextFencingToken
+    );
+
+    @Update("""
+            UPDATE agent_workspace
+            SET last_accepted_fencing_token = #{nextFencingToken},
+                version = version + 1,
+                updated_at = UTC_TIMESTAMP(6)
+            WHERE workspace_id = #{workspaceId}
+              AND status = 'READY'
+              AND writer_run_id = #{runId}
+              AND last_accepted_fencing_token = #{expectedFencingToken}
+            """)
+    int takeoverWriter(
+            @Param("workspaceId") String workspaceId,
+            @Param("runId") String runId,
+            @Param("expectedFencingToken") long expectedFencingToken,
+            @Param("nextFencingToken") long nextFencingToken
+    );
+
+    @Update("""
+            UPDATE agent_workspace
+            SET writer_run_id = NULL,
+                last_accepted_fencing_token = #{revokedFencingToken},
+                version = version + 1,
+                updated_at = UTC_TIMESTAMP(6)
+            WHERE workspace_id = #{workspaceId}
+              AND status = 'READY'
+              AND writer_run_id = #{runId}
+              AND last_accepted_fencing_token = #{expectedFencingToken}
+            """)
+    int releaseWriter(
+            @Param("workspaceId") String workspaceId,
+            @Param("runId") String runId,
+            @Param("expectedFencingToken") long expectedFencingToken,
+            @Param("revokedFencingToken") long revokedFencingToken
+    );
 }
