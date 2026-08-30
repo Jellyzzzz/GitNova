@@ -23,6 +23,7 @@ import com.gitnova.service.agent.tools.FinishTaskTool;
 import com.gitnova.service.agent.workspace.PatchBatchResult;
 import com.gitnova.service.agent.workspace.SnapshotScope;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 import com.gitnova.service.agent.workspace.WorkspaceMutationCommand;
@@ -362,17 +363,19 @@ class AgentRuntimeWorkspaceDriftTest {
     }
 
     private AgentExecutionContext context() {
+        AgentRunContext run = new AgentRunContext(
+                "run-drift",
+                42L,
+                "7/42",
+                SnapshotScope.of("a".repeat(40))
+        );
         return new AgentExecutionContext(
                 "session-drift",
-                new AgentRunContext(
-                        "run-drift",
-                        42L,
-                        "7/42",
-                        SnapshotScope.of("a".repeat(40))
-                ),
+                run,
                 9L,
                 "Inspect the latest Workspace",
                 new WorkspaceBinding(workspaceId),
+                new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
                 AgentCapabilityPolicy.cloudAgent()
         );
     }

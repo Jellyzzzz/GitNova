@@ -10,7 +10,7 @@ public record AgentTask(
         String creationIdempotencyKey,
         long createdByActorId,
         Status status,
-        String requestJson,
+        AgentTaskRequest request,
         String requestDigest,
         String currentRunId,
         long lastRunNumber,
@@ -36,7 +36,7 @@ public record AgentTask(
         requireNonBlank(taskId, "taskId");
         requireNonBlank(sessionId, "sessionId");
         requireNonBlank(creationIdempotencyKey, "creationIdempotencyKey");
-        requireNonBlank(requestJson, "requestJson");
+        Objects.requireNonNull(request, "request must not be null");
         requireDigest(requestDigest, "requestDigest");
         Objects.requireNonNull(status, "status must not be null");
         Objects.requireNonNull(createdAt, "createdAt must not be null");

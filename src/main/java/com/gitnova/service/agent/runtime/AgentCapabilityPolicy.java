@@ -1,5 +1,6 @@
 package com.gitnova.service.agent.runtime;
 
+import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 
@@ -28,5 +29,11 @@ public record AgentCapabilityPolicy(Set<AgentCapability> granted) {
                 AgentCapability.WORKSPACE_MUTATION,
                 AgentCapability.COMMAND_EXECUTE
         ));
+    }
+    public AgentCapabilityPolicy restrictTo(Set<AgentCapability> requested){
+        Objects.requireNonNull(requested);
+        Set<AgentCapability>effective=new HashSet<>(granted);
+        effective.retainAll(requested);
+        return new AgentCapabilityPolicy(effective);
     }
 }

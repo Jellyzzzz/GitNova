@@ -13,7 +13,7 @@ public record CreateTaskCommand(
         String initialRunId,
         String sessionId,
         long createdByActorId,
-        JsonNode request,
+        AgentTaskRequest request,
         JsonNode executionConfig
 ) {
     private static final int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
@@ -25,8 +25,8 @@ public record CreateTaskCommand(
         requireUuid(sessionId, "sessionId");
         Objects.requireNonNull(request, "request must not be null");
         Objects.requireNonNull(executionConfig, "executionConfig must not be null");
-        if (!request.isObject() || !executionConfig.isObject()) {
-            throw new IllegalArgumentException("request and executionConfig must be JSON objects");
+        if (!executionConfig.isObject()) {
+            throw new IllegalArgumentException("executionConfig must be a JSON object");
         }
         if (creationIdempotencyKey.length() > MAX_IDEMPOTENCY_KEY_LENGTH) {
             throw new IllegalArgumentException("creationIdempotencyKey exceeds the length limit");
@@ -34,7 +34,6 @@ public record CreateTaskCommand(
         if (createdByActorId <= 0) {
             throw new IllegalArgumentException("createdByActorId must be positive");
         }
-        request = request.deepCopy();
         executionConfig = executionConfig.deepCopy();
     }
 
@@ -42,7 +41,7 @@ public record CreateTaskCommand(
             String creationIdempotencyKey,
             String sessionId,
             long createdByActorId,
-            JsonNode request,
+            AgentTaskRequest request,
             JsonNode executionConfig
     ) {
         return new CreateTaskCommand(

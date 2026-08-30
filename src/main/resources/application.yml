@@ -4,6 +4,11 @@ server:
 spring:
   application:
     name: gitnova
+  rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
 
   # ===== 数据库 =====
   datasource:

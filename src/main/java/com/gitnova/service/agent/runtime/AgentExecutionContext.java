@@ -1,6 +1,7 @@
 package com.gitnova.service.agent.runtime;
 
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 
 import java.util.Objects;
 
@@ -10,6 +11,7 @@ public record AgentExecutionContext(
         long actorId,
         String taskText,
         WorkspaceBinding workspace,
+        WorkspaceExecutionPermit executionPermit,
         AgentCapabilityPolicy capabilities
 ) {
     public AgentExecutionContext {

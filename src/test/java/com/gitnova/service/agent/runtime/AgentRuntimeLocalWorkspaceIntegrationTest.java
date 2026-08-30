@@ -46,6 +46,7 @@ import com.gitnova.service.agent.workspace.LocalWorkspaceRegistry;
 import com.gitnova.service.agent.workspace.SnapshotScope;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
 import com.gitnova.service.agent.workspace.WorkspaceCommandExecutor;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.workspace.WorkspaceHandle;
 import com.gitnova.service.agent.workspace.WorkspaceId;
@@ -753,6 +754,7 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                         + "[\"test-runner\", \"CalculatorTest\"] from working directory '.', "
                         + "inspect the final Workspace diff, and finish the task.",
                 new WorkspaceBinding(workspaceId),
+                new WorkspaceExecutionPermit("run-local-coding", workspaceId, 1L),
                 AgentCapabilityPolicy.cloudAgent()
         );
     }
@@ -775,6 +777,7 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                         + "Validate with argv [\"test-runner\", \"ServiceRegressionSpec\"] "
                         + "from working directory '.', inspect the final Workspace diff, and finish.",
                 new WorkspaceBinding(workspaceId),
+                new WorkspaceExecutionPermit("run-medium-batch", workspaceId, 1L),
                 AgentCapabilityPolicy.cloudAgent()
         );
     }
@@ -796,6 +799,7 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                         + "Validate with argv [\"test-runner\", \"CalculatorTest\"] from working "
                         + "directory '.', inspect the final Workspace diff, and finish the task.",
                 new WorkspaceBinding(workspaceId),
+                new WorkspaceExecutionPermit("run-workspace-drift", workspaceId, 1L),
                 AgentCapabilityPolicy.cloudAgent()
         );
     }

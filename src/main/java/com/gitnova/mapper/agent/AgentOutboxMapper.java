@@ -6,6 +6,10 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Mapper
 public interface AgentOutboxMapper {
@@ -35,4 +39,39 @@ public interface AgentOutboxMapper {
             FOR UPDATE
             """)
     AgentOutboxEntity selectByEventId(@Param("eventId") String eventId);
+
+    @Select("""
+            SELECT *
+            FROM agent_outbox
+            WHERE status = 'PENDING'
+              AND aggregate_type = 'RUN'
+              AND event_type = 'RUN_DISPATCH_REQUESTED'
+              AND available_at <= UTC_TIMESTAMP(6)
+            ORDER BY outbox_id
+            LIMIT #{limit}
+            """)
+    List<AgentOutboxEntity> findPublishable(@Param("limit") int limit);
+
+    @Update("""
+            UPDATE agent_outbox
+            SET status = 'PUBLISHED',
+                published_at = UTC_TIMESTAMP(6),
+                updated_at = UTC_TIMESTAMP(6)
+            WHERE outbox_id = #{outboxId}
+              AND status = 'PENDING'
+            """)
+    int markPublished(@Param("outboxId") long outboxId);
+
+    @Update("""
+            UPDATE agent_outbox
+            SET attempt_count = attempt_count + 1,
+                available_at = #{nextAvailableAt},
+                updated_at = UTC_TIMESTAMP(6)
+            WHERE outbox_id = #{outboxId}
+              AND status = 'PENDING'
+            """)
+    int recordFailure(
+            @Param("outboxId") long outboxId,
+            @Param("nextAvailableAt") LocalDateTime nextAvailableAt
+    );
 }

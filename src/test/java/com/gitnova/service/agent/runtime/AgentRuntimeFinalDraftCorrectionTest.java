@@ -20,6 +20,7 @@ import com.gitnova.service.agent.tools.FinishTaskTool;
 import com.gitnova.service.agent.workspace.PatchBatchResult;
 import com.gitnova.service.agent.workspace.SnapshotScope;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 import com.gitnova.service.agent.workspace.WorkspaceMutationCommand;
@@ -172,17 +173,20 @@ class AgentRuntimeFinalDraftCorrectionTest {
     }
 
     private AgentExecutionContext context() {
+        AgentRunContext run = new AgentRunContext(
+                "run-correction",
+                42L,
+                "7/42",
+                SnapshotScope.of("a".repeat(40))
+        );
+        WorkspaceId workspaceId = WorkspaceId.generate();
         return new AgentExecutionContext(
                 "session-1",
-                new AgentRunContext(
-                        "run-correction",
-                        42L,
-                        "7/42",
-                        SnapshotScope.of("a".repeat(40))
-                ),
+                run,
                 7L,
                 "Explain the current implementation",
-                new WorkspaceBinding(WorkspaceId.generate()),
+                new WorkspaceBinding(workspaceId),
+                new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
                 AgentCapabilityPolicy.cloudAgent()
         );
     }

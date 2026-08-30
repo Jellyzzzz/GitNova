@@ -9,8 +9,10 @@ import com.gitnova.mapper.agent.AgentRunMapper;
 import com.gitnova.mapper.agent.AgentSessionMapper;
 import com.gitnova.mapper.agent.AgentTaskMapper;
 import com.gitnova.mapper.agent.AgentWorkspaceMapper;
+import com.gitnova.service.agent.execution.AgentExecutionPersistenceException;
 import com.gitnova.service.agent.execution.AgentRun;
 import com.gitnova.service.agent.execution.AgentTask;
+import com.gitnova.service.agent.execution.AgentTaskRequest;
 import com.gitnova.service.agent.execution.AgentTaskRunStore;
 import com.gitnova.service.agent.execution.CreateTaskCommand;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
@@ -30,6 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -98,25 +101,52 @@ class MyBatisAgentTaskRunStoreTest {
                         runId,
                         sessionId,
                         9L,
-                        json.createObjectNode().put("goal", "review"),
+                        new AgentTaskRequest("review"),
                         json.createObjectNode().put("model", "test")
                 )
         );
 
         assertTrue(result.created());
         assertEquals(AgentTask.Status.ACTIVE, result.task().status());
+        assertEquals("review", result.task().request().message());
         assertEquals(runId, result.task().currentRunId());
         assertEquals(AgentRun.Status.QUEUED, result.initialRun().status());
+        assertEquals("{\"message\":\"review\"}", taskRow.get().getRequestJson());
         ArgumentCaptor<AgentEventAppender.AppendCommand> events =
                 ArgumentCaptor.forClass(AgentEventAppender.AppendCommand.class);
         verify(eventAppender, org.mockito.Mockito.times(3)).append(events.capture());
         assertEquals(AgentStepType.USER_MESSAGE_RECEIVED, events.getAllValues().get(0).stepType());
+        assertEquals(
+                "review",
+                events.getAllValues().get(0).persistedPayload()
+                        .path("request")
+                        .path("message")
+                        .textValue()
+        );
         assertEquals(AgentStepType.TASK_CREATED, events.getAllValues().get(1).stepType());
         assertEquals(AgentStepType.RUN_QUEUED, events.getAllValues().get(2).stepType());
         ArgumentCaptor<AgentOutboxWriter.EnqueueCommand> outbox =
                 ArgumentCaptor.forClass(AgentOutboxWriter.EnqueueCommand.class);
         verify(outboxWriter).enqueue(outbox.capture());
         assertEquals("run:dispatch:" + runId + ":initial", outbox.getValue().eventId());
+    }
+
+    @Test
+    void invalidPersistedTaskRequestShouldFailAtThePersistenceBoundary() {
+        AgentTaskEntity task = baseTask();
+        task.setStatus("ACTIVE");
+        task.setRequestJson("{}");
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+
+        AgentExecutionPersistenceException exception = assertThrows(
+                AgentExecutionPersistenceException.class,
+                () -> store().findTask(TASK_ID)
+        );
+
+        assertEquals(
+                AgentExecutionPersistenceException.Code.PERSISTENCE_FAILURE,
+                exception.code()
+        );
     }
 
     @Test
@@ -375,6 +405,7 @@ class MyBatisAgentTaskRunStoreTest {
     }
 
     private MyBatisAgentTaskRunStore store() {
+        ObjectMapper objectMapper = new ObjectMapper();
         return new MyBatisAgentTaskRunStore(
                 sessionMapper,
                 taskMapper,
@@ -382,7 +413,8 @@ class MyBatisAgentTaskRunStoreTest {
                 workspaceMapper,
                 eventAppender,
                 outboxWriter,
-                new CanonicalJsonCodec(new ObjectMapper())
+                new CanonicalJsonCodec(objectMapper),
+                objectMapper
         );
     }
 
@@ -436,7 +468,7 @@ class MyBatisAgentTaskRunStoreTest {
         task.setSessionId(SESSION_ID);
         task.setCreationIdempotencyKey("create-task-1");
         task.setCreatedByActorId(1L);
-        task.setRequestJson("{}");
+        task.setRequestJson("{\"message\":\"test task\"}");
         task.setRequestDigest(DIGEST);
         task.setLastRunNumber(1L);
         task.setVersion(1L);

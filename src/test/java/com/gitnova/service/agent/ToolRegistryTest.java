@@ -15,6 +15,7 @@ import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
 import com.gitnova.service.agent.workspace.SnapshotScope;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 import org.junit.jupiter.api.Test;
 
@@ -171,12 +172,15 @@ class ToolRegistryTest {
                         .toList()
         );
 
+        AgentRunContext run = createRunContext();
+        WorkspaceId workspaceId = WorkspaceId.generate();
         AgentExecutionContext readOnlyContext = new AgentExecutionContext(
                 "session-read-only",
-                createRunContext(),
+                run,
                 1L,
                 "Inspect without modifying",
-                new WorkspaceBinding(WorkspaceId.generate()),
+                new WorkspaceBinding(workspaceId),
+                new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
                 readOnlyPolicy
         );
         ToolResult denied = registry.execute(

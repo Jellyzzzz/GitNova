@@ -5,6 +5,7 @@ import com.gitnova.service.agent.runtime.AgentExecutionContext;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 
 /** Shared construction of trusted Agent contexts in tests. */
@@ -27,6 +28,7 @@ public final class AgentTestContexts {
                 1L,
                 "test task",
                 new WorkspaceBinding(workspaceId),
+                new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
                 AgentCapabilityPolicy.cloudAgent()
         );
     }

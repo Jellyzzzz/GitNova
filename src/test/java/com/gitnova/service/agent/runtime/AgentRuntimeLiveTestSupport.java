@@ -6,6 +6,7 @@ import com.gitnova.service.agent.review.ReviewDraft;
 import com.gitnova.service.agent.review.ReviewIssueDraft;
 import com.gitnova.service.agent.workspace.PatchBatchResult;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 import com.gitnova.service.agent.workspace.WorkspaceMutationCommand;
@@ -19,12 +20,14 @@ final class AgentRuntimeLiveTestSupport {
     }
 
     static AgentExecutionContext execution(AgentRunContext run, String taskText) {
+        WorkspaceId workspaceId = WorkspaceId.generate();
         return new AgentExecutionContext(
                 "session-" + run.runId(),
                 run,
                 1L,
                 taskText,
-                new WorkspaceBinding(WorkspaceId.generate()),
+                new WorkspaceBinding(workspaceId),
+                new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
                 AgentCapabilityPolicy.cloudAgent()
         );
     }

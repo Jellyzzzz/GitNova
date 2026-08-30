@@ -10,6 +10,7 @@ import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.workspace.PatchBatchResult;
 import com.gitnova.service.agent.workspace.SnapshotScope;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 import com.gitnova.service.agent.workspace.WorkspaceMutationCommand;
@@ -232,17 +233,20 @@ class CompletionInspectorTest {
     }
 
     private AgentExecutionContext context() {
+        AgentRunContext run = new AgentRunContext(
+                "run-1",
+                10L,
+                "1/10",
+                SnapshotScope.of("a".repeat(40))
+        );
+        WorkspaceId workspaceId = WorkspaceId.generate();
         return new AgentExecutionContext(
                 "session-1",
-                new AgentRunContext(
-                        "run-1",
-                        10L,
-                        "1/10",
-                        SnapshotScope.of("a".repeat(40))
-                ),
+                run,
                 7L,
                 "Inspect the repository",
-                new WorkspaceBinding(WorkspaceId.generate()),
+                new WorkspaceBinding(workspaceId),
+                new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
                 AgentCapabilityPolicy.cloudAgent()
         );
     }

@@ -12,6 +12,7 @@ import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
 import com.gitnova.service.agent.workspace.SnapshotScope;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 import org.junit.jupiter.api.Test;
 
@@ -174,12 +175,14 @@ class FinishTaskToolTest {
                 "1/10",
                 SnapshotScope.of("a".repeat(40))
         );
+        WorkspaceId workspaceId = WorkspaceId.generate();
         AgentExecutionContext agent = new AgentExecutionContext(
                 "session-1",
                 run,
                 7L,
                 "Inspect generation handling and fix it if necessary",
-                new WorkspaceBinding(WorkspaceId.generate()),
+                new WorkspaceBinding(workspaceId),
+                new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
                 AgentCapabilityPolicy.cloudAgent()
         );
         return com.gitnova.service.agent.AgentTestContexts.toolExecution(agent, 2, "call-finish-1");

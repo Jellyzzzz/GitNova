@@ -65,14 +65,24 @@ class AgentTaskRunMySqlIntegrationTest {
                 "task-mysql-it-" + UUID.randomUUID(),
                 session.session().sessionId(),
                 9101L,
-                objectMapper.createObjectNode().put("goal", "verify persistence"),
+                new AgentTaskRequest("verify persistence"),
                 objectMapper.createObjectNode().put("model", "mysql-it")
         );
         AgentTaskRunStore.CreateResult created = taskRunStore.createTaskWithInitialRun(create);
 
         assertTrue(created.created());
         assertEquals(AgentTask.Status.ACTIVE, created.task().status());
+        assertEquals("verify persistence", created.task().request().message());
         assertEquals(AgentRun.Status.QUEUED, created.initialRun().status());
+        assertEquals(
+                "verify persistence",
+                jdbcTemplate.queryForObject(
+                        "SELECT JSON_UNQUOTE(JSON_EXTRACT(request_json, '$.message')) "
+                                + "FROM agent_task WHERE task_id = ?",
+                        String.class,
+                        create.taskId()
+                )
+        );
         assertEquals(1L, countOutbox(create.initialRunId()));
 
         AgentTaskRunStore.ClaimResult claimed = taskRunStore.claimRun(

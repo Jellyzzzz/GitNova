@@ -16,6 +16,7 @@ import com.gitnova.service.agent.workspace.PatchBatchResult;
 import com.gitnova.service.agent.workspace.PatchOperationResult;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 import com.gitnova.service.agent.workspace.WorkspaceMutationCommand;
 import com.gitnova.service.agent.workspace.SnapshotScope;
@@ -78,12 +79,14 @@ class ApplyPatchToolTest {
                 objectMapper
         );
 
+        AgentRunContext run = run();
         AgentExecutionContext readOnly = new AgentExecutionContext(
                 "session-read-only",
-                run(),
+                run,
                 1L,
                 "Inspect without modifying",
                 new WorkspaceBinding(WORKSPACE_ID),
+                new WorkspaceExecutionPermit(run.runId(), WORKSPACE_ID, 1L),
                 new AgentCapabilityPolicy(Set.of(AgentCapability.CODE_READ))
         );
         ToolResult result = new ToolRegistry(List.of(tool)).execute(

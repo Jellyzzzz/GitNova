@@ -1,5 +1,7 @@
 package com.gitnova.service.agent.execution.mybatis;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.entity.agent.AgentRunEntity;
 import com.gitnova.entity.agent.AgentSessionEntity;
@@ -12,6 +14,7 @@ import com.gitnova.mapper.agent.AgentWorkspaceMapper;
 import com.gitnova.service.agent.execution.AgentExecutionPersistenceException;
 import com.gitnova.service.agent.execution.AgentRun;
 import com.gitnova.service.agent.execution.AgentTask;
+import com.gitnova.service.agent.execution.AgentTaskRequest;
 import com.gitnova.service.agent.execution.AgentTaskRunStore;
 import com.gitnova.service.agent.execution.CreateTaskCommand;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
@@ -40,6 +43,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
     private final AgentEventAppender eventAppender;
     private final AgentOutboxWriter outboxWriter;
     private final CanonicalJsonCodec canonicalJson;
+    private final ObjectMapper objectMapper;
 
     public MyBatisAgentTaskRunStore(
             AgentSessionMapper sessionMapper,
@@ -48,7 +52,8 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
             AgentWorkspaceMapper workspaceMapper,
             AgentEventAppender eventAppender,
             AgentOutboxWriter outboxWriter,
-            CanonicalJsonCodec canonicalJson
+            CanonicalJsonCodec canonicalJson,
+            ObjectMapper objectMapper
     ) {
         this.sessionMapper = Objects.requireNonNull(sessionMapper, "sessionMapper must not be null");
         this.taskMapper = Objects.requireNonNull(taskMapper, "taskMapper must not be null");
@@ -57,6 +62,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
         this.eventAppender = Objects.requireNonNull(eventAppender, "eventAppender must not be null");
         this.outboxWriter = Objects.requireNonNull(outboxWriter, "outboxWriter must not be null");
         this.canonicalJson = Objects.requireNonNull(canonicalJson, "canonicalJson must not be null");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
     }
 
     @Override
@@ -64,7 +70,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
     public CreateResult createTaskWithInitialRun(CreateTaskCommand command) {
         Objects.requireNonNull(command, "command must not be null");
         AgentSessionEntity session = requireLockedActiveSession(command.sessionId());
-        CanonicalJsonCodec.EncodedJson request = canonicalJson.encode(command.request());
+        CanonicalJsonCodec.EncodedJson request = canonicalJson.encode(objectMapper.valueToTree(command.request()));
         CanonicalJsonCodec.EncodedJson executionConfig = canonicalJson.encode(command.executionConfig());
         LocalDateTime now = utcNow();
 
@@ -634,7 +640,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
             CanonicalJsonCodec.EncodedJson request
     ) {
         ObjectNode payload = canonicalJson.objectNode();
-        payload.set("request", command.request());
+        payload.set("request", objectMapper.valueToTree(command.request()));
         payload.put("requestDigest", request.digest());
         payload.put("taskId", command.taskId());
         return payload;
@@ -767,7 +773,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 task.getCreationIdempotencyKey(),
                 requireLong(task.getCreatedByActorId(), "createdByActorId"),
                 AgentTask.Status.valueOf(task.getStatus()),
-                task.getRequestJson(),
+                decodeTaskRequest(task.getRequestJson()),
                 task.getRequestDigest(),
                 task.getCurrentRunId(),
                 requireLong(task.getLastRunNumber(), "lastRunNumber"),
@@ -777,6 +783,14 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 requireTime(task.getUpdatedAt(), "updatedAt"),
                 optionalTime(task.getTerminalAt())
         );
+    }
+
+    private AgentTaskRequest decodeTaskRequest(String requestJson) {
+        try {
+            return objectMapper.readValue(requestJson, AgentTaskRequest.class);
+        } catch (JsonProcessingException exception) {
+            throw failure(Code.PERSISTENCE_FAILURE, "Task request JSON is invalid");
+        }
     }
 
     private AgentRun toDomain(AgentRunEntity run) {
