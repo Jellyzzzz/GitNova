@@ -164,13 +164,27 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
     @Transactional
     public ClaimResult claimRun(ClaimCommand command) {
         Objects.requireNonNull(command, "command must not be null");
-        LockedExecution locked = lockExecution(command.sessionId(), command.taskId(), command.runId());
-        if (!eligibleTaskAndWorkspace(locked)) {
+
+        // Global lock order: Session -> Task -> Run -> Workspace.
+        requireLockedActiveSession(command.sessionId());
+        AgentTaskEntity task = requireLockedTask(command.taskId(), command.sessionId());
+        AgentRunEntity run = runMapper.selectForUpdate(command.runId());
+        if (run == null) {
+            throw failure(Code.UNKNOWN_RUN, "Unknown Run: " + command.runId());
+        }
+        if (!task.getTaskId().equals(run.getTaskId())
+                || !command.sessionId().equals(run.getSessionId())) {
+            throw failure(Code.STATE_CONFLICT, "Run does not belong to Task and Session");
+        }
+        AgentWorkspaceEntity workspace = requireLockedReadyWorkspace(command.sessionId());
+
+        if (!AgentTask.Status.ACTIVE.name().equals(task.getStatus())
+                || !run.getRunId().equals(task.getCurrentRunId())
+                || !"READY".equals(workspace.getStatus())) {
             return new ClaimResult(ClaimDisposition.NOT_CLAIMABLE, null);
         }
-        AgentRunEntity run = locked.run();
-        AgentWorkspaceEntity workspace = locked.workspace();
 
+        // Redelivery to the current lease owner is an idempotent claim.
         if (AgentRun.Status.RUNNING.name().equals(run.getStatus())
                 && command.workerId().equals(run.getLeaseOwner())
                 && run.getCurrentFencingToken() != null
@@ -183,6 +197,8 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 ) == 1) {
             return new ClaimResult(ClaimDisposition.ALREADY_CLAIMED, toDomain(run));
         }
+
+        // A fresh claim starts only from QUEUED with no Workspace writer.
         if (!AgentRun.Status.QUEUED.name().equals(run.getStatus())
                 || workspace.getWriterRunId() != null) {
             return new ClaimResult(ClaimDisposition.NOT_CLAIMABLE, null);
@@ -249,7 +265,9 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 command.runId(),
                 command.expiredFencingToken()
         );
-        if (run == null || !belongsTo(run, task, command.sessionId())) {
+        if (run == null
+                || !task.getTaskId().equals(run.getTaskId())
+                || !command.sessionId().equals(run.getSessionId())) {
             return new LeaseExpiryResult(false, null);
         }
         AgentWorkspaceEntity workspace = requireLockedReadyWorkspace(command.sessionId());
@@ -272,7 +290,8 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 workspace
         );
         enqueueDispatch(
-                recoveryDispatchEventId(command.runId(), command.expiredFencingToken()),
+                "run:dispatch:" + command.runId()
+                        + ":recovery:" + command.expiredFencingToken(),
                 command.runId(),
                 "RECOVERY",
                 command.expiredFencingToken()
@@ -284,14 +303,28 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
     @Transactional
     public TakeoverResult takeoverRun(TakeoverCommand command) {
         Objects.requireNonNull(command, "command must not be null");
-        LockedExecution locked = lockExecution(command.sessionId(), command.taskId(), command.runId());
-        if (!eligibleTaskAndWorkspace(locked)
-                || !AgentRun.Status.RUNNING.name().equals(locked.run().getStatus())) {
+
+        // Global lock order: Session -> Task -> Run -> Workspace.
+        requireLockedActiveSession(command.sessionId());
+        AgentTaskEntity task = requireLockedTask(command.taskId(), command.sessionId());
+        AgentRunEntity run = runMapper.selectForUpdate(command.runId());
+        if (run == null) {
+            throw failure(Code.UNKNOWN_RUN, "Unknown Run: " + command.runId());
+        }
+        if (!task.getTaskId().equals(run.getTaskId())
+                || !command.sessionId().equals(run.getSessionId())) {
+            throw failure(Code.STATE_CONFLICT, "Run does not belong to Task and Session");
+        }
+        AgentWorkspaceEntity workspace = requireLockedReadyWorkspace(command.sessionId());
+
+        if (!AgentTask.Status.ACTIVE.name().equals(task.getStatus())
+                || !run.getRunId().equals(task.getCurrentRunId())
+                || !"READY".equals(workspace.getStatus())
+                || !AgentRun.Status.RUNNING.name().equals(run.getStatus())) {
             return new TakeoverResult(TakeoverDisposition.NOT_ELIGIBLE, null);
         }
-        AgentRunEntity run = locked.run();
-        AgentWorkspaceEntity workspace = locked.workspace();
 
+        // The same recovery delivery is idempotent after a successful takeover.
         if (run.getCurrentFencingToken() != null
                 && run.getCurrentFencingToken() > command.expiredFencingToken()
                 && command.workerId().equals(run.getLeaseOwner())
@@ -304,6 +337,8 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 ) == 1) {
             return new TakeoverResult(TakeoverDisposition.ALREADY_TAKEN_OVER, toDomain(run));
         }
+
+        // A real takeover must still own the exact expired fence on Run and Workspace.
         if (!Objects.equals(run.getCurrentFencingToken(), command.expiredFencingToken())
                 || !Objects.equals(workspace.getLastAcceptedFencingToken(), command.expiredFencingToken())
                 || !run.getRunId().equals(workspace.getWriterRunId())) {
@@ -351,76 +386,119 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
     @Transactional
     public TerminalResult terminateRun(TerminalCommand command) {
         Objects.requireNonNull(command, "command must not be null");
-        LockedExecution locked = lockExecution(command.sessionId(), command.taskId(), command.runId());
-        AgentTask.Status taskStatus = taskStatus(command.outcome());
-        AgentRun.Status runStatus = AgentRun.Status.valueOf(command.outcome().name());
 
-        if (runStatus.name().equals(locked.run().getStatus())) {
-            if (taskStatus.name().equals(locked.task().getStatus())
-                    && locked.task().getCurrentRunId() == null
-                    && locked.workspace().getWriterRunId() == null
-                    && Objects.equals(locked.run().getCurrentFencingToken(), command.fencingToken())
-                    && Objects.equals(locked.run().getTerminationReason(), command.terminationReason())
+        // Global lock order: Session -> Task -> Run -> Workspace.
+        requireLockedActiveSession(command.sessionId());
+        AgentTaskEntity task = requireLockedTask(command.taskId(), command.sessionId());
+        AgentRunEntity run = runMapper.selectForUpdate(command.runId());
+        if (run == null) {
+            throw failure(Code.UNKNOWN_RUN, "Unknown Run: " + command.runId());
+        }
+        if (!task.getTaskId().equals(run.getTaskId())
+                || !command.sessionId().equals(run.getSessionId())) {
+            throw failure(Code.STATE_CONFLICT, "Run does not belong to Task and Session");
+        }
+        AgentWorkspaceEntity workspace = requireLockedReadyWorkspace(command.sessionId());
+
+        AgentRun.Status runStatus = AgentRun.Status.valueOf(command.outcome().name());
+        AgentTask.Status taskStatus = switch (command.outcome()) {
+            case COMPLETED -> AgentTask.Status.COMPLETED;
+            case PARTIAL -> AgentTask.Status.WAITING_USER;
+            case FAILED -> AgentTask.Status.ACTIVE;
+            case CANCELLED -> AgentTask.Status.CANCELLED;
+        };
+        AgentStepType runStepType = switch (command.outcome()) {
+            case COMPLETED -> AgentStepType.RUN_COMPLETED;
+            case PARTIAL -> AgentStepType.RUN_PARTIAL;
+            case FAILED -> AgentStepType.RUN_FAILED;
+            case CANCELLED -> AgentStepType.RUN_CANCELLED;
+        };
+        AgentStepType taskStepType = switch (command.outcome()) {
+            case COMPLETED -> AgentStepType.TASK_COMPLETED;
+            case PARTIAL -> AgentStepType.TASK_WAITING_USER;
+            case FAILED -> AgentStepType.TASK_RUN_FAILED;
+            case CANCELLED -> AgentStepType.TASK_CANCELLED;
+        };
+
+        // Retry verifies the committed projection; first delivery performs all three CAS writes.
+        boolean terminalRetry = runStatus.name().equals(run.getStatus());
+        if (terminalRetry) {
+            boolean committedProjectionMatches = taskStatus.name().equals(task.getStatus())
+                    && task.getCurrentRunId() == null
+                    && workspace.getWriterRunId() == null
+                    && Objects.equals(run.getCurrentFencingToken(), command.fencingToken())
+                    && Objects.equals(run.getTerminationReason(), command.terminationReason())
                     && Objects.equals(
-                            locked.workspace().getLastAcceptedFencingToken(),
+                            workspace.getLastAcceptedFencingToken(),
                             Math.incrementExact(command.fencingToken())
                     )
                     && (
                             !taskStatus.terminal()
                                     || Objects.equals(
-                                            locked.task().getTerminalReason(),
+                                            task.getTerminalReason(),
                                             command.terminationReason()
                                     )
-                    )) {
-                appendTerminalEvents(command, taskStatus, locked.workspace());
-                return new TerminalResult(toDomain(locked.task()), toDomain(locked.run()));
+                    );
+            if (!committedProjectionMatches) {
+                throw failure(
+                        Code.STATE_CONFLICT,
+                        "Terminal Run retry conflicts with Task/Workspace projection"
+                );
             }
-            throw failure(Code.STATE_CONFLICT, "Terminal Run retry conflicts with Task/Workspace projection");
+            // Re-appending the terminal events below verifies the committed event semantics.
+        } else {
+            if (!AgentTask.Status.ACTIVE.name().equals(task.getStatus())
+                    || !run.getRunId().equals(task.getCurrentRunId())
+                    || !"READY".equals(workspace.getStatus())
+                    || !AgentRun.Status.RUNNING.name().equals(run.getStatus())
+                    || !command.workerId().equals(run.getLeaseOwner())
+                    || !Objects.equals(run.getCurrentFencingToken(), command.fencingToken())
+                    || !command.runId().equals(workspace.getWriterRunId())
+                    || !Objects.equals(
+                            workspace.getLastAcceptedFencingToken(),
+                            command.fencingToken()
+                    )) {
+                throw failure(
+                        Code.LEASE_LOST,
+                        "Run no longer owns Task execution and Workspace mutation"
+                );
+            }
+
+            LocalDateTime taskTerminalAt = taskStatus.terminal() ? utcNow() : null;
+            String taskTerminalReason = taskStatus.terminal()
+                    ? command.terminationReason()
+                    : null;
+            if (runMapper.terminate(
+                    command.runId(),
+                    command.workerId(),
+                    command.fencingToken(),
+                    runStatus.name(),
+                    command.terminationReason()
+            ) != 1 || taskMapper.transitionAfterRun(
+                    command.taskId(),
+                    command.sessionId(),
+                    command.runId(),
+                    taskStatus.name(),
+                    taskTerminalReason,
+                    taskTerminalAt
+            ) != 1) {
+                throw failure(Code.LEASE_LOST, "Run terminal transition lost ownership");
+            }
+
+            long revokedFence = Math.incrementExact(command.fencingToken());
+            if (workspaceMapper.releaseWriter(
+                    workspace.getWorkspaceId(),
+                    command.runId(),
+                    command.fencingToken(),
+                    revokedFence
+            ) != 1) {
+                throw failure(
+                        Code.FENCING_CONFLICT,
+                        "Could not revoke Workspace writer on Run termination"
+                );
+            }
         }
-        requireTerminalOwnership(command, locked);
 
-        LocalDateTime taskTerminalAt = taskStatus.terminal() ? utcNow() : null;
-        String taskTerminalReason = taskStatus.terminal() ? command.terminationReason() : null;
-        if (runMapper.terminate(
-                command.runId(),
-                command.workerId(),
-                command.fencingToken(),
-                runStatus.name(),
-                command.terminationReason()
-        ) != 1 || taskMapper.transitionAfterRun(
-                command.taskId(),
-                command.sessionId(),
-                command.runId(),
-                taskStatus.name(),
-                taskTerminalReason,
-                taskTerminalAt
-        ) != 1) {
-            throw failure(Code.LEASE_LOST, "Run terminal transition lost ownership");
-        }
-
-        long revokedFence = Math.incrementExact(command.fencingToken());
-        if (workspaceMapper.releaseWriter(
-                locked.workspace().getWorkspaceId(),
-                command.runId(),
-                command.fencingToken(),
-                revokedFence
-        ) != 1) {
-            throw failure(Code.FENCING_CONFLICT, "Could not revoke Workspace writer on Run termination");
-        }
-
-        appendTerminalEvents(command, taskStatus, locked.workspace());
-        return new TerminalResult(
-                toDomain(requireTask(command.taskId())),
-                toDomain(requireRun(command.runId()))
-        );
-    }
-
-    private void appendTerminalEvents(
-            TerminalCommand command,
-            AgentTask.Status taskStatus,
-            AgentWorkspaceEntity workspace
-    ) {
-        AgentStepType runStepType = runTerminalStepType(command.outcome());
         ObjectNode runPayload = canonicalJson.objectNode();
         runPayload.put("outcome", command.outcome().name());
         runPayload.put("runId", command.runId());
@@ -444,10 +522,18 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 command.taskEventId(),
                 command.sessionId(),
                 command.taskId(),
-                taskStepType(command.outcome()),
+                taskStepType,
                 taskPayload,
                 command.runEventId(),
                 workspace
+        );
+
+        if (terminalRetry) {
+            return new TerminalResult(toDomain(task), toDomain(run));
+        }
+        return new TerminalResult(
+                toDomain(requireTask(command.taskId())),
+                toDomain(requireRun(command.runId()))
         );
     }
 
@@ -463,20 +549,6 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
     public Optional<AgentRun> findRun(String runId) {
         requireNonBlank(runId, "runId");
         return Optional.ofNullable(runMapper.selectById(runId)).map(this::toDomain);
-    }
-
-    private LockedExecution lockExecution(String sessionId, String taskId, String runId) {
-        requireLockedActiveSession(sessionId);
-        AgentTaskEntity task = requireLockedTask(taskId, sessionId);
-        AgentRunEntity run = runMapper.selectForUpdate(runId);
-        if (run == null) {
-            throw failure(Code.UNKNOWN_RUN, "Unknown Run: " + runId);
-        }
-        if (!belongsTo(run, task, sessionId)) {
-            throw failure(Code.STATE_CONFLICT, "Run does not belong to Task and Session");
-        }
-        AgentWorkspaceEntity workspace = requireLockedReadyWorkspace(sessionId);
-        return new LockedExecution(task, run, workspace);
     }
 
     private AgentSessionEntity requireLockedActiveSession(String sessionId) {
@@ -511,23 +583,6 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
             throw failure(Code.STATE_CONFLICT, "Logical Workspace must be READY");
         }
         return locked;
-    }
-
-    private boolean eligibleTaskAndWorkspace(LockedExecution locked) {
-        return AgentTask.Status.ACTIVE.name().equals(locked.task().getStatus())
-                && locked.run().getRunId().equals(locked.task().getCurrentRunId())
-                && "READY".equals(locked.workspace().getStatus());
-    }
-
-    private void requireTerminalOwnership(TerminalCommand command, LockedExecution locked) {
-        if (!eligibleTaskAndWorkspace(locked)
-                || !AgentRun.Status.RUNNING.name().equals(locked.run().getStatus())
-                || !command.workerId().equals(locked.run().getLeaseOwner())
-                || !Objects.equals(locked.run().getCurrentFencingToken(), command.fencingToken())
-                || !command.runId().equals(locked.workspace().getWriterRunId())
-                || !Objects.equals(locked.workspace().getLastAcceptedFencingToken(), command.fencingToken())) {
-            throw failure(Code.LEASE_LOST, "Run no longer owns Task execution and Workspace mutation");
-        }
     }
 
     private void verifySameTaskRequest(
@@ -632,10 +687,6 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
         ));
     }
 
-    private static String recoveryDispatchEventId(String runId, long expiredFencingToken) {
-        return "run:dispatch:" + runId + ":recovery:" + expiredFencingToken;
-    }
-
     private void appendTaskEvent(
             String eventId,
             String sessionId,
@@ -683,33 +734,6 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 workspace.getWorkspaceEpoch(),
                 workspace.getGeneration()
         ));
-    }
-
-    private static AgentTask.Status taskStatus(TerminalOutcome outcome) {
-        return switch (outcome) {
-            case COMPLETED -> AgentTask.Status.COMPLETED;
-            case PARTIAL -> AgentTask.Status.WAITING_USER;
-            case FAILED -> AgentTask.Status.ACTIVE;
-            case CANCELLED -> AgentTask.Status.CANCELLED;
-        };
-    }
-
-    private static AgentStepType runTerminalStepType(TerminalOutcome outcome) {
-        return switch (outcome) {
-            case COMPLETED -> AgentStepType.RUN_COMPLETED;
-            case PARTIAL -> AgentStepType.RUN_PARTIAL;
-            case FAILED -> AgentStepType.RUN_FAILED;
-            case CANCELLED -> AgentStepType.RUN_CANCELLED;
-        };
-    }
-
-    private static AgentStepType taskStepType(TerminalOutcome outcome) {
-        return switch (outcome) {
-            case COMPLETED -> AgentStepType.TASK_COMPLETED;
-            case PARTIAL -> AgentStepType.TASK_WAITING_USER;
-            case FAILED -> AgentStepType.TASK_RUN_FAILED;
-            case CANCELLED -> AgentStepType.TASK_CANCELLED;
-        };
     }
 
     private AgentTaskEntity requireTask(String taskId) {
@@ -779,15 +803,6 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
         );
     }
 
-    private static boolean belongsTo(
-            AgentRunEntity run,
-            AgentTaskEntity task,
-            String sessionId
-    ) {
-        return task.getTaskId().equals(run.getTaskId())
-                && sessionId.equals(run.getSessionId());
-    }
-
     private static long requireNonNegative(Long value, String field) {
         long actual = requireLong(value, field);
         if (actual < 0) {
@@ -829,10 +844,4 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
         return new AgentExecutionPersistenceException(code, message);
     }
 
-    private record LockedExecution(
-            AgentTaskEntity task,
-            AgentRunEntity run,
-            AgentWorkspaceEntity workspace
-    ) {
-    }
 }
