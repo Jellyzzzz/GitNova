@@ -1,5 +1,6 @@
 package com.gitnova.service.agent.execution;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -21,6 +22,7 @@ public interface AgentTaskRunStore {
 
     Optional<AgentRun> findRun(String runId);
 
+    List<AgentRun> findExpiredRuns(int limit);
     record CreateResult(AgentTask task, AgentRun initialRun, boolean created) {
         public CreateResult {
             Objects.requireNonNull(task, "task must not be null");

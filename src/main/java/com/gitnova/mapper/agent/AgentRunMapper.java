@@ -1,11 +1,14 @@
 package com.gitnova.mapper.agent;
 
 import com.gitnova.entity.agent.AgentRunEntity;
+import com.gitnova.service.agent.execution.AgentRun;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+
+import java.util.List;
 
 @Mapper
 public interface AgentRunMapper {
@@ -78,6 +81,14 @@ public interface AgentRunMapper {
             @Param("workerId") String workerId,
             @Param("fencingToken") long fencingToken
     );
+    @Select("""
+            SELECT * FROM agent_run
+            WHERE status='RUNNIG'
+            AND   lease_until<=UTC_TIMESTAMP(6)
+            ORDER BY lease_until
+            LIMIT #{limit}
+            """)
+    List<AgentRunEntity>selectExpiredRuns(@Param("limit") int limit);
 
     @Update("""
             UPDATE agent_run

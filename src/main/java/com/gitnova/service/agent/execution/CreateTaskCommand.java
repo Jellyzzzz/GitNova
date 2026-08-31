@@ -1,6 +1,7 @@
 package com.gitnova.service.agent.execution;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.gitnova.service.agent.runtime.AgentExecutionConfig;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
@@ -14,7 +15,7 @@ public record CreateTaskCommand(
         String sessionId,
         long createdByActorId,
         AgentTaskRequest request,
-        JsonNode executionConfig
+        AgentExecutionConfig executionConfig
 ) {
     private static final int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
@@ -25,16 +26,12 @@ public record CreateTaskCommand(
         requireUuid(sessionId, "sessionId");
         Objects.requireNonNull(request, "request must not be null");
         Objects.requireNonNull(executionConfig, "executionConfig must not be null");
-        if (!executionConfig.isObject()) {
-            throw new IllegalArgumentException("executionConfig must be a JSON object");
-        }
         if (creationIdempotencyKey.length() > MAX_IDEMPOTENCY_KEY_LENGTH) {
             throw new IllegalArgumentException("creationIdempotencyKey exceeds the length limit");
         }
         if (createdByActorId <= 0) {
             throw new IllegalArgumentException("createdByActorId must be positive");
         }
-        executionConfig = executionConfig.deepCopy();
     }
 
     public static CreateTaskCommand prepare(
@@ -42,7 +39,7 @@ public record CreateTaskCommand(
             String sessionId,
             long createdByActorId,
             AgentTaskRequest request,
-            JsonNode executionConfig
+            AgentExecutionConfig executionConfig
     ) {
         return new CreateTaskCommand(
                 creationIdempotencyKey,

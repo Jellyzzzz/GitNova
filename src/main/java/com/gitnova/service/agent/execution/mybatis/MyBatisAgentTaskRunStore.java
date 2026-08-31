@@ -28,6 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -71,7 +73,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
         Objects.requireNonNull(command, "command must not be null");
         AgentSessionEntity session = requireLockedActiveSession(command.sessionId());
         CanonicalJsonCodec.EncodedJson request = canonicalJson.encode(objectMapper.valueToTree(command.request()));
-        CanonicalJsonCodec.EncodedJson executionConfig = canonicalJson.encode(command.executionConfig());
+        CanonicalJsonCodec.EncodedJson executionConfig = canonicalJson.encode(objectMapper.valueToTree(command.executionConfig()));
         LocalDateTime now = utcNow();
 
         AgentTaskEntity candidate = new AgentTaskEntity();
@@ -555,6 +557,18 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
     public Optional<AgentRun> findRun(String runId) {
         requireNonBlank(runId, "runId");
         return Optional.ofNullable(runMapper.selectById(runId)).map(this::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AgentRun> findExpiredRuns(int limit){
+        List<AgentRunEntity>runEntities=runMapper.selectExpiredRuns(limit);
+        if(runEntities==null) return null;
+        List<AgentRun>result=new ArrayList<>(limit);
+        for(AgentRunEntity runEntity:runEntities){
+            result.add(toDomain(runEntity));
+        }
+        return List.copyOf(result);
     }
 
     private AgentSessionEntity requireLockedActiveSession(String sessionId) {
