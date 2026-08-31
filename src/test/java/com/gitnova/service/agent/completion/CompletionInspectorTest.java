@@ -265,6 +265,7 @@ class CompletionInspectorTest {
         @Override
         public PatchBatchResult applyPatch(
                 WorkspaceId workspaceId,
+                WorkspaceExecutionPermit executionPermit,
                 WorkspaceMutationCommand command
         ) {
             throw new UnsupportedOperationException();

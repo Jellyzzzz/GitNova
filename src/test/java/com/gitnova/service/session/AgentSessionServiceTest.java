@@ -4,6 +4,7 @@ import com.gitnova.gitobject.GitObjectId;
 import com.gitnova.service.agent.workspace.SnapshotScope;
 import com.gitnova.service.agent.workspace.WorkspaceHandle;
 import com.gitnova.service.agent.workspace.WorkspaceId;
+import com.gitnova.service.agent.workspace.LocalWorkspaceRegistry;
 import com.gitnova.service.agent.workspace.WorkspaceProvider;
 import com.gitnova.service.agent.workspace.WorkspaceProvisionException;
 import com.gitnova.service.agent.workspace.WorkspaceSpec;
@@ -42,6 +43,9 @@ class AgentSessionServiceTest {
 
     @Mock
     WorkspaceProvider workspaceProvider;
+
+    @Mock
+    LocalWorkspaceRegistry workspaceRegistry;
 
     @TempDir
     Path tempDir;
@@ -88,6 +92,7 @@ class AgentSessionServiceTest {
         AgentSession result = service().create(command);
 
         assertSame(active, result);
+        verify(workspaceRegistry).register(handle);
         ArgumentCaptor<WorkspaceSpec> spec = ArgumentCaptor.forClass(WorkspaceSpec.class);
         verify(workspaceProvider).provision(spec.capture());
         assertEquals(persisted.workspaceId(), spec.getValue().workspaceId());
@@ -170,7 +175,7 @@ class AgentSessionServiceTest {
     }
 
     private AgentSessionService service() {
-        return new AgentSessionService(sessionStore, workspaceProvider);
+        return new AgentSessionService(sessionStore, workspaceProvider, workspaceRegistry);
     }
 
     private AgentSession session(

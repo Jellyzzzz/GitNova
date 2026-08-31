@@ -89,6 +89,7 @@ class AgentRuntimeWorkspaceDriftTest {
             @Override
             public PatchBatchResult applyPatch(
                     WorkspaceId ignored,
+                    WorkspaceExecutionPermit executionPermit,
                     WorkspaceMutationCommand command
             ) {
                 throw new AssertionError("mutation must not execute");
@@ -129,6 +130,7 @@ class AgentRuntimeWorkspaceDriftTest {
             @Override
             public PatchBatchResult applyPatch(
                     WorkspaceId ignored,
+                    WorkspaceExecutionPermit executionPermit,
                     WorkspaceMutationCommand command
             ) {
                 throw new AssertionError("mutation must not execute");
@@ -438,6 +440,7 @@ class AgentRuntimeWorkspaceDriftTest {
         @Override
         public PatchBatchResult applyPatch(
                 WorkspaceId workspaceId,
+                WorkspaceExecutionPermit executionPermit,
                 WorkspaceMutationCommand command
         ) {
             throw new UnsupportedOperationException();
@@ -475,6 +478,7 @@ class AgentRuntimeWorkspaceDriftTest {
         @Override
         public PatchBatchResult applyPatch(
                 WorkspaceId workspaceId,
+                WorkspaceExecutionPermit executionPermit,
                 WorkspaceMutationCommand command
         ) {
             throw new UnsupportedOperationException();

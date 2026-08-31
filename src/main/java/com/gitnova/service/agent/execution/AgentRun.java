@@ -1,5 +1,7 @@
 package com.gitnova.service.agent.execution;
 
+import com.gitnova.service.agent.runtime.AgentExecutionConfig;
+
 import java.time.Instant;
 import java.util.Objects;
 
@@ -15,7 +17,7 @@ public record AgentRun(
         String leaseOwner,
         Instant leaseUntil,
         Long currentFencingToken,
-        String executionConfigJson,
+        AgentExecutionConfig executionConfig,
         String executionConfigDigest,
         String terminationReason,
         long version,
@@ -42,7 +44,7 @@ public record AgentRun(
         requireNonBlank(runId, "runId");
         requireNonBlank(sessionId, "sessionId");
         requireNonBlank(taskId, "taskId");
-        requireNonBlank(executionConfigJson, "executionConfigJson");
+        Objects.requireNonNull(executionConfig, "executionConfig must not be null");
         requireDigest(executionConfigDigest, "executionConfigDigest");
         Objects.requireNonNull(status, "status must not be null");
         Objects.requireNonNull(createdAt, "createdAt must not be null");

@@ -83,12 +83,12 @@ public interface AgentRunMapper {
     );
     @Select("""
             SELECT * FROM agent_run
-            WHERE status='RUNNIG'
-            AND   lease_until<=UTC_TIMESTAMP(6)
-            ORDER BY lease_until
+            WHERE status = 'RUNNING'
+              AND lease_until <= UTC_TIMESTAMP(6)
+            ORDER BY lease_until, run_id
             LIMIT #{limit}
             """)
-    List<AgentRunEntity>selectExpiredRuns(@Param("limit") int limit);
+    List<AgentRunEntity> selectExpiredRuns(@Param("limit") int limit);
 
     @Update("""
             UPDATE agent_run

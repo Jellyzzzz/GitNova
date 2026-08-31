@@ -1,5 +1,6 @@
 package com.gitnova.service.agent.dispatch;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gitnova.entity.agent.AgentOutboxEntity;
 import com.gitnova.mapper.agent.AgentOutboxMapper;
 import org.junit.jupiter.api.Test;
@@ -48,7 +49,12 @@ class OutboxPublisherTest {
         }).when(rabbitTemplate).convertAndSend(
                 eq(AgentRabbitConfiguration.RUN_EXCHANGE),
                 eq(AgentRabbitConfiguration.RUN_ROUTING_KEY),
-                eq(new RunDispatchMessage("dispatch-1", "run-1")),
+                eq(new RunDispatchMessage(
+                        "dispatch-1",
+                        "run-1",
+                        RunDispatchReason.INITIAL,
+                        null
+                )),
                 any(CorrelationData.class)
         );
 
@@ -134,15 +140,84 @@ class OutboxPublisherTest {
         verify(outboxMapper, never()).markPublished(17L);
     }
 
+    @Test
+    void shouldQuarantineMalformedPayloadAndContinueWithTheNextRow() {
+        AgentOutboxEntity malformed = event(
+                16L,
+                "dispatch-bad",
+                "run-bad",
+                "{"
+        );
+        AgentOutboxEntity valid = event();
+        AtomicReference<CorrelationData> sentCorrelation = new AtomicReference<>();
+        when(outboxMapper.findPublishable(100)).thenReturn(List.of(malformed, valid));
+        doAnswer(invocation -> {
+            sentCorrelation.set(invocation.getArgument(3));
+            return null;
+        }).when(rabbitTemplate).convertAndSend(
+                eq(AgentRabbitConfiguration.RUN_EXCHANGE),
+                eq(AgentRabbitConfiguration.RUN_ROUTING_KEY),
+                any(RunDispatchMessage.class),
+                any(CorrelationData.class)
+        );
+
+        publisher().publishPending();
+
+        verify(outboxMapper).markFailed(16L, "INVALID_DISPATCH_PAYLOAD");
+        assertEquals("dispatch-1", sentCorrelation.get().getId());
+        sentCorrelation.get().getFuture().complete(new CorrelationData.Confirm(true, null));
+        verify(outboxMapper).markPublished(17L);
+    }
+
+    @Test
+    void shouldQuarantineDispatchWhosePayloadTargetsAnotherRun() {
+        AgentOutboxEntity event = event(
+                18L,
+                "dispatch-mismatch",
+                "run-aggregate",
+                """
+                        {"reason":"INITIAL","runId":"run-payload","expiredFencingToken":null}
+                        """
+        );
+        when(outboxMapper.findPublishable(100)).thenReturn(List.of(event));
+
+        publisher().publishPending();
+
+        verify(outboxMapper).markFailed(18L, "DISPATCH_AGGREGATE_MISMATCH");
+        verify(rabbitTemplate, never()).convertAndSend(
+                any(String.class),
+                any(String.class),
+                any(RunDispatchMessage.class),
+                any(CorrelationData.class)
+        );
+    }
+
     private OutboxPublisher publisher() {
-        return new OutboxPublisher(outboxMapper, rabbitTemplate);
+        return new OutboxPublisher(new ObjectMapper(), outboxMapper, rabbitTemplate);
     }
 
     private AgentOutboxEntity event() {
+        return event(
+                17L,
+                "dispatch-1",
+                "run-1",
+                """
+                        {"reason":"INITIAL","runId":"run-1","expiredFencingToken":null}
+                        """
+        );
+    }
+
+    private AgentOutboxEntity event(
+            long outboxId,
+            String eventId,
+            String aggregateId,
+            String payloadJson
+    ) {
         AgentOutboxEntity event = new AgentOutboxEntity();
-        event.setOutboxId(17L);
-        event.setEventId("dispatch-1");
-        event.setAggregateId("run-1");
+        event.setOutboxId(outboxId);
+        event.setEventId(eventId);
+        event.setAggregateId(aggregateId);
+        event.setPayloadJson(payloadJson);
         return event;
     }
 }

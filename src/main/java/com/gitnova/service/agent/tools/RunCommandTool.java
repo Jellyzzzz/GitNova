@@ -104,6 +104,7 @@ public final class RunCommandTool implements AgentTool {
         try {
             WorkspaceGateway.CommandResult result = workspaceGateway.runCommand(
                     execution.requireWorkspaceId(),
+                    execution.requireExecutionPermit(),
                     request
             );
             JsonNode payload = objectMapper.valueToTree(result);

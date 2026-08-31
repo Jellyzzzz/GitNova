@@ -74,4 +74,18 @@ public interface AgentOutboxMapper {
             @Param("outboxId") long outboxId,
             @Param("nextAvailableAt") LocalDateTime nextAvailableAt
     );
+
+    @Update("""
+            UPDATE agent_outbox
+            SET status = 'FAILED',
+                last_error_code = #{errorCode},
+                failed_at = UTC_TIMESTAMP(6),
+                updated_at = UTC_TIMESTAMP(6)
+            WHERE outbox_id = #{outboxId}
+              AND status = 'PENDING'
+            """)
+    int markFailed(
+            @Param("outboxId") long outboxId,
+            @Param("errorCode") String errorCode
+    );
 }

@@ -15,8 +15,9 @@ Current sequence:
 V1__baseline_existing_schema.sql
 V2__agent_session_foundation.sql
 V3__agent_task_run_foundation.sql
+V4__agent_outbox_quarantine.sql
 ```
 
 Flyway is the single migration mechanism. `baseline-on-migrate=1` adopts a legacy non-empty development
-database without replaying V1; a new empty database executes V1 before applying V2. Runtime services must
+database without replaying V1; a new empty database executes the ordered migration sequence. Runtime services must
 not create or alter tables programmatically.

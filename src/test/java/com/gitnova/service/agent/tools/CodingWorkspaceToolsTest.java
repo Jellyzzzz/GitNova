@@ -16,6 +16,7 @@ import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
 import com.gitnova.service.agent.workspace.PatchBatchResult;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 import com.gitnova.service.agent.workspace.WorkspaceMutationCommand;
 import com.gitnova.service.agent.workspace.SnapshotScope;
@@ -199,13 +200,18 @@ class CodingWorkspaceToolsTest {
             @Override
             public PatchBatchResult applyPatch(
                     WorkspaceId workspaceId,
+                    WorkspaceExecutionPermit executionPermit,
                     WorkspaceMutationCommand command
             ) {
                 throw new UnsupportedOperationException();
             }
 
             @Override
-            public CommandResult runCommand(WorkspaceId workspaceId, CommandRequest request) {
+            public CommandResult runCommand(
+                    WorkspaceId workspaceId,
+                    WorkspaceExecutionPermit executionPermit,
+                    CommandRequest request
+            ) {
                 invocations.incrementAndGet();
                 throw new AssertionError("empty command must not execute");
             }
@@ -287,6 +293,7 @@ class CodingWorkspaceToolsTest {
         @Override
         public PatchBatchResult applyPatch(
                 WorkspaceId workspaceId,
+                WorkspaceExecutionPermit executionPermit,
                 WorkspaceMutationCommand command
         ) {
             throw new UnsupportedOperationException();
@@ -360,7 +367,11 @@ class CodingWorkspaceToolsTest {
         }
 
         @Override
-        public CommandResult runCommand(WorkspaceId workspaceId, CommandRequest request) {
+        public CommandResult runCommand(
+                WorkspaceId workspaceId,
+                WorkspaceExecutionPermit executionPermit,
+                CommandRequest request
+        ) {
             if (request.expectedGeneration() != 4) {
                 return new CommandResult(
                         CommandStatus.CONFLICT,

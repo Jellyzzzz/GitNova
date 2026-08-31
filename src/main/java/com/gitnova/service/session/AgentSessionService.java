@@ -4,6 +4,7 @@ import com.gitnova.service.agent.workspace.WorkspaceHandle;
 import com.gitnova.service.agent.workspace.WorkspaceOperationException;
 import com.gitnova.service.agent.workspace.WorkspaceProvider;
 import com.gitnova.service.agent.workspace.WorkspaceProvisionException;
+import com.gitnova.service.agent.workspace.LocalWorkspaceRegistry;
 import com.gitnova.service.agent.workspace.WorkspaceSpec;
 import com.gitnova.service.agent.workspace.WorkspaceTreeFingerprint;
 import org.springframework.stereotype.Service;
@@ -22,10 +23,12 @@ public class AgentSessionService {
 
     private final AgentSessionStore sessionStore;
     private final WorkspaceProvider workspaceProvider;
+    private final LocalWorkspaceRegistry workspaceRegistry;
 
     public AgentSessionService(
             AgentSessionStore sessionStore,
-            WorkspaceProvider workspaceProvider
+            WorkspaceProvider workspaceProvider,
+            LocalWorkspaceRegistry workspaceRegistry
     ) {
         this.sessionStore = Objects.requireNonNull(
                 sessionStore,
@@ -34,6 +37,10 @@ public class AgentSessionService {
         this.workspaceProvider = Objects.requireNonNull(
                 workspaceProvider,
                 "workspaceProvider must not be null"
+        );
+        this.workspaceRegistry = Objects.requireNonNull(
+                workspaceRegistry,
+                "workspaceRegistry must not be null"
         );
     }
 
@@ -58,7 +65,7 @@ public class AgentSessionService {
         try {
             WorkspaceHandle handle = workspaceProvider.provision(trustedSpec);
             String fingerprint = WorkspaceTreeFingerprint.capture(handle.root());
-            return sessionStore.activate(new AgentSessionStore.WorkspaceActivation(
+            AgentSession active = sessionStore.activate(new AgentSessionStore.WorkspaceActivation(
                     workspaceMaterializedEventId(session),
                     session.sessionId(),
                     workspaceProvider.providerType(),
@@ -66,6 +73,8 @@ public class AgentSessionService {
                     null,
                     fingerprint
             ));
+            workspaceRegistry.register(handle);
+            return active;
         } catch (WorkspaceProvisionException exception) {
             recordProvisioningFailure(session, exception.reason().name(), retryable(exception));
             throw exception;

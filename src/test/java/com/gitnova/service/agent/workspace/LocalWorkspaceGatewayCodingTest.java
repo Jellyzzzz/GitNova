@@ -253,14 +253,8 @@ class LocalWorkspaceGatewayCodingTest {
                 "context focused tests"
         );
 
-        WorkspaceGateway.CommandResult first = fixture.gateway().runCommand(
-                fixture.workspaceId(),
-                request
-        );
-        WorkspaceGateway.CommandResult stale = fixture.gateway().runCommand(
-                fixture.workspaceId(),
-                request
-        );
+        WorkspaceGateway.CommandResult first = fixture.runCommand(request);
+        WorkspaceGateway.CommandResult stale = fixture.runCommand(request);
 
         assertEquals(WorkspaceGateway.CommandStatus.COMPLETED, first.status());
         assertEquals(0, first.generationBefore());
@@ -286,8 +280,7 @@ class LocalWorkspaceGatewayCodingTest {
                 );
         Fixture fixture = fixture(executor);
 
-        WorkspaceGateway.CommandResult result = fixture.gateway().runCommand(
-                fixture.workspaceId(),
+        WorkspaceGateway.CommandResult result = fixture.runCommand(
                 new WorkspaceGateway.CommandRequest(
                         0,
                         List.of("test-runner"),
@@ -314,8 +307,7 @@ class LocalWorkspaceGatewayCodingTest {
 
         WorkspaceOperationException exception = assertThrows(
                 WorkspaceOperationException.class,
-                () -> fixture.gateway().runCommand(
-                        fixture.workspaceId(),
+                () -> fixture.runCommand(
                         new WorkspaceGateway.CommandRequest(
                                 0,
                                 List.of("test-runner"),
@@ -346,8 +338,7 @@ class LocalWorkspaceGatewayCodingTest {
                 );
         Fixture fixture = fixture(executor);
 
-        WorkspaceGateway.CommandResult result = fixture.gateway().runCommand(
-                fixture.workspaceId(),
+        WorkspaceGateway.CommandResult result = fixture.runCommand(
                 new WorkspaceGateway.CommandRequest(
                         0,
                         List.of("test-runner"),
@@ -382,8 +373,7 @@ class LocalWorkspaceGatewayCodingTest {
         };
         Fixture fixture = fixture(executor);
 
-        WorkspaceGateway.CommandResult result = fixture.gateway().runCommand(
-                fixture.workspaceId(),
+        WorkspaceGateway.CommandResult result = fixture.runCommand(
                 new WorkspaceGateway.CommandRequest(
                         0,
                         List.of("test-runner"),
@@ -401,6 +391,47 @@ class LocalWorkspaceGatewayCodingTest {
                 "partial output\n",
                 Files.readString(fixture.root().resolve("timeout-output.txt"))
         );
+    }
+
+    @Test
+    void shouldRejectACommandFromTheSupersededFenceBeforeExecution() {
+        AtomicInteger executions = new AtomicInteger();
+        WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) -> {
+            executions.incrementAndGet();
+            return new WorkspaceCommandExecutor.ProcessResult(
+                    false,
+                    0,
+                    1,
+                    "",
+                    "",
+                    false,
+                    false
+            );
+        };
+        Fixture fixture = fixture(executor);
+        WorkspaceGateway.CommandRequest request = new WorkspaceGateway.CommandRequest(
+                0,
+                List.of("test-runner"),
+                ".",
+                30,
+                "verify fencing"
+        );
+
+        WorkspaceGateway.CommandResult takeover = fixture.gateway().runCommand(
+                fixture.workspaceId(),
+                new WorkspaceExecutionPermit("run-b", fixture.workspaceId(), 2L),
+                request
+        );
+        WorkspaceGateway.CommandResult stale = fixture.gateway().runCommand(
+                fixture.workspaceId(),
+                new WorkspaceExecutionPermit("run-a", fixture.workspaceId(), 1L),
+                request
+        );
+
+        assertEquals(WorkspaceGateway.CommandStatus.COMPLETED, takeover.status());
+        assertEquals(WorkspaceGateway.CommandStatus.CONFLICT, stale.status());
+        assertEquals("STALE_WORKSPACE_FENCE", stale.errorCode());
+        assertEquals(1, executions.get());
     }
 
     @Test
@@ -426,8 +457,7 @@ class LocalWorkspaceGatewayCodingTest {
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
             Future<WorkspaceGateway.CommandResult> command = pool.submit(() ->
-                    fixture.gateway().runCommand(
-                            fixture.workspaceId(),
+                    fixture.runCommand(
                             new WorkspaceGateway.CommandRequest(
                                     0,
                                     List.of("test-runner"),
@@ -439,8 +469,7 @@ class LocalWorkspaceGatewayCodingTest {
             );
             assertTrue(commandStarted.await(1, TimeUnit.SECONDS));
 
-            Future<PatchBatchResult> patch = pool.submit(() -> fixture.gateway().applyPatch(
-                    fixture.workspaceId(),
+            Future<PatchBatchResult> patch = pool.submit(() -> fixture.applyPatch(
                     new WorkspaceMutationCommand(
                             0,
                             List.of(PatchOperation.create(0, "blocked.txt", "later\n"))
@@ -517,5 +546,22 @@ class LocalWorkspaceGatewayCodingTest {
             LocalWorkspaceGateway gateway,
             GitObjectReader objectReader
     ) {
+        private WorkspaceExecutionPermit executionPermit() {
+            return new WorkspaceExecutionPermit(
+                    "test-run-" + workspaceId,
+                    workspaceId,
+                    1L
+            );
+        }
+
+        private WorkspaceGateway.CommandResult runCommand(
+                WorkspaceGateway.CommandRequest request
+        ) {
+            return gateway.runCommand(workspaceId, executionPermit(), request);
+        }
+
+        private PatchBatchResult applyPatch(WorkspaceMutationCommand command) {
+            return gateway.applyPatch(workspaceId, executionPermit(), command);
+        }
     }
 }

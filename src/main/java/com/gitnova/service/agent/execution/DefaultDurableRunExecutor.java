@@ -1,8 +1,10 @@
 package com.gitnova.service.agent.execution;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.gitnova.service.agent.runtime.*;
+import com.gitnova.service.agent.runtime.AgentCapabilityPolicy;
+import com.gitnova.service.agent.runtime.AgentExecutionContext;
+import com.gitnova.service.agent.runtime.AgentRunContext;
+import com.gitnova.service.agent.runtime.AgentRunResult;
+import com.gitnova.service.agent.runtime.AgentRuntime;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
 import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.session.AgentSession;
@@ -15,53 +17,64 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Objects;
 import java.util.concurrent.ScheduledFuture;
 
 @Service
 @ConditionalOnBean(AgentRuntime.class)
 public class DefaultDurableRunExecutor implements DurableRunExecutor {
+    private static final int LEASE_SECONDS = 30;
+    private static final int HEARTBEAT_SECONDS = 10;
+    private static final Logger logger = LoggerFactory.getLogger(
+            DefaultDurableRunExecutor.class
+    );
+
     private final AgentTaskRunStore agentTaskRunStore;
     private final AgentSessionStore agentSessionStore;
     private final AgentRuntime runtime;
-    private final ObjectMapper objectMapper;
     private final TaskScheduler heartbeatScheduler;
-    private final int LEASE_SECONDS=30;
-    private final int HEARTBEAT_SECONDS=10;
-    private static final Logger logger =
-            LoggerFactory.getLogger(DefaultDurableRunExecutor.class);
+
     public DefaultDurableRunExecutor(
             AgentTaskRunStore agentTaskRunStore,
-            AgentRuntime agentRuntime,
-            AgentSessionStore agentSessionStore, AgentRuntime runtime, ObjectMapper objectMapper,
+            AgentSessionStore agentSessionStore,
+            AgentRuntime runtime,
             @Qualifier("agentHeartbeatScheduler")
             TaskScheduler heartbeatScheduler
     ) {
-        this.agentTaskRunStore = agentTaskRunStore;
-        this.agentSessionStore = agentSessionStore;
-        this.runtime = runtime;
-        this.objectMapper = objectMapper;
-        this.heartbeatScheduler=heartbeatScheduler;
+        this.agentTaskRunStore = Objects.requireNonNull(
+                agentTaskRunStore,
+                "agentTaskRunStore must not be null"
+        );
+        this.agentSessionStore = Objects.requireNonNull(
+                agentSessionStore,
+                "agentSessionStore must not be null"
+        );
+        this.runtime = Objects.requireNonNull(runtime, "runtime must not be null");
+        this.heartbeatScheduler = Objects.requireNonNull(
+                heartbeatScheduler,
+                "heartbeatScheduler must not be null"
+        );
     }
 
     @Override
-    public void execute(String runId, String workerId, long fencingToken) throws JsonProcessingException {
+    public void execute(String runId, String workerId, long fencingToken) {
         AgentRun run = agentTaskRunStore.findRun(runId).orElseThrow();
         AgentTask task = agentTaskRunStore.findTask(run.taskId()).orElseThrow();
         AgentSession session = agentSessionStore.findById(run.sessionId()).orElseThrow();
 
-        if (!AgentRun.Status.RUNNING.equals(run.status())) {
+        if (run.status() != AgentRun.Status.RUNNING) {
             return;
         }
         if (!workerId.equals(run.leaseOwner())) {
             return;
         }
-        if (!run.currentFencingToken().equals(fencingToken)) {
+        if (run.currentFencingToken() != fencingToken) {
             return;
         }
-        if (!AgentTask.Status.ACTIVE.equals(task.status())) {
+        if (task.status() != AgentTask.Status.ACTIVE) {
             return;
         }
-        if (!AgentSession.Status.ACTIVE.equals(session.status())) {
+        if (session.status() != AgentSession.Status.ACTIVE) {
             return;
         }
 
@@ -86,15 +99,29 @@ public class DefaultDurableRunExecutor implements DurableRunExecutor {
                 session.source()
         );
 
-        String taskText = task.request().message();
-        AgentExecutionConfig config=objectMapper.readValue(run.executionConfigJson(),AgentExecutionConfig.class);
-        AgentCapabilityPolicy capabilities=AgentCapabilityPolicy.cloudAgent().restrictTo(config.capabilities());
+        AgentCapabilityPolicy capabilities = AgentCapabilityPolicy.cloudAgent()
+                .restrictTo(run.executionConfig().capabilities());
 
-        AgentExecutionContext executionContext=new AgentExecutionContext(session.sessionId(),agentRunContext,task.createdByActorId(),taskText,workspace,executionPermit,capabilities);
+        AgentExecutionContext executionContext = new AgentExecutionContext(
+                session.sessionId(),
+                agentRunContext,
+                task.createdByActorId(),
+                task.request().message(),
+                workspace,
+                executionPermit,
+                capabilities
+        );
 
-        ScheduledFuture<?>scheduledFuture=startHeartbeat(runId,workerId,fencingToken);
+        AgentExecutionControl executionControl = new AgentExecutionControl();
+        ScheduledFuture<?> heartbeat = startHeartbeat(
+                runId,
+                workerId,
+                fencingToken,
+                executionControl
+        );
         try {
-            AgentRunResult result = runtime.run(executionContext);
+            AgentRunResult result = runtime.run(executionContext, executionControl);
+            executionControl.requireLease();
 
             AgentTaskRunStore.TerminalOutcome outcome = switch (result.status()) {
                 case COMPLETED -> AgentTaskRunStore.TerminalOutcome.COMPLETED;
@@ -113,45 +140,80 @@ public class DefaultDurableRunExecutor implements DurableRunExecutor {
                             outcome,
                             result.terminationReason().name()
                     ));
-        }finally {
-            scheduledFuture.cancel(false);
+        } catch (AgentExecutionControl.LeaseLostException exception) {
+            logger.info(
+                    "Agent Run stopped after lease loss: runId={}, workerId={}, fence={}",
+                    runId,
+                    workerId,
+                    fencingToken
+            );
+        } finally {
+            heartbeat.cancel(false);
         }
     }
 
-    private final class HeartbeatTask implements Runnable{
+    private final class HeartbeatTask implements Runnable {
         private final String runId;
         private final String workerId;
         private final long fencingToken;
-        private HeartbeatTask(String runId,String workerId,long fencingToken){
-            this.runId=runId;
-            this.workerId=workerId;
-            this.fencingToken=fencingToken;
+        private final AgentExecutionControl executionControl;
+
+        private HeartbeatTask(
+                String runId,
+                String workerId,
+                long fencingToken,
+                AgentExecutionControl executionControl
+        ) {
+            this.runId = runId;
+            this.workerId = workerId;
+            this.fencingToken = fencingToken;
+            this.executionControl = executionControl;
         }
+
         @Override
         public void run() {
             try {
-                AgentTaskRunStore.HeartbeatResult result = agentTaskRunStore.heartbeat(new AgentTaskRunStore.HeartbeatCommand(
-                        runId, workerId, fencingToken, LEASE_SECONDS
-                ));
-                logger.warn(
-                        "Agent Run heartbeat lost lease: runId={}, workerId={}, fence={}",
-                        runId,
-                        workerId,
-                        fencingToken
+                AgentTaskRunStore.HeartbeatResult result = agentTaskRunStore.heartbeat(
+                        new AgentTaskRunStore.HeartbeatCommand(
+                                runId,
+                                workerId,
+                                fencingToken,
+                                LEASE_SECONDS
+                        )
                 );
-            }catch (RuntimeException e){
+                if (result == AgentTaskRunStore.HeartbeatResult.LEASE_LOST) {
+                    executionControl.markLeaseLost();
+                    logger.warn(
+                            "Agent Run heartbeat lost lease: runId={}, workerId={}, fence={}",
+                            runId,
+                            workerId,
+                            fencingToken
+                    );
+                }
+            } catch (RuntimeException exception) {
                 logger.warn(
                         "Agent Run heartbeat failed: runId={}, workerId={}, fence={}",
                         runId,
                         workerId,
                         fencingToken,
-                        e
+                        exception
                 );
             }
         }
     }
-    private ScheduledFuture<?>startHeartbeat(String runId,String workerId,long fencingToken){
-        HeartbeatTask task=new HeartbeatTask(runId,workerId,fencingToken);
+
+    private ScheduledFuture<?> startHeartbeat(
+            String runId,
+            String workerId,
+            long fencingToken,
+            AgentExecutionControl executionControl
+    ) {
+        HeartbeatTask task = new HeartbeatTask(
+                runId,
+                workerId,
+                fencingToken,
+                executionControl
+        );
         return heartbeatScheduler.scheduleAtFixedRate(
                 task,
                 Duration.ofSeconds(HEARTBEAT_SECONDS)

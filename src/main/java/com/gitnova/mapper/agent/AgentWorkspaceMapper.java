@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.gitnova.entity.agent.AgentWorkspaceEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Result;
+import org.apache.ibatis.annotations.Results;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
@@ -27,6 +29,22 @@ public interface AgentWorkspaceMapper
             FOR UPDATE
             """)
     AgentWorkspaceEntity selectForUpdate(
+            @Param("workspaceId") String workspaceId
+    );
+
+    @Select("""
+            SELECT workspace.*, session.repo_key AS repo_key
+            FROM agent_workspace workspace
+            JOIN agent_session session ON session.session_id = workspace.session_id
+            WHERE workspace.workspace_id = #{workspaceId}
+              AND workspace.status = 'READY'
+              AND session.status = 'ACTIVE'
+            """)
+    @Results(
+            id = "readyWorkspaceRegistration",
+            value = @Result(column = "repo_key", property = "repoKey")
+    )
+    AgentWorkspaceEntity selectReadyForRegistration(
             @Param("workspaceId") String workspaceId
     );
 

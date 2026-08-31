@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 @SpringBootTest
 @Tag("mysql-it")
@@ -63,6 +64,28 @@ class AgentOutboxMapperMySqlIntegrationTest {
         assertNotNull(published.getPublishedAt());
         assertEquals(0, outboxMapper.markPublished(first.getOutboxId()));
         assertEquals(0, outboxMapper.recordFailure(first.getOutboxId(), now.plusMinutes(1)));
+
+        AgentOutboxEntity quarantined = insert(
+                "RUN",
+                "RUN_DISPATCH_REQUESTED",
+                now.minusSeconds(1)
+        );
+        assertEquals(
+                1,
+                outboxMapper.markFailed(quarantined.getOutboxId(), "INVALID_DISPATCH_PAYLOAD")
+        );
+        AgentOutboxEntity failedPermanently = outboxMapper.selectByEventId(
+                quarantined.getEventId()
+        );
+        assertEquals("FAILED", failedPermanently.getStatus());
+        assertEquals("INVALID_DISPATCH_PAYLOAD", failedPermanently.getLastErrorCode());
+        assertNotNull(failedPermanently.getFailedAt());
+        assertNull(failedPermanently.getPublishedAt());
+        assertEquals(0, outboxMapper.markPublished(quarantined.getOutboxId()));
+        assertEquals(
+                0,
+                outboxMapper.recordFailure(quarantined.getOutboxId(), now.plusMinutes(1))
+        );
     }
 
     private AgentOutboxEntity insert(

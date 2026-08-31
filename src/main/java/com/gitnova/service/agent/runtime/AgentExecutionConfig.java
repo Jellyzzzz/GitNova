@@ -1,9 +1,23 @@
 package com.gitnova.service.agent.runtime;
 
+import java.util.EnumSet;
+import java.util.Objects;
 import java.util.Set;
 
+/** Immutable, validated execution policy persisted with a Run. */
 public record AgentExecutionConfig(Set<AgentCapability> capabilities) {
-    public AgentExecutionConfig{
-        capabilities = Set.copyOf(capabilities);
+    public AgentExecutionConfig {
+        Objects.requireNonNull(capabilities, "capabilities must not be null");
+        for (AgentCapability capability : capabilities) {
+            if (capability == null) {
+                throw new IllegalArgumentException("capabilities must not contain null");
+            }
+        }
+        capabilities = capabilities.isEmpty()
+                ? Set.of()
+                : Set.copyOf(EnumSet.copyOf(capabilities));
+        if (!capabilities.contains(AgentCapability.CODE_READ)) {
+            throw new IllegalArgumentException("Agent execution requires CODE_READ");
+        }
     }
 }

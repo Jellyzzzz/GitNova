@@ -30,6 +30,7 @@ public interface WorkspaceGateway {
 
     PatchBatchResult applyPatch(
             WorkspaceId workspaceId,
+            WorkspaceExecutionPermit executionPermit,
             WorkspaceMutationCommand command
     );
 
@@ -73,6 +74,7 @@ public interface WorkspaceGateway {
 
     default CommandResult runCommand(
             WorkspaceId workspaceId,
+            WorkspaceExecutionPermit executionPermit,
             CommandRequest request
     ) {
         throw new UnsupportedOperationException("runCommand is not supported");

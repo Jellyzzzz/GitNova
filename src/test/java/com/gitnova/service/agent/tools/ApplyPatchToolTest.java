@@ -42,7 +42,7 @@ class ApplyPatchToolTest {
     void shouldUseTrustedWorkspaceAndBuildOrderedCommandFromModelArguments() {
         AtomicReference<WorkspaceId> capturedWorkspace = new AtomicReference<>();
         AtomicReference<WorkspaceMutationCommand> capturedCommand = new AtomicReference<>();
-        WorkspaceGateway gateway = (workspaceId, command) -> {
+        WorkspaceGateway gateway = (workspaceId, executionPermit, command) -> {
             capturedWorkspace.set(workspaceId);
             capturedCommand.set(command);
             return PatchBatchResult.success(
@@ -72,7 +72,7 @@ class ApplyPatchToolTest {
     void shouldRejectMissingWorkspaceMutationCapabilityWithoutInvokingGateway() {
         AtomicInteger invocations = new AtomicInteger();
         ApplyPatchTool tool = new ApplyPatchTool(
-                (workspaceId, command) -> {
+                (workspaceId, executionPermit, command) -> {
                     invocations.incrementAndGet();
                     throw new AssertionError("gateway must not be invoked");
                 },
@@ -104,7 +104,7 @@ class ApplyPatchToolTest {
     void shouldRejectInvalidNestedOperationWithoutInvokingGateway() {
         AtomicInteger invocations = new AtomicInteger();
         ApplyPatchTool tool = new ApplyPatchTool(
-                (workspaceId, command) -> {
+                (workspaceId, executionPermit, command) -> {
                     invocations.incrementAndGet();
                     throw new AssertionError("gateway must not be invoked");
                 },
@@ -122,7 +122,7 @@ class ApplyPatchToolTest {
 
     @Test
     void shouldReturnStateBearingPartialToolResult() {
-        WorkspaceGateway gateway = (workspaceId, command) -> PatchBatchResult.partialSuccess(
+        WorkspaceGateway gateway = (workspaceId, executionPermit, command) -> PatchBatchResult.partialSuccess(
                 command,
                 command.expectedGeneration(),
                 List.of(
@@ -159,7 +159,7 @@ class ApplyPatchToolTest {
 
     @Test
     void shouldExposeNonApplyingUnifiedDiffAsAModelCorrectableConflict() {
-        WorkspaceGateway gateway = (workspaceId, command) -> PatchBatchResult.failed(
+        WorkspaceGateway gateway = (workspaceId, executionPermit, command) -> PatchBatchResult.failed(
                 command,
                 command.expectedGeneration(),
                 List.of(PatchOperationResult.failed(
@@ -186,7 +186,7 @@ class ApplyPatchToolTest {
     void shouldRejectModelSuppliedWorkspaceIdentityAtRegistryBoundary() {
         AtomicInteger invocations = new AtomicInteger();
         ApplyPatchTool tool = new ApplyPatchTool(
-                (workspaceId, command) -> {
+                (workspaceId, executionPermit, command) -> {
                     invocations.incrementAndGet();
                     throw new AssertionError("gateway must not be invoked");
                 },
@@ -211,7 +211,7 @@ class ApplyPatchToolTest {
     void shouldAcceptEmptyCreateContentAndExactOperationByteLimit() {
         AtomicReference<WorkspaceMutationCommand> captured = new AtomicReference<>();
         AtomicInteger invocations = new AtomicInteger();
-        WorkspaceGateway gateway = (workspaceId, command) -> {
+        WorkspaceGateway gateway = (workspaceId, executionPermit, command) -> {
             invocations.incrementAndGet();
             captured.set(command);
             return PatchBatchResult.conflict(
@@ -242,7 +242,7 @@ class ApplyPatchToolTest {
     void shouldRejectOperationBytesAndOperationCountAboveLimitsWithoutInvokingGateway() {
         AtomicInteger invocations = new AtomicInteger();
         ApplyPatchTool tool = new ApplyPatchTool(
-                (workspaceId, command) -> {
+                (workspaceId, executionPermit, command) -> {
                     invocations.incrementAndGet();
                     throw new AssertionError("invalid input must not reach Workspace");
                 },
@@ -275,7 +275,7 @@ class ApplyPatchToolTest {
     void shouldAcceptExactlyMaximumOperationCount() {
         AtomicInteger invocations = new AtomicInteger();
         ApplyPatchTool tool = new ApplyPatchTool(
-                (workspaceId, command) -> {
+                (workspaceId, executionPermit, command) -> {
                     invocations.incrementAndGet();
                     return PatchBatchResult.conflict(
                             command,

@@ -14,6 +14,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
@@ -44,6 +46,46 @@ import java.util.regex.Pattern;
 import java.util.concurrent.locks.Lock;
 
 public final class LocalWorkspaceGateway implements WorkspaceGateway {
+
+    private static final int MAX_FENCE_FILE_BYTES = 512;
+
+    private static final class WorkspaceMutationLock implements AutoCloseable {
+        private final FileChannel channel;
+        private final FileLock lock;
+        private final boolean accepted;
+
+        private WorkspaceMutationLock(FileChannel channel, FileLock lock, boolean accepted) {
+            this.channel = channel;
+            this.lock = lock;
+            this.accepted = accepted;
+        }
+
+        boolean accepted() {
+            return accepted;
+        }
+
+        @Override
+        public void close() {
+            IOException failure = null;
+            try {
+                lock.close();
+            } catch (IOException exception) {
+                failure = exception;
+            }
+            try {
+                channel.close();
+            } catch (IOException exception) {
+                if (failure == null) {
+                    failure = exception;
+                } else {
+                    failure.addSuppressed(exception);
+                }
+            }
+            if (failure != null) {
+                throw new IllegalStateException("Could not close Workspace mutation lock", failure);
+            }
+        }
+    }
 
     private final LocalWorkspaceRegistry registry;
     private final GitObjectReader gitObjectReader;
@@ -480,13 +522,33 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
     @Override
     public WorkspaceGateway.CommandResult runCommand(
             WorkspaceId workspaceId,
+            WorkspaceExecutionPermit executionPermit,
             WorkspaceGateway.CommandRequest request
     ) {
         Objects.requireNonNull(request, "request must not be null");
         LocalWorkspaceRegistry.LocalWorkspaceState state = registry.require(workspaceId);
         Lock writeLock = state.lock().writeLock();
         writeLock.lock();
+        WorkspaceMutationLock mutationLock = null;
         try {
+            mutationLock = acquireMutationLock(state, executionPermit);
+            if (!mutationLock.accepted()) {
+                long generation = state.generation();
+                return new WorkspaceGateway.CommandResult(
+                        WorkspaceGateway.CommandStatus.CONFLICT,
+                        request.expectedGeneration(),
+                        generation,
+                        generation,
+                        null,
+                        0,
+                        "",
+                        "",
+                        false,
+                        false,
+                        "STALE_WORKSPACE_FENCE",
+                        "Execution permit has been superseded by a newer Workspace writer"
+                );
+            }
             refreshStateFromDisk(state);
             long generationBefore = state.generation();
             if (request.expectedGeneration() != generationBefore) {
@@ -610,13 +672,20 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                     null
             );
         } finally {
-            writeLock.unlock();
+            try {
+                if (mutationLock != null) {
+                    mutationLock.close();
+                }
+            } finally {
+                writeLock.unlock();
+            }
         }
     }
 
     @Override
     public PatchBatchResult applyPatch(
             WorkspaceId workspaceId,
+            WorkspaceExecutionPermit executionPermit,
             WorkspaceMutationCommand command
     ) {
         Objects.requireNonNull(workspaceId, "workspaceId");
@@ -627,8 +696,18 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
 
         Lock writeLock = state.lock().writeLock();
         writeLock.lock();
+        WorkspaceMutationLock mutationLock = null;
 
         try {
+            mutationLock = acquireMutationLock(state, executionPermit);
+            if (!mutationLock.accepted()) {
+                return PatchBatchResult.conflict(
+                        command,
+                        state.generation(),
+                        "STALE_WORKSPACE_FENCE",
+                        "Execution permit has been superseded by a newer Workspace writer"
+                );
+            }
             refreshStateFromDisk(state);
             long generationBefore = state.generation();
 
@@ -704,7 +783,86 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             return outcome;
 
         } finally {
-            writeLock.unlock();
+            try {
+                if (mutationLock != null) {
+                    mutationLock.close();
+                }
+            } finally {
+                writeLock.unlock();
+            }
+        }
+    }
+
+    private WorkspaceMutationLock acquireMutationLock(
+            LocalWorkspaceRegistry.LocalWorkspaceState state,
+            WorkspaceExecutionPermit executionPermit
+    ) {
+        Path fenceFile = state.root().resolveSibling(
+                "." + state.workspaceId() + ".mutation-fence"
+        );
+        FileChannel channel = null;
+        FileLock lock = null;
+        try {
+            channel = FileChannel.open(
+                    fenceFile,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.READ,
+                    StandardOpenOption.WRITE,
+                    LinkOption.NOFOLLOW_LINKS
+            );
+            lock = channel.lock();
+
+            long fileSize = channel.size();
+            if (fileSize > MAX_FENCE_FILE_BYTES) {
+                throw new IOException("Workspace mutation fence is too large");
+            }
+            if (fileSize > 0) {
+                ByteBuffer buffer = ByteBuffer.allocate((int) fileSize);
+                channel.position(0);
+                while (buffer.hasRemaining() && channel.read(buffer) >= 0) {
+                    // Keep reading until the complete, bounded fence record is available.
+                }
+                String[] fields = new String(
+                        buffer.array(),
+                        StandardCharsets.UTF_8
+                ).strip().split("\\t", -1);
+                if (fields.length != 2 || fields[1].isBlank()) {
+                    throw new IOException("Workspace mutation fence is invalid");
+                }
+                state.restoreAcceptedFence(fields[1], Long.parseLong(fields[0]));
+            }
+
+            boolean accepted = state.acceptExecutionPermit(executionPermit);
+            if (accepted) {
+                byte[] persisted = (
+                        executionPermit.fencingToken()
+                                + "\t"
+                                + executionPermit.runId()
+                                + "\n"
+                ).getBytes(StandardCharsets.UTF_8);
+                channel.truncate(0);
+                channel.position(0);
+                ByteBuffer persistedFence = ByteBuffer.wrap(persisted);
+                while (persistedFence.hasRemaining()) {
+                    channel.write(persistedFence);
+                }
+                channel.force(true);
+            }
+            return new WorkspaceMutationLock(channel, lock, accepted);
+        } catch (IOException | NumberFormatException exception) {
+            if (channel != null) {
+                try {
+                    channel.close();
+                } catch (IOException closeFailure) {
+                    exception.addSuppressed(closeFailure);
+                }
+            }
+            throw workspaceFailure(
+                    WorkspaceOperationException.Reason.FILESYSTEM_FAILURE,
+                    "WORKSPACE_FENCE_UNAVAILABLE",
+                    "Workspace mutation fence could not be acquired",
+                    exception
+            );
         }
     }
 

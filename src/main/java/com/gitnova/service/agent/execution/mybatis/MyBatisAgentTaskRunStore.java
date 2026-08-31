@@ -2,6 +2,7 @@ package com.gitnova.service.agent.execution.mybatis;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.entity.agent.AgentRunEntity;
 import com.gitnova.entity.agent.AgentSessionEntity;
@@ -11,6 +12,7 @@ import com.gitnova.mapper.agent.AgentRunMapper;
 import com.gitnova.mapper.agent.AgentSessionMapper;
 import com.gitnova.mapper.agent.AgentTaskMapper;
 import com.gitnova.mapper.agent.AgentWorkspaceMapper;
+import com.gitnova.service.agent.dispatch.RunDispatchReason;
 import com.gitnova.service.agent.execution.AgentExecutionPersistenceException;
 import com.gitnova.service.agent.execution.AgentRun;
 import com.gitnova.service.agent.execution.AgentTask;
@@ -21,6 +23,8 @@ import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.AgentOutboxWriter;
 import com.gitnova.service.agent.persistence.AgentStepType;
 import com.gitnova.service.agent.persistence.CanonicalJsonCodec;
+import com.gitnova.service.agent.runtime.AgentCapability;
+import com.gitnova.service.agent.runtime.AgentExecutionConfig;
 import com.gitnova.service.session.AgentSession;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,7 +77,14 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
         Objects.requireNonNull(command, "command must not be null");
         AgentSessionEntity session = requireLockedActiveSession(command.sessionId());
         CanonicalJsonCodec.EncodedJson request = canonicalJson.encode(objectMapper.valueToTree(command.request()));
-        CanonicalJsonCodec.EncodedJson executionConfig = canonicalJson.encode(objectMapper.valueToTree(command.executionConfig()));
+        ObjectNode executionConfigNode = canonicalJson.objectNode();
+        ArrayNode capabilities = executionConfigNode.putArray("capabilities");
+        for (AgentCapability capability : AgentCapability.values()) {
+            if (command.executionConfig().capabilities().contains(capability)) {
+                capabilities.add(capability.name());
+            }
+        }
+        CanonicalJsonCodec.EncodedJson executionConfig = canonicalJson.encode(executionConfigNode);
         LocalDateTime now = utcNow();
 
         AgentTaskEntity candidate = new AgentTaskEntity();
@@ -158,7 +169,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
         enqueueDispatch(
                 command.initialDispatchEventId(),
                 command.initialRunId(),
-                "INITIAL",
+                RunDispatchReason.INITIAL,
                 null
         );
         return new CreateResult(
@@ -301,7 +312,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 "run:dispatch:" + command.runId()
                         + ":recovery:" + command.expiredFencingToken(),
                 command.runId(),
-                "RECOVERY",
+                RunDispatchReason.RECOVERY,
                 command.expiredFencingToken()
         );
         return new LeaseExpiryResult(true, toDomain(requireRun(command.runId())));
@@ -561,11 +572,13 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AgentRun> findExpiredRuns(int limit){
-        List<AgentRunEntity>runEntities=runMapper.selectExpiredRuns(limit);
-        if(runEntities==null) return null;
-        List<AgentRun>result=new ArrayList<>(limit);
-        for(AgentRunEntity runEntity:runEntities){
+    public List<AgentRun> findExpiredRuns(int limit) {
+        if (limit < 1 || limit > 1_000) {
+            throw new IllegalArgumentException("limit must be in range 1..1000");
+        }
+        List<AgentRunEntity> runEntities = runMapper.selectExpiredRuns(limit);
+        ArrayList<AgentRun> result = new ArrayList<>(runEntities.size());
+        for (AgentRunEntity runEntity : runEntities) {
             result.add(toDomain(runEntity));
         }
         return List.copyOf(result);
@@ -686,11 +699,11 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
     private void enqueueDispatch(
             String eventId,
             String runId,
-            String reason,
+            RunDispatchReason reason,
             Long expiredFencingToken
     ) {
         ObjectNode payload = canonicalJson.objectNode();
-        payload.put("reason", reason);
+        payload.put("reason", reason.name());
         payload.put("runId", runId);
         if (expiredFencingToken == null) {
             payload.putNull("expiredFencingToken");
@@ -819,7 +832,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 run.getLeaseOwner(),
                 optionalTime(run.getLeaseUntil()),
                 run.getCurrentFencingToken(),
-                run.getExecutionConfigJson(),
+                decodeExecutionConfig(run.getExecutionConfigJson()),
                 run.getExecutionConfigDigest(),
                 run.getTerminationReason(),
                 requireLong(run.getVersion(), "version"),
@@ -829,6 +842,14 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 optionalTime(run.getFinishedAt()),
                 requireTime(run.getUpdatedAt(), "updatedAt")
         );
+    }
+
+    private AgentExecutionConfig decodeExecutionConfig(String executionConfigJson) {
+        try {
+            return objectMapper.readValue(executionConfigJson, AgentExecutionConfig.class);
+        } catch (JsonProcessingException | IllegalArgumentException exception) {
+            throw failure(Code.PERSISTENCE_FAILURE, "Run execution config JSON is invalid");
+        }
     }
 
     private static long requireNonNegative(Long value, String field) {

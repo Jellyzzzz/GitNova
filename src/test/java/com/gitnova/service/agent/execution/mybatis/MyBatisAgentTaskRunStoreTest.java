@@ -19,6 +19,8 @@ import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.AgentOutboxWriter;
 import com.gitnova.service.agent.persistence.AgentStepType;
 import com.gitnova.service.agent.persistence.CanonicalJsonCodec;
+import com.gitnova.service.agent.runtime.AgentCapability;
+import com.gitnova.service.agent.runtime.AgentExecutionConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -28,6 +30,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -92,8 +97,6 @@ class MyBatisAgentTaskRunStoreTest {
         });
         when(taskMapper.selectById(taskId)).thenAnswer(invocation -> taskRow.get());
         when(runMapper.selectById(runId)).thenAnswer(invocation -> runRow.get());
-        ObjectMapper json = new ObjectMapper();
-
         AgentTaskRunStore.CreateResult result = store().createTaskWithInitialRun(
                 new CreateTaskCommand(
                         "create-1",
@@ -102,7 +105,10 @@ class MyBatisAgentTaskRunStoreTest {
                         sessionId,
                         9L,
                         new AgentTaskRequest("review"),
-                        json.createObjectNode().put("model", "test")
+                        new AgentExecutionConfig(new LinkedHashSet<>(List.of(
+                                AgentCapability.WORKSPACE_MUTATION,
+                                AgentCapability.CODE_READ
+                        )))
                 )
         );
 
@@ -111,6 +117,14 @@ class MyBatisAgentTaskRunStoreTest {
         assertEquals("review", result.task().request().message());
         assertEquals(runId, result.task().currentRunId());
         assertEquals(AgentRun.Status.QUEUED, result.initialRun().status());
+        assertEquals(
+                "{\"capabilities\":[\"CODE_READ\",\"WORKSPACE_MUTATION\"]}",
+                runRow.get().getExecutionConfigJson()
+        );
+        assertEquals(
+                Set.of(AgentCapability.CODE_READ, AgentCapability.WORKSPACE_MUTATION),
+                result.initialRun().executionConfig().capabilities()
+        );
         assertEquals("{\"message\":\"review\"}", taskRow.get().getRequestJson());
         ArgumentCaptor<AgentEventAppender.AppendCommand> events =
                 ArgumentCaptor.forClass(AgentEventAppender.AppendCommand.class);
@@ -530,7 +544,7 @@ class MyBatisAgentTaskRunStoreTest {
         run.setTaskId(TASK_ID);
         run.setRunNumber(1L);
         run.setLastRunStepSequence(4L);
-        run.setExecutionConfigJson("{}");
+        run.setExecutionConfigJson("{\"capabilities\":[\"CODE_READ\"]}");
         run.setExecutionConfigDigest(DIGEST);
         run.setVersion(2L);
         run.setCreatedAt(NOW.minusMinutes(4));

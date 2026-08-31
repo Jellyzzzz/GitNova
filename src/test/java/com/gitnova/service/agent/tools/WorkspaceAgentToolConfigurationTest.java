@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gitnova.service.agent.workspace.PatchBatchResult;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.workspace.WorkspaceId;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.agent.workspace.WorkspaceMutationCommand;
+import com.gitnova.service.agent.workspace.WorkspaceCommandExecutor;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -41,6 +43,23 @@ class WorkspaceAgentToolConfigurationTest {
                 .run(context -> assertThat(context).doesNotHaveBean(ListFilesTool.class));
     }
 
+    @Test
+    void shouldNotExposeRunCommandWithoutAnIsolatedCommandExecutor() {
+        contextRunner
+                .withBean(ObjectMapper.class, ObjectMapper::new)
+                .withBean(
+                        WorkspaceGateway.class,
+                        () -> (workspaceId, executionPermit, command) -> {
+                            throw new UnsupportedOperationException();
+                        }
+                )
+                .withUserConfiguration(WorkspaceAgentToolConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasSingleBean(ApplyPatchTool.class);
+                    assertThat(context).doesNotHaveBean(RunCommandTool.class);
+                });
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class TestDependencies {
         @Bean
@@ -54,10 +73,18 @@ class WorkspaceAgentToolConfigurationTest {
                 @Override
                 public PatchBatchResult applyPatch(
                         WorkspaceId workspaceId,
+                        WorkspaceExecutionPermit executionPermit,
                         WorkspaceMutationCommand command
                 ) {
                     throw new UnsupportedOperationException();
                 }
+            };
+        }
+
+        @Bean
+        WorkspaceCommandExecutor workspaceCommandExecutor() {
+            return (workingDirectory, argv, timeout) -> {
+                throw new UnsupportedOperationException();
             };
         }
     }

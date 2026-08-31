@@ -1,6 +1,7 @@
 package com.gitnova.entity.agent;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -46,4 +47,8 @@ public class AgentWorkspaceEntity {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+    /** Populated only by the registry rehydration join. */
+    @TableField(exist = false)
+    private String repoKey;
 }

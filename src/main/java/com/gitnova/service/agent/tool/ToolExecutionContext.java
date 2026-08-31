@@ -5,6 +5,7 @@ import com.gitnova.service.agent.runtime.AgentExecutionContext;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
 import com.gitnova.service.agent.workspace.WorkspaceId;
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 
 import java.util.Objects;
 
@@ -47,6 +48,13 @@ public record ToolExecutionContext(
 
     public WorkspaceId requireWorkspaceId() {
         return agent.workspace().workspaceId();
+    }
+
+    public WorkspaceExecutionPermit requireExecutionPermit() {
+        return Objects.requireNonNull(
+                agent.executionPermit(),
+                "Workspace execution permit is required"
+        );
     }
 
     public AgentCapabilityPolicy capabilities() {

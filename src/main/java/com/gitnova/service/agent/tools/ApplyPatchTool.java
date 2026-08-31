@@ -152,7 +152,11 @@ public final class ApplyPatchTool implements AgentTool {
             );
         }
 
-        PatchBatchResult batch = workspaceGateway.applyPatch(workspaceId, command);
+        PatchBatchResult batch = workspaceGateway.applyPatch(
+                workspaceId,
+                execution.requireExecutionPermit(),
+                command
+        );
         JsonNode payload = objectMapper.valueToTree(batch);
 
         return switch (batch.status()) {

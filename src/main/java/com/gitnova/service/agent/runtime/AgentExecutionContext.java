@@ -19,7 +19,15 @@ public record AgentExecutionContext(
         Objects.requireNonNull(context);
         Objects.requireNonNull(taskText);
         Objects.requireNonNull(workspace);
+        Objects.requireNonNull(executionPermit);
         Objects.requireNonNull(capabilities);
+
+        if (!workspace.workspaceId().equals(executionPermit.workspaceId())
+                || !context.runId().equals(executionPermit.runId())) {
+            throw new IllegalArgumentException(
+                    "executionPermit must belong to the bound Run and Workspace"
+            );
+        }
 
         if (sessionId.isBlank()) {
             throw new IllegalArgumentException(

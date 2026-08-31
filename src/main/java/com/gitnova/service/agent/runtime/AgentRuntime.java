@@ -22,6 +22,7 @@ import com.gitnova.service.agent.tool.ToolStatus;
 import com.gitnova.service.agent.tools.FinishTaskTool;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.workspace.WorkspaceOperationException;
+import com.gitnova.service.agent.execution.AgentExecutionControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -106,7 +107,15 @@ public final class AgentRuntime {
     }
 
     public AgentRunResult run(AgentExecutionContext context) {
+        return run(context, new AgentExecutionControl());
+    }
+
+    public AgentRunResult run(
+            AgentExecutionContext context,
+            AgentExecutionControl executionControl
+    ) {
         Objects.requireNonNull(context, "context must not be null");
+        Objects.requireNonNull(executionControl, "executionControl must not be null");
         AssembledPrompt prompt = promptAssembler.assemble(context.context());
         RunState state = RunState.start(
                 messageFactory.initialMessages(prompt, context.taskText())
@@ -118,6 +127,7 @@ public final class AgentRuntime {
         }
 
         while (true) {
+            executionControl.requireLease();
             if (state.modelCallCount >= policy.maxModelCalls()) {
                 return terminate(state, AgentTerminationReason.MAX_MODEL_CALLS_REACHED);
             }
@@ -132,6 +142,7 @@ public final class AgentRuntime {
             appendWorkspaceDriftFeedback(state, beforeModel);
 
             ModelRequest request = buildRequest(context, state, toolDefinitions);
+            executionControl.requireLease();
             state.modelCallCount++;
             ModelResponse response;
             try {
@@ -139,12 +150,18 @@ public final class AgentRuntime {
             } catch (ModelGatewayException exception) {
                 return terminate(state, AgentTerminationReason.MODEL_GATEWAY_FAILURE);
             }
+            executionControl.requireLease();
 
             state.modelUsages.add(response.usage());
             state.messages.add(messageFactory.assistant(response));
 
             Optional<AgentRunResult> outcome = switch (response.finishReason()) {
-                case TOOL_CALLS -> handleToolCalls(state, context, response.toolCalls());
+                case TOOL_CALLS -> handleToolCalls(
+                        state,
+                        context,
+                        executionControl,
+                        response.toolCalls()
+                );
                 case STOP -> handleStopWithoutFinish(state);
                 case LENGTH -> Optional.of(terminate(
                         state,
@@ -233,6 +250,7 @@ public final class AgentRuntime {
     private Optional<AgentRunResult> handleToolCalls(
             RunState state,
             AgentExecutionContext context,
+            AgentExecutionControl executionControl,
             List<ToolCall> toolCalls
     ) {
         if (state.toolCallCount + toolCalls.size() > policy.maxToolCalls()) {
@@ -249,6 +267,7 @@ public final class AgentRuntime {
             return rejectMixedTerminalCalls(state, toolCalls);
         }
         if (terminalCount == 1) {
+            executionControl.requireLease();
             ToolCall terminalCall = toolCalls.get(0);
             if (!FinishTaskTool.NAME.equals(terminalCall.name())) {
                 return rejectUnsupportedTerminalCall(state, terminalCall);
@@ -262,6 +281,7 @@ public final class AgentRuntime {
                 ));
             }
             Optional<AgentRunResult> finish = handleFinish(context, state, terminalCall);
+            executionControl.requireLease();
             if (finish.isEmpty()) {
                 appendWorkspaceDriftFeedback(state, refresh);
             }
@@ -270,6 +290,7 @@ public final class AgentRuntime {
 
         WorkspaceGateway.WorkspaceRefresh latestDrift = null;
         for (int index = 0; index < toolCalls.size(); index++) {
+            executionControl.requireLease();
             ToolCall toolCall = toolCalls.get(index);
             WorkspaceGateway.WorkspaceRefresh refresh = synchronizeWorkspace(context, state);
             if (refresh == null) {
@@ -286,6 +307,7 @@ public final class AgentRuntime {
                 latestDrift = refresh;
             }
             executeOrdinaryTool(state, context, toolCall);
+            executionControl.requireLease();
         }
         if (latestDrift != null) {
             appendWorkspaceDriftFeedback(state, latestDrift);

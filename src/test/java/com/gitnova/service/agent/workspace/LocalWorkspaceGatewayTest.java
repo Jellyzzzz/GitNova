@@ -51,7 +51,7 @@ class LocalWorkspaceGatewayTest {
                 )
         );
 
-        PatchBatchResult result = fixture.gateway().applyPatch(fixture.workspaceId(), command);
+        PatchBatchResult result = fixture.applyPatch(command);
 
         assertEquals(PatchBatchStatus.SUCCESS, result.status());
         assertEquals(0, result.generationBefore());
@@ -73,7 +73,7 @@ class LocalWorkspaceGatewayTest {
                 List.of(PatchOperation.create(0, "stale.txt", "must not exist"))
         );
 
-        PatchBatchResult result = fixture.gateway().applyPatch(fixture.workspaceId(), command);
+        PatchBatchResult result = fixture.applyPatch(command);
 
         assertEquals(PatchBatchStatus.CONFLICT, result.status());
         assertEquals(2, result.generationBefore());
@@ -91,13 +91,9 @@ class LocalWorkspaceGatewayTest {
                 List.of(PatchOperation.create(0, "empty.txt", ""))
         );
 
-        PatchBatchResult first = fixture.gateway().applyPatch(fixture.workspaceId(), original);
-        PatchBatchResult requestReplay = fixture.gateway().applyPatch(
-                fixture.workspaceId(),
-                original
-        );
-        PatchBatchResult semanticReplay = fixture.gateway().applyPatch(
-                fixture.workspaceId(),
+        PatchBatchResult first = fixture.applyPatch(original);
+        PatchBatchResult requestReplay = fixture.applyPatch(original);
+        PatchBatchResult semanticReplay = fixture.applyPatch(
                 new WorkspaceMutationCommand(
                         1,
                         List.of(PatchOperation.create(0, "empty.txt", ""))
@@ -120,8 +116,7 @@ class LocalWorkspaceGatewayTest {
         Fixture fixture = fixture(0);
         String content = "x".repeat(1024 * 1024);
 
-        PatchBatchResult result = fixture.gateway().applyPatch(
-                fixture.workspaceId(),
+        PatchBatchResult result = fixture.applyPatch(
                 new WorkspaceMutationCommand(
                         0,
                         List.of(PatchOperation.create(0, "maximum.txt", content))
@@ -150,7 +145,7 @@ class LocalWorkspaceGatewayTest {
                 )
         );
 
-        PatchBatchResult result = fixture.gateway().applyPatch(fixture.workspaceId(), command);
+        PatchBatchResult result = fixture.applyPatch(command);
 
         assertEquals(PatchBatchStatus.PARTIAL_SUCCESS, result.status());
         assertEquals(1, result.generationAfter());
@@ -178,7 +173,7 @@ class LocalWorkspaceGatewayTest {
                 )
         );
 
-        PatchBatchResult result = fixture.gateway().applyPatch(fixture.workspaceId(), command);
+        PatchBatchResult result = fixture.applyPatch(command);
 
         assertEquals(PatchBatchStatus.FAILED, result.status());
         assertEquals(0, result.generationAfter());
@@ -198,10 +193,7 @@ class LocalWorkspaceGatewayTest {
                 ))
         );
 
-        PatchBatchResult result = fixture.gateway().applyPatch(
-                fixture.workspaceId(),
-                command
-        );
+        PatchBatchResult result = fixture.applyPatch(command);
 
         assertEquals(PatchBatchStatus.FAILED, result.status());
         assertEquals(0, result.generationBefore());
@@ -242,8 +234,7 @@ class LocalWorkspaceGatewayTest {
         Fixture fixture = fixture(0);
         Files.writeString(fixture.root().resolve("external.txt"), "changed elsewhere\n");
 
-        PatchBatchResult result = fixture.gateway().applyPatch(
-                fixture.workspaceId(),
+        PatchBatchResult result = fixture.applyPatch(
                 new WorkspaceMutationCommand(
                         0,
                         List.of(PatchOperation.create(0, "must-not-write.txt", "no\n"))
@@ -286,7 +277,7 @@ class LocalWorkspaceGatewayTest {
         try {
             Future<PatchBatchResult> future = executor.submit(() -> {
                 submitted.countDown();
-                return fixture.gateway().applyPatch(fixture.workspaceId(), command);
+                return fixture.applyPatch(command);
             });
             assertTrue(submitted.await(1, TimeUnit.SECONDS));
             assertThrows(TimeoutException.class, () -> future.get(100, TimeUnit.MILLISECONDS));
@@ -313,7 +304,7 @@ class LocalWorkspaceGatewayTest {
                 List.of(PatchOperation.create(0, "../escape.txt", "no"))
         );
 
-        PatchBatchResult result = fixture.gateway().applyPatch(fixture.workspaceId(), command);
+        PatchBatchResult result = fixture.applyPatch(command);
 
         assertEquals(PatchBatchStatus.FAILED, result.status());
         assertEquals("INVALID_WORKSPACE_PATH", result.operationResults().get(0).errorCode());
@@ -333,8 +324,7 @@ class LocalWorkspaceGatewayTest {
         );
 
         for (String invalidPath : invalidPaths) {
-            PatchBatchResult result = fixture.gateway().applyPatch(
-                    fixture.workspaceId(),
+            PatchBatchResult result = fixture.applyPatch(
                     new WorkspaceMutationCommand(
                             0,
                             List.of(PatchOperation.create(0, invalidPath, "no"))
@@ -352,8 +342,7 @@ class LocalWorkspaceGatewayTest {
         Path outside = Files.createDirectories(tempDir.resolve("outside"));
         Files.createSymbolicLink(fixture.root().resolve("link"), outside);
 
-        PatchBatchResult result = fixture.gateway().applyPatch(
-                fixture.workspaceId(),
+        PatchBatchResult result = fixture.applyPatch(
                 new WorkspaceMutationCommand(
                         0,
                         List.of(PatchOperation.create(0, "link/escape.txt", "no"))
@@ -364,6 +353,97 @@ class LocalWorkspaceGatewayTest {
         assertEquals("UNSAFE_WORKSPACE_PATH", result.operationResults().get(0).errorCode());
         assertFalse(Files.exists(outside.resolve("escape.txt")));
         assertEquals(0, fixture.state().generation());
+    }
+
+    @Test
+    void shouldRejectAnOldFenceAfterTheResourceAcceptsATakeover() {
+        Fixture fixture = fixture(0);
+        WorkspaceExecutionPermit firstOwner = new WorkspaceExecutionPermit(
+                "run-a",
+                fixture.workspaceId(),
+                1L
+        );
+        WorkspaceExecutionPermit takeoverOwner = new WorkspaceExecutionPermit(
+                "run-b",
+                fixture.workspaceId(),
+                2L
+        );
+
+        PatchBatchResult first = fixture.gateway().applyPatch(
+                fixture.workspaceId(),
+                firstOwner,
+                new WorkspaceMutationCommand(
+                        0,
+                        List.of(PatchOperation.create(0, "first.txt", "first\n"))
+                )
+        );
+        PatchBatchResult takeover = fixture.gateway().applyPatch(
+                fixture.workspaceId(),
+                takeoverOwner,
+                new WorkspaceMutationCommand(
+                        1,
+                        List.of(PatchOperation.create(0, "takeover.txt", "takeover\n"))
+                )
+        );
+        PatchBatchResult stale = fixture.gateway().applyPatch(
+                fixture.workspaceId(),
+                firstOwner,
+                new WorkspaceMutationCommand(
+                        2,
+                        List.of(PatchOperation.create(0, "stale.txt", "must not exist\n"))
+                )
+        );
+
+        assertEquals(PatchBatchStatus.SUCCESS, first.status());
+        assertEquals(PatchBatchStatus.SUCCESS, takeover.status());
+        assertEquals(PatchBatchStatus.CONFLICT, stale.status());
+        assertEquals("STALE_WORKSPACE_FENCE", stale.errorCode());
+        assertEquals(2, fixture.state().generation());
+        assertFalse(Files.exists(fixture.root().resolve("stale.txt")));
+    }
+
+    @Test
+    void shouldPersistTheAcceptedFenceAcrossRegistryInstances() {
+        Fixture firstProcess = fixture(0);
+        LocalWorkspaceRegistry restartedRegistry = new LocalWorkspaceRegistry();
+        restartedRegistry.register(new WorkspaceHandle(
+                firstProcess.workspaceId(),
+                firstProcess.state().repoKey(),
+                firstProcess.state().source(),
+                firstProcess.root(),
+                WorkspaceStatus.READY,
+                0
+        ));
+        LocalWorkspaceGateway restartedGateway = new LocalWorkspaceGateway(restartedRegistry);
+
+        PatchBatchResult takeover = restartedGateway.applyPatch(
+                firstProcess.workspaceId(),
+                new WorkspaceExecutionPermit(
+                        "run-b",
+                        firstProcess.workspaceId(),
+                        2L
+                ),
+                new WorkspaceMutationCommand(
+                        0,
+                        List.of(PatchOperation.create(0, "takeover.txt", "takeover\n"))
+                )
+        );
+        PatchBatchResult stale = firstProcess.gateway().applyPatch(
+                firstProcess.workspaceId(),
+                new WorkspaceExecutionPermit(
+                        "run-a",
+                        firstProcess.workspaceId(),
+                        1L
+                ),
+                new WorkspaceMutationCommand(
+                        1,
+                        List.of(PatchOperation.create(0, "stale.txt", "must not exist\n"))
+                )
+        );
+
+        assertEquals(PatchBatchStatus.SUCCESS, takeover.status());
+        assertEquals(PatchBatchStatus.CONFLICT, stale.status());
+        assertFalse(Files.exists(firstProcess.root().resolve("stale.txt")));
     }
 
     private Fixture fixture(long generation) {
@@ -408,5 +488,16 @@ class LocalWorkspaceGatewayTest {
             LocalWorkspaceRegistry.LocalWorkspaceState state,
             LocalWorkspaceGateway gateway
     ) {
+        private PatchBatchResult applyPatch(WorkspaceMutationCommand command) {
+            return gateway.applyPatch(
+                    workspaceId,
+                    new WorkspaceExecutionPermit(
+                            "test-run-" + workspaceId,
+                            workspaceId,
+                            1L
+                    ),
+                    command
+            );
+        }
     }
 }

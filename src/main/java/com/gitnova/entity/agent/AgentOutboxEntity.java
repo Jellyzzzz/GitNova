@@ -19,6 +19,8 @@ public class AgentOutboxEntity {
     private Integer attemptCount;
     private LocalDateTime availableAt;
     private LocalDateTime publishedAt;
+    private String lastErrorCode;
+    private LocalDateTime failedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

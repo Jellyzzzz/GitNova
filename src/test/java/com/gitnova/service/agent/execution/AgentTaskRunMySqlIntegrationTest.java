@@ -1,8 +1,9 @@
 package com.gitnova.service.agent.execution;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gitnova.gitobject.GitObjectId;
 import com.gitnova.service.agent.workspace.SnapshotScope;
+import com.gitnova.service.agent.runtime.AgentCapability;
+import com.gitnova.service.agent.runtime.AgentExecutionConfig;
 import com.gitnova.service.session.AgentSessionStore;
 import com.gitnova.service.session.CreateSessionCommand;
 import com.gitnova.storage.RepoKey;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.UUID;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -37,8 +39,6 @@ class AgentTaskRunMySqlIntegrationTest {
 
     @Autowired
     JdbcTemplate jdbcTemplate;
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
     void shouldPersistClaimHeartbeatTakeoverAndFailedTerminalTransactionChain() {
@@ -66,7 +66,7 @@ class AgentTaskRunMySqlIntegrationTest {
                 session.session().sessionId(),
                 9101L,
                 new AgentTaskRequest("verify persistence"),
-                objectMapper.createObjectNode().put("model", "mysql-it")
+                new AgentExecutionConfig(Set.of(AgentCapability.CODE_READ))
         );
         AgentTaskRunStore.CreateResult created = taskRunStore.createTaskWithInitialRun(create);
 
