@@ -62,6 +62,10 @@ public class ToolRegistry {
                 .toList();
     }
 
+    AgentTool registeredTool(String name) {
+        return tools.get(name);
+    }
+
     /**
      * 分发执行：LLM 返回 ToolCall 后，根据 name 找到对应工具并执行。
      * 出错不抛异常，把错误信息作为 Observation 返回给 Agent，
