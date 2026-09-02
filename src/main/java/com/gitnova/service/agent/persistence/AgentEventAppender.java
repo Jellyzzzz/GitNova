@@ -14,6 +14,7 @@ import java.util.Optional;
 public interface AgentEventAppender {
 
     AppendResult append(AppendCommand command);
+    AppendResult appendFence(AppendCommand command,RunExecutionAuthority authority);
 
     record AppendCommand(
             String eventId,
@@ -91,6 +92,13 @@ public interface AgentEventAppender {
             if (runStepSequence != null && runStepSequence <= 0) {
                 throw new IllegalArgumentException("runStepSequence must be positive when present");
             }
+        }
+    }
+
+    record RunExecutionAuthority(long fencingToken,String workerId){
+        public RunExecutionAuthority{
+            if(fencingToken<=0) throw new IllegalArgumentException("fencingToken must be positive");
+            requireNonBlank(workerId,"workerId");
         }
     }
 

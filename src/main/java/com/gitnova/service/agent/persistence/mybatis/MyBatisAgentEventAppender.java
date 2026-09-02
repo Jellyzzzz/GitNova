@@ -10,6 +10,8 @@ import com.gitnova.mapper.agent.AgentStepMapper;
 import com.gitnova.mapper.agent.AgentTaskMapper;
 import com.gitnova.mapper.agent.AgentRunMapper;
 import com.gitnova.service.agent.execution.AgentExecutionPersistenceException;
+import com.gitnova.service.agent.execution.AgentRun;
+import com.gitnova.service.agent.execution.AgentTask;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.CanonicalJsonCodec;
 import org.springframework.stereotype.Repository;
@@ -47,95 +49,16 @@ public class MyBatisAgentEventAppender implements AgentEventAppender {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public AppendResult append(AppendCommand command) {
-        Objects.requireNonNull(command, "command must not be null");
-        CanonicalJsonCodec.EncodedJson payload = canonicalJson.encode(command.persistedPayload());
-        String payloadJson = payload.json();
-        String payloadDigest = payload.digest();
-        String eventDigest = eventDigest(command, payloadDigest);
+        return appendInternal(command,null);
+    }
 
-        AgentSessionEntity session = sessionMapper.selectForUpdate(command.sessionId());
-        if (session == null) {
-            throw failure(
-                    AgentExecutionPersistenceException.Code.UNKNOWN_SESSION,
-                    "Unknown Session: " + command.sessionId()
-            );
-        }
-        AgentTaskEntity task = lockAndVerifyTask(command);
-        AgentRunEntity run = lockAndVerifyRun(command, task);
-        AgentStepEntity existing = stepMapper.selectByEventId(command.eventId());
-        if (existing != null) {
-            if (!eventDigest.equals(existing.getEventDigest())) {
-                throw failure(
-                        AgentExecutionPersistenceException.Code.IDEMPOTENCY_KEY_CONFLICT,
-                        "eventId is already committed with different event semantics: " + command.eventId()
-                );
-            }
-            return new AppendResult(
-                    existing.getStepId(),
-                    existing.getSessionSequence(),
-                    existing.getRunStepSequence(),
-                    true
-            );
-        }
-        long previousSequence = requireNonNegative(
-                session.getLastSessionSequence(),
-                "lastSessionSequence"
-        );
-        long nextSequence = Math.incrementExact(previousSequence);
-        if (sessionMapper.advanceSequence(
-                command.sessionId(),
-                previousSequence,
-                nextSequence
-        ) != 1) {
-            throw failure(
-                    AgentExecutionPersistenceException.Code.STATE_CONFLICT,
-                    "Could not advance Session sequence"
-            );
-        }
-
-        Long nextRunSequence = null;
-        if (run != null) {
-            long previousRunSequence = requireNonNegative(
-                    run.getLastRunStepSequence(),
-                    "lastRunStepSequence"
-            );
-            nextRunSequence = Math.incrementExact(previousRunSequence);
-            if (runMapper.advanceStepSequence(
-                    run.getRunId(),
-                    previousRunSequence,
-                    nextRunSequence
-            ) != 1) {
-                throw failure(
-                        AgentExecutionPersistenceException.Code.STATE_CONFLICT,
-                        "Could not advance Run sequence"
-                );
-            }
-        }
-
-        AgentStepEntity step = new AgentStepEntity();
-        step.setEventId(command.eventId());
-        step.setEventDigest(eventDigest);
-        step.setSessionId(command.sessionId());
-        step.setSessionSequence(nextSequence);
-        step.setTaskId(command.taskId());
-        step.setRunId(command.runId());
-        step.setRunStepSequence(nextRunSequence);
-        step.setStepType(command.stepType().name());
-        step.setSchemaVersion(command.schemaVersion());
-        step.setPayloadJson(payloadJson);
-        step.setPersistedPayloadDigest(payloadDigest);
-        step.setCausationEventId(command.causationEventId());
-        step.setCorrelationId(command.correlationId());
-        step.setWorkspaceEpoch(command.workspaceEpoch());
-        step.setWorkspaceGeneration(command.workspaceGeneration());
-        step.setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
-        if (stepMapper.insert(step) != 1 || step.getStepId() == null) {
-            throw failure(
-                    AgentExecutionPersistenceException.Code.PERSISTENCE_FAILURE,
-                    "Could not append Agent Step"
-            );
-        }
-        return new AppendResult(step.getStepId(), nextSequence, nextRunSequence, false);
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public AppendResult appendFence(AppendCommand command,RunExecutionAuthority authority){
+        Objects.requireNonNull(command,"command must not be null");
+        Objects.requireNonNull(authority,"authority must not be null");
+        if(command.runId()==null) throw new IllegalArgumentException("runId must not be null");
+        return appendInternal(command,authority);
     }
 
     private AgentTaskEntity lockAndVerifyTask(AppendCommand command) {
@@ -196,6 +119,98 @@ public class MyBatisAgentEventAppender implements AgentEventAppender {
         putNullable(identity, "workspaceEpoch", command.workspaceEpoch());
         putNullable(identity, "workspaceGeneration", command.workspaceGeneration());
         return canonicalJson.encode(identity).digest();
+    }
+
+    private AppendResult appendInternal(AppendCommand command,RunExecutionAuthority authority){
+        Objects.requireNonNull(command, "command must not be null");
+        CanonicalJsonCodec.EncodedJson payload = canonicalJson.encode(command.persistedPayload());
+        String payloadJson = payload.json();
+        String payloadDigest = payload.digest();
+        String eventDigest = eventDigest(command, payloadDigest);
+
+        AgentSessionEntity session=sessionMapper.selectForUpdate(command.sessionId());
+        if(session==null) throw failure(
+                AgentExecutionPersistenceException.Code.UNKNOWN_SESSION,
+                "Unknown Session: " + command.sessionId()
+        );
+
+        AgentTaskEntity task=lockAndVerifyTask(command);
+        AgentRunEntity run=lockAndVerifyRun(command,task);
+        if(authority!=null) verifyExecutionAuthority(run,authority);
+
+        AgentStepEntity existing=stepMapper.selectByEventId(command.eventId());
+        if(existing!=null){
+            if (!eventDigest.equals(existing.getEventDigest())){
+                throw failure(
+                        AgentExecutionPersistenceException.Code.IDEMPOTENCY_KEY_CONFLICT,
+                        "eventId is already committed with different event semantics: " + command.eventId()
+                );
+            }
+            return new AppendResult(existing.getStepId(),existing.getSessionSequence(),existing.getRunStepSequence(),true);
+        }
+        long previousSessionSequence = requireNonNegative(
+                session.getLastSessionSequence(),
+                "lastSessionSequence"
+        );
+        long nextSessionSequence=Math.incrementExact(previousSessionSequence);
+        if(sessionMapper.advanceSequence(session.getSessionId(),previousSessionSequence,nextSessionSequence)!=1){
+            throw failure(
+                    AgentExecutionPersistenceException.Code.STATE_CONFLICT,
+                    "Could not advance Session sequence"
+            );
+        }
+        Long nextRunStepSequence = null;
+
+        if (run != null) {
+            long previousRunStepSequence = requireNonNegative(
+                    run.getLastRunStepSequence(),
+                    "lastRunStepSequence"
+            );
+            long next = Math.incrementExact(previousRunStepSequence);
+            if (runMapper.advanceStepSequence(
+                    run.getRunId(),
+                    previousRunStepSequence,
+                    next
+            ) != 1) {
+                throw failure(
+                        AgentExecutionPersistenceException.Code.STATE_CONFLICT,
+                        "Could not advance Run sequence"
+                );
+            }
+            nextRunStepSequence = next;
+        }
+        AgentStepEntity step = new AgentStepEntity();
+        step.setEventId(command.eventId());
+        step.setEventDigest(eventDigest);
+        step.setSessionId(command.sessionId());
+        step.setSessionSequence(nextSessionSequence);
+        step.setTaskId(command.taskId());
+        step.setRunId(command.runId());
+        step.setRunStepSequence(nextRunStepSequence);
+        step.setStepType(command.stepType().name());
+        step.setSchemaVersion(command.schemaVersion());
+        step.setPayloadJson(payloadJson);
+        step.setPersistedPayloadDigest(payloadDigest);
+        step.setCausationEventId(command.causationEventId());
+        step.setCorrelationId(command.correlationId());
+        step.setWorkspaceEpoch(command.workspaceEpoch());
+        step.setWorkspaceGeneration(command.workspaceGeneration());
+        step.setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
+        if(stepMapper.insert(step)!=1||step.getStepId()==null){
+            throw failure(
+                    AgentExecutionPersistenceException.Code.PERSISTENCE_FAILURE,
+                    "Could not append Agent Step"
+            );
+        }
+        return new AppendResult(step.getStepId(),step.getSessionSequence(),step.getRunStepSequence(),false);
+    }
+
+    private void verifyExecutionAuthority(AgentRunEntity run,RunExecutionAuthority authority){
+        Objects.requireNonNull(run, "run must not be null");
+        Objects.requireNonNull(authority, "authority must not be null");
+        if(runMapper.hasValidLease(run.getRunId(), authority.workerId(),authority.fencingToken())!=1){
+            throw failure(AgentExecutionPersistenceException.Code.LEASE_LOST,"Run execution authority has been lost");
+        }
     }
 
     private static void putNullable(ObjectNode node, String field, String value) {
