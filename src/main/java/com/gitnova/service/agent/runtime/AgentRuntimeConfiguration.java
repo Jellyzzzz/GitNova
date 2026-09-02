@@ -6,6 +6,7 @@ import com.gitnova.service.agent.model.MessageFactory;
 import com.gitnova.service.agent.model.ModelGateway;
 import com.gitnova.service.agent.prompt.PromptAssembler;
 import com.gitnova.service.agent.tool.ToolRegistry;
+import com.gitnova.service.agent.tool.ToolSetResolver;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -16,7 +17,7 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties(AgentRuntimeProperties.class)
 public class AgentRuntimeConfiguration {
     @Bean
-    public AgentRuntimePolicy agentRuntimePolicy(AgentRuntimeProperties properties){
+    public AgentRuntimePolicy agentRuntimePolicy(AgentRuntimeProperties properties) {
         return new AgentRuntimePolicy(properties.model(),properties.maxModelCalls(),properties.maxToolCalls(),properties.maxProtocolCorrections(),
                 properties.maxFinalDraftCorrections(),properties.maxOutputTokens(),properties.temperature());
     }
@@ -29,13 +30,13 @@ public class AgentRuntimeConfiguration {
                                      ToolRegistry toolRegistry,
                                      ObjectMapper objectMapper,
                                      WorkspaceGateway workspaceGateway,
-                                     AgentRuntimePolicy policy){
+                                     ToolSetResolver toolSetResolver) {
         return new AgentRuntime(modelGateway,
                 promptAssembler,
                 messageFactory,
                 toolRegistry,
                 workspaceGateway,
                 new CompletionInspector(objectMapper, workspaceGateway),
-                policy);
+                toolSetResolver);
     }
 }

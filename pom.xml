@@ -204,7 +204,7 @@
                     <plugin>
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
-                            <excludedGroups>gateway | mysql-it | workspace-it</excludedGroups>
+                            <excludedGroups>gateway | mysql-it | workspace-it | live-model</excludedGroups>
                         </configuration>
                     </plugin>
                 </plugins>
@@ -247,6 +247,20 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
                             <groups>workspace-it</groups>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>live-model-test</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <groups>live-model</groups>
                         </configuration>
                     </plugin>
                 </plugins>

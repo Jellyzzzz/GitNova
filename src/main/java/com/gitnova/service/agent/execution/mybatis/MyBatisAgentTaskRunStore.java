@@ -2,7 +2,6 @@ package com.gitnova.service.agent.execution.mybatis;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.entity.agent.AgentRunEntity;
 import com.gitnova.entity.agent.AgentSessionEntity;
@@ -20,10 +19,10 @@ import com.gitnova.service.agent.execution.AgentTaskRequest;
 import com.gitnova.service.agent.execution.AgentTaskRunStore;
 import com.gitnova.service.agent.execution.CreateTaskCommand;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
+import com.gitnova.service.agent.persistence.AgentExecutionConfigCodec;
 import com.gitnova.service.agent.persistence.AgentOutboxWriter;
 import com.gitnova.service.agent.persistence.AgentStepType;
 import com.gitnova.service.agent.persistence.CanonicalJsonCodec;
-import com.gitnova.service.agent.runtime.AgentCapability;
 import com.gitnova.service.agent.runtime.AgentExecutionConfig;
 import com.gitnova.service.session.AgentSession;
 import org.springframework.stereotype.Repository;
@@ -49,6 +48,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
     private final AgentEventAppender eventAppender;
     private final AgentOutboxWriter outboxWriter;
     private final CanonicalJsonCodec canonicalJson;
+    private final AgentExecutionConfigCodec executionConfigCodec;
     private final ObjectMapper objectMapper;
 
     public MyBatisAgentTaskRunStore(
@@ -59,6 +59,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
             AgentEventAppender eventAppender,
             AgentOutboxWriter outboxWriter,
             CanonicalJsonCodec canonicalJson,
+            AgentExecutionConfigCodec executionConfigCodec,
             ObjectMapper objectMapper
     ) {
         this.sessionMapper = Objects.requireNonNull(sessionMapper, "sessionMapper must not be null");
@@ -68,6 +69,10 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
         this.eventAppender = Objects.requireNonNull(eventAppender, "eventAppender must not be null");
         this.outboxWriter = Objects.requireNonNull(outboxWriter, "outboxWriter must not be null");
         this.canonicalJson = Objects.requireNonNull(canonicalJson, "canonicalJson must not be null");
+        this.executionConfigCodec = Objects.requireNonNull(
+                executionConfigCodec,
+                "executionConfigCodec must not be null"
+        );
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
     }
 
@@ -77,14 +82,8 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
         Objects.requireNonNull(command, "command must not be null");
         AgentSessionEntity session = requireLockedActiveSession(command.sessionId());
         CanonicalJsonCodec.EncodedJson request = canonicalJson.encode(objectMapper.valueToTree(command.request()));
-        ObjectNode executionConfigNode = canonicalJson.objectNode();
-        ArrayNode capabilities = executionConfigNode.putArray("capabilities");
-        for (AgentCapability capability : AgentCapability.values()) {
-            if (command.executionConfig().capabilities().contains(capability)) {
-                capabilities.add(capability.name());
-            }
-        }
-        CanonicalJsonCodec.EncodedJson executionConfig = canonicalJson.encode(executionConfigNode);
+        CanonicalJsonCodec.EncodedJson executionConfig =
+                executionConfigCodec.encode(command.executionConfig());
         LocalDateTime now = utcNow();
 
         AgentTaskEntity candidate = new AgentTaskEntity();
@@ -846,8 +845,8 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
 
     private AgentExecutionConfig decodeExecutionConfig(String executionConfigJson) {
         try {
-            return objectMapper.readValue(executionConfigJson, AgentExecutionConfig.class);
-        } catch (JsonProcessingException | IllegalArgumentException exception) {
+            return executionConfigCodec.decode(executionConfigJson);
+        } catch (IllegalArgumentException exception) {
             throw failure(Code.PERSISTENCE_FAILURE, "Run execution config JSON is invalid");
         }
     }

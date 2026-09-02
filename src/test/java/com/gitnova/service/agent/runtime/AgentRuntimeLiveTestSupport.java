@@ -19,7 +19,11 @@ final class AgentRuntimeLiveTestSupport {
     private AgentRuntimeLiveTestSupport() {
     }
 
-    static AgentExecutionContext execution(AgentRunContext run, String taskText) {
+    static AgentExecutionContext execution(
+            AgentRunContext run,
+            String taskText,
+            AgentExecutionConfig executionConfig
+    ) {
         WorkspaceId workspaceId = WorkspaceId.generate();
         return new AgentExecutionContext(
                 "session-" + run.runId(),
@@ -28,7 +32,7 @@ final class AgentRuntimeLiveTestSupport {
                 taskText,
                 new WorkspaceBinding(workspaceId),
                 new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
-                AgentCapabilityPolicy.cloudAgent()
+                executionConfig
         );
     }
 

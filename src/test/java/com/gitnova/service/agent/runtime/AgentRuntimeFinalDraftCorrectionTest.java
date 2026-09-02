@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.dto.ToolCall;
 import com.gitnova.service.agent.completion.CompletionInspector;
 import com.gitnova.service.agent.model.FakeModelGateway;
+import com.gitnova.service.agent.AgentTestExecutionConfigs;
 import com.gitnova.service.agent.model.MessageFactory;
 import com.gitnova.service.agent.model.ModelFinishReason;
 import com.gitnova.service.agent.model.ModelMessage;
@@ -35,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AgentRuntimeFinalDraftCorrectionTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private AgentExecutionConfig executionConfig;
 
     @Test
     void shouldReturnInvalidDraftObservationAndCompleteAfterModelCorrection() throws Exception {
@@ -133,22 +135,25 @@ class AgentRuntimeFinalDraftCorrectionTest {
     ) {
         WorkspaceGateway workspace = new EmptyWorkspace(generation);
         List<AgentTool> tools = List.of(new FinishTaskTool(objectMapper));
+        AgentRuntimePolicy policy = new AgentRuntimePolicy(
+                "fake-model",
+                5,
+                6,
+                1,
+                maxCorrections,
+                1024,
+                0.0
+        );
+        ToolRegistry registry = new ToolRegistry(tools);
+        executionConfig = AgentTestExecutionConfigs.forTools(tools, policy);
         return new AgentRuntime(
                 gateway,
                 promptAssembler(),
                 new MessageFactory(objectMapper),
-                new ToolRegistry(tools),
+                registry,
                 workspace,
                 new CompletionInspector(objectMapper, workspace),
-                new AgentRuntimePolicy(
-                        "fake-model",
-                        5,
-                        6,
-                        1,
-                        maxCorrections,
-                        1024,
-                        0.0
-                )
+                AgentTestExecutionConfigs.resolver(registry)
         );
     }
 
@@ -187,7 +192,7 @@ class AgentRuntimeFinalDraftCorrectionTest {
                 "Explain the current implementation",
                 new WorkspaceBinding(workspaceId),
                 new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
-                AgentCapabilityPolicy.cloudAgent()
+                executionConfig
         );
     }
 

@@ -6,6 +6,7 @@ import com.gitnova.dto.ToolCall;
 import com.gitnova.dto.ToolDefinition;
 import com.gitnova.service.agent.completion.CompletionInspector;
 import com.gitnova.service.agent.model.FakeModelGateway;
+import com.gitnova.service.agent.AgentTestExecutionConfigs;
 import com.gitnova.service.agent.model.MessageFactory;
 import com.gitnova.service.agent.model.ModelFinishReason;
 import com.gitnova.service.agent.model.ModelMessage;
@@ -39,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AgentRuntimeWorkspaceDriftTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private AgentExecutionConfig executionConfig;
     private final WorkspaceId workspaceId = WorkspaceId.generate();
 
     @Test
@@ -333,14 +335,25 @@ class AgentRuntimeWorkspaceDriftTest {
             WorkspaceGateway workspace,
             List<AgentTool> tools
     ) {
+        AgentRuntimePolicy policy = new AgentRuntimePolicy(
+                "fake-model",
+                5,
+                6,
+                1,
+                1,
+                1024,
+                0.0
+        );
+        ToolRegistry registry = new ToolRegistry(tools);
+        executionConfig = AgentTestExecutionConfigs.forTools(tools, policy);
         return new AgentRuntime(
                 modelGateway,
                 promptAssembler(),
                 new MessageFactory(objectMapper),
-                new ToolRegistry(tools),
+                registry,
                 workspace,
                 new CompletionInspector(objectMapper, workspace),
-                new AgentRuntimePolicy("fake-model", 5, 6, 1, 1, 1024, 0.0)
+                AgentTestExecutionConfigs.resolver(registry)
         );
     }
 
@@ -378,7 +391,7 @@ class AgentRuntimeWorkspaceDriftTest {
                 "Inspect the latest Workspace",
                 new WorkspaceBinding(workspaceId),
                 new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
-                AgentCapabilityPolicy.cloudAgent()
+                executionConfig
         );
     }
 

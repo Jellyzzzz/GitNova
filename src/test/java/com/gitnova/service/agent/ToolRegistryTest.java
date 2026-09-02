@@ -181,7 +181,7 @@ class ToolRegistryTest {
                 "Inspect without modifying",
                 new WorkspaceBinding(workspaceId),
                 new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
-                readOnlyPolicy
+                AgentTestExecutionConfigs.minimal(readOnlyPolicy.granted())
         );
         ToolResult denied = registry.execute(
                 new ToolExecutionContext(readOnlyContext, 0, "call-write"),

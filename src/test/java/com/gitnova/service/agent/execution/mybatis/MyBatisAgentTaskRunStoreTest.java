@@ -15,12 +15,15 @@ import com.gitnova.service.agent.execution.AgentTask;
 import com.gitnova.service.agent.execution.AgentTaskRequest;
 import com.gitnova.service.agent.execution.AgentTaskRunStore;
 import com.gitnova.service.agent.execution.CreateTaskCommand;
+import com.gitnova.service.agent.persistence.AgentExecutionConfigCodec;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.AgentOutboxWriter;
 import com.gitnova.service.agent.persistence.AgentStepType;
 import com.gitnova.service.agent.persistence.CanonicalJsonCodec;
 import com.gitnova.service.agent.runtime.AgentCapability;
 import com.gitnova.service.agent.runtime.AgentExecutionConfig;
+import com.gitnova.service.agent.runtime.AgentRuntimePolicy;
+import com.gitnova.service.agent.runtime.ToolSetSnap;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -97,6 +100,27 @@ class MyBatisAgentTaskRunStoreTest {
         });
         when(taskMapper.selectById(taskId)).thenAnswer(invocation -> taskRow.get());
         when(runMapper.selectById(runId)).thenAnswer(invocation -> runRow.get());
+        AgentExecutionConfig executionConfig = new AgentExecutionConfig(
+                new AgentRuntimePolicy(
+                        "frozen-model",
+                        20,
+                        50,
+                        2,
+                        3,
+                        4096,
+                        0.2
+                ),
+                new LinkedHashSet<>(List.of(
+                        AgentCapability.WORKSPACE_MUTATION,
+                        AgentCapability.CODE_READ
+                )),
+                new ToolSetSnap(
+                        1,
+                        List.of("finishTask", "readFile"),
+                        "b".repeat(64)
+                ),
+                "context-v1"
+        );
         AgentTaskRunStore.CreateResult result = store().createTaskWithInitialRun(
                 new CreateTaskCommand(
                         "create-1",
@@ -105,10 +129,7 @@ class MyBatisAgentTaskRunStoreTest {
                         sessionId,
                         9L,
                         new AgentTaskRequest("review"),
-                        new AgentExecutionConfig(new LinkedHashSet<>(List.of(
-                                AgentCapability.WORKSPACE_MUTATION,
-                                AgentCapability.CODE_READ
-                        )))
+                        executionConfig
                 )
         );
 
@@ -117,14 +138,11 @@ class MyBatisAgentTaskRunStoreTest {
         assertEquals("review", result.task().request().message());
         assertEquals(runId, result.task().currentRunId());
         assertEquals(AgentRun.Status.QUEUED, result.initialRun().status());
-        assertEquals(
-                "{\"capabilities\":[\"CODE_READ\",\"WORKSPACE_MUTATION\"]}",
-                runRow.get().getExecutionConfigJson()
-        );
-        assertEquals(
-                Set.of(AgentCapability.CODE_READ, AgentCapability.WORKSPACE_MUTATION),
-                result.initialRun().executionConfig().capabilities()
-        );
+        CanonicalJsonCodec.EncodedJson encodedConfig = executionConfigCodec()
+                .encode(executionConfig);
+        assertEquals(encodedConfig.json(), runRow.get().getExecutionConfigJson());
+        assertEquals(encodedConfig.digest(), runRow.get().getExecutionConfigDigest());
+        assertEquals(executionConfig, result.initialRun().executionConfig());
         assertEquals("{\"message\":\"review\"}", taskRow.get().getRequestJson());
         ArgumentCaptor<AgentEventAppender.AppendCommand> events =
                 ArgumentCaptor.forClass(AgentEventAppender.AppendCommand.class);
@@ -155,6 +173,24 @@ class MyBatisAgentTaskRunStoreTest {
         AgentExecutionPersistenceException exception = assertThrows(
                 AgentExecutionPersistenceException.class,
                 () -> store().findTask(TASK_ID)
+        );
+
+        assertEquals(
+                AgentExecutionPersistenceException.Code.PERSISTENCE_FAILURE,
+                exception.code()
+        );
+    }
+
+    @Test
+    void invalidPersistedExecutionConfigShouldFailAtThePersistenceBoundary() {
+        AgentRunEntity run = baseRun();
+        run.setStatus("QUEUED");
+        run.setExecutionConfigJson("{\"capabilities\":[\"CODE_READ\"]}");
+        when(runMapper.selectById(RUN_ID)).thenReturn(run);
+
+        AgentExecutionPersistenceException exception = assertThrows(
+                AgentExecutionPersistenceException.class,
+                () -> store().findRun(RUN_ID)
         );
 
         assertEquals(
@@ -420,6 +456,7 @@ class MyBatisAgentTaskRunStoreTest {
 
     private MyBatisAgentTaskRunStore store() {
         ObjectMapper objectMapper = new ObjectMapper();
+        CanonicalJsonCodec canonicalJson = new CanonicalJsonCodec(objectMapper);
         return new MyBatisAgentTaskRunStore(
                 sessionMapper,
                 taskMapper,
@@ -427,9 +464,16 @@ class MyBatisAgentTaskRunStoreTest {
                 workspaceMapper,
                 eventAppender,
                 outboxWriter,
-                new CanonicalJsonCodec(objectMapper),
+                canonicalJson,
+                new AgentExecutionConfigCodec(canonicalJson, objectMapper),
                 objectMapper
         );
+    }
+
+    private AgentExecutionConfigCodec executionConfigCodec() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        CanonicalJsonCodec canonicalJson = new CanonicalJsonCodec(objectMapper);
+        return new AgentExecutionConfigCodec(canonicalJson, objectMapper);
     }
 
     private void stubLockedExecution(AgentRunEntity run, AgentWorkspaceEntity workspace) {
@@ -544,11 +588,34 @@ class MyBatisAgentTaskRunStoreTest {
         run.setTaskId(TASK_ID);
         run.setRunNumber(1L);
         run.setLastRunStepSequence(4L);
-        run.setExecutionConfigJson("{\"capabilities\":[\"CODE_READ\"]}");
+        run.setExecutionConfigJson(
+                executionConfigCodec().encode(testExecutionConfig()).json()
+        );
         run.setExecutionConfigDigest(DIGEST);
         run.setVersion(2L);
         run.setCreatedAt(NOW.minusMinutes(4));
         run.setUpdatedAt(NOW);
         return run;
+    }
+
+    private AgentExecutionConfig testExecutionConfig() {
+        return new AgentExecutionConfig(
+                new AgentRuntimePolicy(
+                        "fake-model",
+                        20,
+                        50,
+                        2,
+                        2,
+                        4096,
+                        0.0
+                ),
+                Set.of(AgentCapability.CODE_READ),
+                new ToolSetSnap(
+                        1,
+                        List.of("finishTask"),
+                        "a".repeat(64)
+                ),
+                "1"
+        );
     }
 }

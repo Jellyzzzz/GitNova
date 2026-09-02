@@ -57,7 +57,9 @@ class AgentRunRecoveryScannerTest {
                 "worker-a",
                 now.minusSeconds(1),
                 fencingToken,
-                new AgentExecutionConfig(Set.of(AgentCapability.CODE_READ)),
+                com.gitnova.service.agent.AgentTestExecutionConfigs.minimal(
+                        Set.of(AgentCapability.CODE_READ)
+                ),
                 "a".repeat(64),
                 null,
                 1L,

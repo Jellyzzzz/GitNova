@@ -61,12 +61,16 @@ class AgentTaskRunMySqlIntegrationTest {
                 "b".repeat(64)
         ));
 
+        AgentExecutionConfig executionConfig =
+                com.gitnova.service.agent.AgentTestExecutionConfigs.minimal(
+                        Set.of(AgentCapability.CODE_READ)
+                );
         CreateTaskCommand create = CreateTaskCommand.prepare(
                 "task-mysql-it-" + UUID.randomUUID(),
                 session.session().sessionId(),
                 9101L,
                 new AgentTaskRequest("verify persistence"),
-                new AgentExecutionConfig(Set.of(AgentCapability.CODE_READ))
+                executionConfig
         );
         AgentTaskRunStore.CreateResult created = taskRunStore.createTaskWithInitialRun(create);
 
@@ -74,6 +78,11 @@ class AgentTaskRunMySqlIntegrationTest {
         assertEquals(AgentTask.Status.ACTIVE, created.task().status());
         assertEquals("verify persistence", created.task().request().message());
         assertEquals(AgentRun.Status.QUEUED, created.initialRun().status());
+        assertEquals(executionConfig, created.initialRun().executionConfig());
+        assertEquals(
+                executionConfig,
+                taskRunStore.findRun(create.initialRunId()).orElseThrow().executionConfig()
+        );
         assertEquals(
                 "verify persistence",
                 jdbcTemplate.queryForObject(

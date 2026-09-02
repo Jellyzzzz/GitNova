@@ -183,7 +183,7 @@ class FinishTaskToolTest {
                 "Inspect generation handling and fix it if necessary",
                 new WorkspaceBinding(workspaceId),
                 new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
-                AgentCapabilityPolicy.cloudAgent()
+                com.gitnova.service.agent.AgentTestExecutionConfigs.minimal()
         );
         return com.gitnova.service.agent.AgentTestContexts.toolExecution(agent, 2, "call-finish-1");
     }

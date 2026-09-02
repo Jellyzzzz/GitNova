@@ -247,7 +247,7 @@ class CompletionInspectorTest {
                 "Inspect the repository",
                 new WorkspaceBinding(workspaceId),
                 new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
-                AgentCapabilityPolicy.cloudAgent()
+                com.gitnova.service.agent.AgentTestExecutionConfigs.minimal()
         );
     }
 

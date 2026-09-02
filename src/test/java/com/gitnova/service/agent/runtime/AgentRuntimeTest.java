@@ -8,6 +8,7 @@ import com.gitnova.dto.ToolDefinition;
 import com.gitnova.service.agent.completion.CompletionDisposition;
 import com.gitnova.service.agent.completion.CompletionInspector;
 import com.gitnova.service.agent.model.FakeModelGateway;
+import com.gitnova.service.agent.AgentTestExecutionConfigs;
 import com.gitnova.service.agent.model.MessageFactory;
 import com.gitnova.service.agent.model.ModelFinishReason;
 import com.gitnova.service.agent.model.ModelGatewayErrorCode;
@@ -46,6 +47,7 @@ class AgentRuntimeTest {
     private static final String CHANGED_FILE = "src/App.java";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private AgentExecutionConfig executionConfig;
 
     @Test
     void shouldCompleteReadOnlyTaskThroughToolObservationAndCanonicalInspection() throws Exception {
@@ -87,7 +89,7 @@ class AgentRuntimeTest {
         ModelRequest firstRequest = modelGateway.receivedRequests().get(0);
         assertEquals("Explain generation semantics", firstRequest.messages().get(1).content());
         assertEquals(
-                List.of("readContext", FinishTaskTool.NAME),
+                List.of(FinishTaskTool.NAME, "readContext"),
                 firstRequest.tools().stream().map(ToolDefinition::name).toList()
         );
 
@@ -187,14 +189,25 @@ class AgentRuntimeTest {
             WorkspaceGateway workspace,
             List<AgentTool> tools
     ) {
+        AgentRuntimePolicy policy = new AgentRuntimePolicy(
+                "fake-model",
+                6,
+                8,
+                1,
+                1,
+                1024,
+                0.0
+        );
+        ToolRegistry registry = new ToolRegistry(tools);
+        executionConfig = AgentTestExecutionConfigs.forTools(tools, policy);
         return new AgentRuntime(
                 modelGateway,
                 promptAssembler(),
                 new MessageFactory(objectMapper),
-                new ToolRegistry(tools),
+                registry,
                 workspace,
                 new CompletionInspector(objectMapper, workspace),
-                new AgentRuntimePolicy("fake-model", 6, 8, 1, 1, 1024, 0.0)
+                AgentTestExecutionConfigs.resolver(registry)
         );
     }
 
@@ -233,7 +246,7 @@ class AgentRuntimeTest {
                 taskText,
                 new WorkspaceBinding(workspaceId),
                 new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
-                AgentCapabilityPolicy.cloudAgent()
+                executionConfig
         );
     }
 

@@ -9,6 +9,7 @@ import com.gitnova.gitobject.GitObjectReader;
 import com.gitnova.service.agent.completion.CompletionDisposition;
 import com.gitnova.service.agent.completion.CompletionInspector;
 import com.gitnova.service.agent.model.FakeModelGateway;
+import com.gitnova.service.agent.AgentTestExecutionConfigs;
 import com.gitnova.service.agent.model.MessageFactory;
 import com.gitnova.service.agent.model.ModelFinishReason;
 import com.gitnova.service.agent.model.ModelGateway;
@@ -126,6 +127,7 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
             """;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private AgentExecutionConfig executionConfig;
 
     @TempDir
     Path tempDir;
@@ -694,14 +696,16 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                 new GetWorkspaceDiffTool(fixture.gateway(), objectMapper),
                 new FinishTaskTool(objectMapper)
         );
+        ToolRegistry registry = new ToolRegistry(tools);
+        executionConfig = AgentTestExecutionConfigs.forTools(tools, policy);
         return new AgentRuntime(
                 modelGateway,
                 promptAssembler,
                 new MessageFactory(objectMapper),
-                new ToolRegistry(tools),
+                registry,
                 fixture.gateway(),
                 new CompletionInspector(objectMapper, fixture.gateway()),
-                policy
+                AgentTestExecutionConfigs.resolver(registry)
         );
     }
 
@@ -755,7 +759,7 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                         + "inspect the final Workspace diff, and finish the task.",
                 new WorkspaceBinding(workspaceId),
                 new WorkspaceExecutionPermit("run-local-coding", workspaceId, 1L),
-                AgentCapabilityPolicy.cloudAgent()
+                executionConfig
         );
     }
 
@@ -778,7 +782,7 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                         + "from working directory '.', inspect the final Workspace diff, and finish.",
                 new WorkspaceBinding(workspaceId),
                 new WorkspaceExecutionPermit("run-medium-batch", workspaceId, 1L),
-                AgentCapabilityPolicy.cloudAgent()
+                executionConfig
         );
     }
 
@@ -800,7 +804,7 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                         + "directory '.', inspect the final Workspace diff, and finish the task.",
                 new WorkspaceBinding(workspaceId),
                 new WorkspaceExecutionPermit("run-workspace-drift", workspaceId, 1L),
-                AgentCapabilityPolicy.cloudAgent()
+                executionConfig
         );
     }
 

@@ -82,7 +82,9 @@ class DefaultDurableRunExecutorTest {
                 "worker-a",
                 now.plusSeconds(30),
                 3L,
-                new AgentExecutionConfig(Set.of(AgentCapability.CODE_READ)),
+                com.gitnova.service.agent.AgentTestExecutionConfigs.minimal(
+                        Set.of(AgentCapability.CODE_READ)
+                ),
                 "a".repeat(64),
                 null,
                 1L,

@@ -12,7 +12,7 @@ public record AgentExecutionContext(
         String taskText,
         WorkspaceBinding workspace,
         WorkspaceExecutionPermit executionPermit,
-        AgentCapabilityPolicy capabilities
+        AgentExecutionConfig executionConfig
 ) {
     public AgentExecutionContext {
         Objects.requireNonNull(sessionId);
@@ -20,7 +20,7 @@ public record AgentExecutionContext(
         Objects.requireNonNull(taskText);
         Objects.requireNonNull(workspace);
         Objects.requireNonNull(executionPermit);
-        Objects.requireNonNull(capabilities);
+        Objects.requireNonNull(executionConfig);
 
         if (!workspace.workspaceId().equals(executionPermit.workspaceId())
                 || !context.runId().equals(executionPermit.runId())) {
@@ -39,11 +39,18 @@ public record AgentExecutionContext(
                     "taskText must not be blank"
             );
         }
-        if (!capabilities.allows(
+        if (!executionConfig.capabilityPolicy().allows(
                 AgentCapability.CODE_READ)) {
             throw new IllegalArgumentException(
                     "Cloud Agent requires CODE_READ"
             );
         }
+    }
+    public AgentRuntimePolicy runtimePolicy() {
+        return executionConfig.policy();
+    }
+
+    public AgentCapabilityPolicy capabilities() {
+        return executionConfig.capabilityPolicy();
     }
 }

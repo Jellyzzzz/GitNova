@@ -18,6 +18,7 @@ import com.gitnova.service.agent.prompt.PromptAssembler;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
+import com.gitnova.service.agent.tool.ToolSetResolver;
 import com.gitnova.service.agent.tool.ToolStatus;
 import com.gitnova.service.agent.tools.FinishTaskTool;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
@@ -74,7 +75,7 @@ public final class AgentRuntime {
     private final ToolRegistry toolRegistry;
     private final WorkspaceGateway workspaceGateway;
     private final CompletionInspector completionInspector;
-    private final AgentRuntimePolicy policy;
+    private final ToolSetResolver toolSetResolver;
 
     public AgentRuntime(
             ModelGateway modelGateway,
@@ -83,7 +84,7 @@ public final class AgentRuntime {
             ToolRegistry toolRegistry,
             WorkspaceGateway workspaceGateway,
             CompletionInspector completionInspector,
-            AgentRuntimePolicy policy
+            ToolSetResolver toolSetResolver
     ) {
         this.modelGateway = Objects.requireNonNull(modelGateway, "modelGateway must not be null");
         this.promptAssembler = Objects.requireNonNull(
@@ -103,7 +104,10 @@ public final class AgentRuntime {
                 completionInspector,
                 "completionInspector must not be null"
         );
-        this.policy = Objects.requireNonNull(policy, "policy must not be null");
+        this.toolSetResolver = Objects.requireNonNull(
+                toolSetResolver,
+                "toolSetResolver must not be null"
+        );
     }
 
     public AgentRunResult run(AgentExecutionContext context) {
@@ -116,13 +120,29 @@ public final class AgentRuntime {
     ) {
         Objects.requireNonNull(context, "context must not be null");
         Objects.requireNonNull(executionControl, "executionControl must not be null");
+        AgentRuntimePolicy policy = context.runtimePolicy();
+        AgentExecutionConfig executionConfig =
+                context.executionConfig();
+        AgentCapabilityPolicy capabilities =
+                executionConfig.capabilityPolicy();
+
+        List<ToolDefinition> toolDefinitions =
+                toolSetResolver.resolve(
+                        executionConfig.toolSet(),
+                        capabilities
+                );
         AssembledPrompt prompt = promptAssembler.assemble(context.context());
         RunState state = RunState.start(
                 messageFactory.initialMessages(prompt, context.taskText())
         );
-        List<ToolDefinition> toolDefinitions = toolRegistry.definitions(context.capabilities());
-        if (toolDefinitions.stream().noneMatch(definition ->
-                FinishTaskTool.NAME.equals(definition.name()))) {
+        boolean finishTaskAvailable = false;
+        for (ToolDefinition definition : toolDefinitions) {
+            if (FinishTaskTool.NAME.equals(definition.name())) {
+                finishTaskAvailable = true;
+                break;
+            }
+        }
+        if (!finishTaskAvailable) {
             throw new IllegalStateException("finishTask must be registered and authorized");
         }
 
@@ -141,7 +161,7 @@ public final class AgentRuntime {
             }
             appendWorkspaceDriftFeedback(state, beforeModel);
 
-            ModelRequest request = buildRequest(context, state, toolDefinitions);
+            ModelRequest request = buildRequest(context, state, toolDefinitions, policy);
             executionControl.requireLease();
             state.modelCallCount++;
             ModelResponse response;
@@ -160,9 +180,10 @@ public final class AgentRuntime {
                         state,
                         context,
                         executionControl,
-                        response.toolCalls()
+                        response.toolCalls(),
+                        policy
                 );
-                case STOP -> handleStopWithoutFinish(state);
+                case STOP -> handleStopWithoutFinish(state, policy);
                 case LENGTH -> Optional.of(terminate(
                         state,
                         AgentTerminationReason.MODEL_OUTPUT_LENGTH
@@ -232,7 +253,8 @@ public final class AgentRuntime {
     private ModelRequest buildRequest(
             AgentExecutionContext context,
             RunState state,
-            List<ToolDefinition> toolDefinitions
+            List<ToolDefinition> toolDefinitions,
+            AgentRuntimePolicy policy
     ) {
         String requestId = context.context().runId()
                 + ":turn" + state.turn
@@ -251,7 +273,8 @@ public final class AgentRuntime {
             RunState state,
             AgentExecutionContext context,
             AgentExecutionControl executionControl,
-            List<ToolCall> toolCalls
+            List<ToolCall> toolCalls,
+            AgentRuntimePolicy policy
     ) {
         if (state.toolCallCount + toolCalls.size() > policy.maxToolCalls()) {
             return Optional.of(terminate(
@@ -264,13 +287,13 @@ public final class AgentRuntime {
                 .filter(call -> toolRegistry.isTerminal(call.name()))
                 .count();
         if (terminalCount > 0 && toolCalls.size() != 1) {
-            return rejectMixedTerminalCalls(state, toolCalls);
+            return rejectMixedTerminalCalls(state, toolCalls, policy);
         }
         if (terminalCount == 1) {
             executionControl.requireLease();
             ToolCall terminalCall = toolCalls.get(0);
             if (!FinishTaskTool.NAME.equals(terminalCall.name())) {
-                return rejectUnsupportedTerminalCall(state, terminalCall);
+                return rejectUnsupportedTerminalCall(state, terminalCall, policy);
             }
             WorkspaceGateway.WorkspaceRefresh refresh = synchronizeWorkspace(context, state);
             if (refresh == null) {
@@ -280,7 +303,12 @@ public final class AgentRuntime {
                         AgentTerminationReason.WORKSPACE_SYNC_FAILURE
                 ));
             }
-            Optional<AgentRunResult> finish = handleFinish(context, state, terminalCall);
+            Optional<AgentRunResult> finish = handleFinish(
+                    context,
+                    state,
+                    terminalCall,
+                    policy
+            );
             executionControl.requireLease();
             if (finish.isEmpty()) {
                 appendWorkspaceDriftFeedback(state, refresh);
@@ -335,7 +363,10 @@ public final class AgentRuntime {
         }
     }
 
-    private Optional<AgentRunResult> handleStopWithoutFinish(RunState state) {
+    private Optional<AgentRunResult> handleStopWithoutFinish(
+            RunState state,
+            AgentRuntimePolicy policy
+    ) {
         state.lastProtocolDeviation = ProtocolDeviation.MODEL_STOPPED_WITHOUT_FINISH;
         if (state.protocolCorrectionCount >= policy.maxProtocolCorrections()) {
             return Optional.of(terminate(
@@ -352,7 +383,8 @@ public final class AgentRuntime {
 
     private Optional<AgentRunResult> rejectMixedTerminalCalls(
             RunState state,
-            List<ToolCall> toolCalls
+            List<ToolCall> toolCalls,
+            AgentRuntimePolicy policy
     ) {
         state.lastProtocolDeviation = ProtocolDeviation.MIXED_TERMINAL_TOOL_CALLS;
         ToolResult rejection = ToolResult.error(
@@ -365,12 +397,13 @@ public final class AgentRuntime {
             state.toolCallCount++;
             state.messages.add(messageFactory.tool(toolCall, rejection));
         }
-        return consumeProtocolCorrectionOrTerminate(state);
+        return consumeProtocolCorrectionOrTerminate(state, policy);
     }
 
     private Optional<AgentRunResult> rejectUnsupportedTerminalCall(
             RunState state,
-            ToolCall toolCall
+            ToolCall toolCall,
+            AgentRuntimePolicy policy
     ) {
         state.toolCallCount++;
         ToolResult rejection = ToolResult.error(
@@ -381,10 +414,13 @@ public final class AgentRuntime {
         );
         state.messages.add(messageFactory.tool(toolCall, rejection));
         state.lastProtocolDeviation = ProtocolDeviation.MIXED_TERMINAL_TOOL_CALLS;
-        return consumeProtocolCorrectionOrTerminate(state);
+        return consumeProtocolCorrectionOrTerminate(state, policy);
     }
 
-    private Optional<AgentRunResult> consumeProtocolCorrectionOrTerminate(RunState state) {
+    private Optional<AgentRunResult> consumeProtocolCorrectionOrTerminate(
+            RunState state,
+            AgentRuntimePolicy policy
+    ) {
         if (state.protocolCorrectionCount >= policy.maxProtocolCorrections()) {
             return Optional.of(terminate(
                     state,
@@ -469,7 +505,8 @@ public final class AgentRuntime {
     private Optional<AgentRunResult> handleFinish(
             AgentExecutionContext context,
             RunState state,
-            ToolCall call
+            ToolCall call,
+            AgentRuntimePolicy policy
     ) {
         ToolExecutionContext execution = new ToolExecutionContext(
                 context,
@@ -482,7 +519,11 @@ public final class AgentRuntime {
 
         if (!result.successful()) {
             if (result.status() == ToolStatus.INVALID_ARGUMENT) {
-                return handleCorrectableCompletion(state, List.of(result.message()));
+                return handleCorrectableCompletion(
+                        state,
+                        List.of(result.message()),
+                        policy
+                );
             }
             return Optional.of(terminate(
                     state,
@@ -511,7 +552,7 @@ public final class AgentRuntime {
             return Optional.of(complete(state, decision.outcome()));
         }
         if (decision.correctable()) {
-            return handleCorrectableCompletion(state, decision.feedback());
+            return handleCorrectableCompletion(state, decision.feedback(), policy);
         }
         return Optional.of(terminate(
                 state,
@@ -521,7 +562,8 @@ public final class AgentRuntime {
 
     private Optional<AgentRunResult> handleCorrectableCompletion(
             RunState state,
-            List<String> feedback
+            List<String> feedback,
+            AgentRuntimePolicy policy
     ) {
         if (state.completionCorrectionCount >= policy.maxFinalDraftCorrections()) {
             return Optional.of(terminate(

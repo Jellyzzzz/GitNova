@@ -129,6 +129,20 @@ class LiveRealToolsAgentRuntimeSmokeTest {
                 new OutputContractSection()
         ));
         WorkspaceGateway workspaceGateway = AgentRuntimeLiveTestSupport.workspace();
+        AgentRuntimePolicy policy = new AgentRuntimePolicy(
+                model,
+                8,
+                12,
+                2,
+                2,
+                2048,
+                0.0
+        );
+        AgentExecutionConfig executionConfig =
+                com.gitnova.service.agent.AgentTestExecutionConfigs.forRegistry(
+                        toolRegistry,
+                        policy
+                );
         AgentRuntime runtime = new AgentRuntime(
                 modelGateway,
                 promptAssembler,
@@ -136,7 +150,7 @@ class LiveRealToolsAgentRuntimeSmokeTest {
                 toolRegistry,
                 workspaceGateway,
                 AgentRuntimeLiveTestSupport.inspector(objectMapper, workspaceGateway),
-                new AgentRuntimePolicy(model, 8, 12, 2, 2, 2048, 0.0)
+                com.gitnova.service.agent.AgentTestExecutionConfigs.resolver(toolRegistry)
         );
 
         AgentRunResult result = runtime.run(AgentRuntimeLiveTestSupport.execution(
@@ -147,7 +161,8 @@ class LiveRealToolsAgentRuntimeSmokeTest {
                         revision.baseSha1(),
                         revision.targetSha1()
                 ),
-                "Review the authorized change and report evidence-backed findings"
+                "Review the authorized change and report evidence-backed findings",
+                executionConfig
         ));
 
         System.out.printf(

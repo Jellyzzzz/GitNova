@@ -1,6 +1,5 @@
 package com.gitnova.service.agent.execution;
 
-import com.gitnova.service.agent.runtime.AgentCapabilityPolicy;
 import com.gitnova.service.agent.runtime.AgentExecutionContext;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.runtime.AgentRunResult;
@@ -99,9 +98,6 @@ public class DefaultDurableRunExecutor implements DurableRunExecutor {
                 session.source()
         );
 
-        AgentCapabilityPolicy capabilities = AgentCapabilityPolicy.cloudAgent()
-                .restrictTo(run.executionConfig().capabilities());
-
         AgentExecutionContext executionContext = new AgentExecutionContext(
                 session.sessionId(),
                 agentRunContext,
@@ -109,7 +105,7 @@ public class DefaultDurableRunExecutor implements DurableRunExecutor {
                 task.request().message(),
                 workspace,
                 executionPermit,
-                capabilities
+                run.executionConfig()
         );
 
         AgentExecutionControl executionControl = new AgentExecutionControl();

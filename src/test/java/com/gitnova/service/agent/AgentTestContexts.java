@@ -1,6 +1,5 @@
 package com.gitnova.service.agent;
 
-import com.gitnova.service.agent.runtime.AgentCapabilityPolicy;
 import com.gitnova.service.agent.runtime.AgentExecutionContext;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.tool.ToolExecutionContext;
@@ -29,7 +28,7 @@ public final class AgentTestContexts {
                 "test task",
                 new WorkspaceBinding(workspaceId),
                 new WorkspaceExecutionPermit(run.runId(), workspaceId, 1L),
-                AgentCapabilityPolicy.cloudAgent()
+                AgentTestExecutionConfigs.minimal()
         );
     }
 

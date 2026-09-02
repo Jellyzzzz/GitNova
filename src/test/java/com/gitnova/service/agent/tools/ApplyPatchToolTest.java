@@ -87,7 +87,9 @@ class ApplyPatchToolTest {
                 "Inspect without modifying",
                 new WorkspaceBinding(WORKSPACE_ID),
                 new WorkspaceExecutionPermit(run.runId(), WORKSPACE_ID, 1L),
-                new AgentCapabilityPolicy(Set.of(AgentCapability.CODE_READ))
+                com.gitnova.service.agent.AgentTestExecutionConfigs.minimal(
+                        Set.of(AgentCapability.CODE_READ)
+                )
         );
         ToolResult result = new ToolRegistry(List.of(tool)).execute(
                 new ToolExecutionContext(readOnly, 0, "call-1"),

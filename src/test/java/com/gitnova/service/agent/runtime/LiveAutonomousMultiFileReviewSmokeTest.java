@@ -133,6 +133,20 @@ class LiveAutonomousMultiFileReviewSmokeTest {
                 new OutputContractSection()
         ));
         WorkspaceGateway workspaceGateway = AgentRuntimeLiveTestSupport.workspace();
+        AgentRuntimePolicy policy = new AgentRuntimePolicy(
+                model,
+                12,
+                24,
+                2,
+                2,
+                4096,
+                0.0
+        );
+        AgentExecutionConfig executionConfig =
+                com.gitnova.service.agent.AgentTestExecutionConfigs.forRegistry(
+                        registry,
+                        policy
+                );
         AgentRuntime runtime = new AgentRuntime(
                 gateway,
                 promptAssembler,
@@ -140,7 +154,7 @@ class LiveAutonomousMultiFileReviewSmokeTest {
                 registry,
                 workspaceGateway,
                 AgentRuntimeLiveTestSupport.inspector(objectMapper, workspaceGateway),
-                new AgentRuntimePolicy(model, 12, 24, 2, 2, 4096, 0.0)
+                com.gitnova.service.agent.AgentTestExecutionConfigs.resolver(registry)
         );
 
         AgentRunResult result = runtime.run(AgentRuntimeLiveTestSupport.execution(
@@ -151,7 +165,8 @@ class LiveAutonomousMultiFileReviewSmokeTest {
                         revision.baseSha1(),
                         revision.targetSha1()
                 ),
-                "Review every changed file and report concrete correctness or security defects"
+                "Review every changed file and report concrete correctness or security defects",
+                executionConfig
         ));
 
         Set<String> actualIssuePaths = AgentRuntimeLiveTestSupport.reviewDraft(result) == null

@@ -169,7 +169,9 @@ class RunDispatchWorkerTest {
     }
 
     private AgentExecutionConfig executionConfig() {
-        return new AgentExecutionConfig(Set.of(AgentCapability.CODE_READ));
+        return com.gitnova.service.agent.AgentTestExecutionConfigs.minimal(
+                Set.of(AgentCapability.CODE_READ)
+        );
     }
 
     private AgentRun queuedRun() {
