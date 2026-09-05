@@ -5,7 +5,6 @@ import com.gitnova.common.UserContext;
 import com.gitnova.dto.ApiResponse;
 import com.gitnova.entity.RepoMember;
 import com.gitnova.entity.Repository;
-import com.gitnova.entity.User;
 import com.gitnova.gitlet.Utils;
 import com.gitnova.mapper.RepoMemberMapper;
 import com.gitnova.mapper.RepositoryMapper;
@@ -23,13 +22,16 @@ public class RepoService {
     private final RepositoryMapper repositoryMapper;
     private final RepoMemberMapper repoMemberMapper;
     private final GitletService gitletService;
+    private final RepositoryAccessService repositoryAccessService;
 
     public RepoService(RepositoryMapper repositoryMapper,
                        RepoMemberMapper repoMemberMapper,
-                       GitletService gitletService) {
+                       GitletService gitletService,
+                       RepositoryAccessService repositoryAccessService) {
         this.repositoryMapper = repositoryMapper;
         this.repoMemberMapper = repoMemberMapper;
         this.gitletService = gitletService;
+        this.repositoryAccessService = repositoryAccessService;
     }
 
     /**
@@ -96,20 +98,12 @@ public class RepoService {
      * 仓库详情
      */
     public ApiResponse<?> getRepoDetail(Long repoId) {
-        // TODO: Phase 1
-        Long userId=UserContext.getUserId();
-        Repository repo=repositoryMapper.selectById(repoId);
-        if(repo==null) return ApiResponse.error(404,"仓库不存在");
-
-        if((repo.getIsPrivate()==1)){
-            LambdaQueryWrapper<RepoMember>wrapper=new LambdaQueryWrapper<>();
-            wrapper.eq(RepoMember::getRepoId,repo.getId())
-                    .eq(RepoMember::getUserId,userId);
-            RepoMember member=repoMemberMapper.selectOne(wrapper);
-            if(member==null) return ApiResponse.error(403,"权限不足");
-        }
-
-        return ApiResponse.success(repo);
+        long actorId = UserContext.getUserId();
+        Repository repository = repositoryAccessService.requireReadAccess(
+                repoId,
+                actorId
+        );
+        return ApiResponse.success(repository);
     }
 
     /**
@@ -117,19 +111,14 @@ public class RepoService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ApiResponse<?> deleteRepo(Long repoId) {
-        // TODO: Phase 1
-        Long userId=UserContext.getUserId();
+        long actorId = UserContext.getUserId();
+        repositoryAccessService.requireOwnerAccess(repoId, actorId);
 
-        Repository repo=repositoryMapper.selectById(repoId);
-        if(repo==null) return ApiResponse.error(404,"仓库不存在");
-
-        LambdaQueryWrapper<RepoMember>wrapper=new LambdaQueryWrapper<>();
-        wrapper.eq(RepoMember::getRepoId,repoId).eq(RepoMember::getUserId,userId);
-        RepoMember member=repoMemberMapper.selectOne(wrapper);
-        if(member==null||!"owner".equals(member.getRole())) return ApiResponse.error(403,"仅仓库所有者可删除");
-
-        repoMemberMapper.delete(new LambdaQueryWrapper<RepoMember>().eq(RepoMember::getRepoId,repoId));
+        repoMemberMapper.delete(
+                new LambdaQueryWrapper<RepoMember>().eq(RepoMember::getRepoId, repoId)
+        );
         repositoryMapper.deleteById(repoId);
+        repositoryAccessService.evictMemberAfterCommit(repoId, actorId);
         return ApiResponse.success(null);
     }
 }

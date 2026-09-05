@@ -18,4 +18,11 @@ public interface RepoMemberMapper extends BaseMapper<RepoMember> {
     order by r.created_at desc
     """)
     List<Repository> selectByReposUserId(@Param("userId")Long userId);
+
+    @Select("""
+    select role from repo_member
+    where repo_id=#{repoId} and user_id=#{userId}
+    limit 1
+    """)
+    String findRole(@Param("repoId") Long repoId, @Param("userId") Long userId);
 }

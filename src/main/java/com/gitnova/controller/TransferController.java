@@ -1,18 +1,14 @@
 package com.gitnova.controller;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gitnova.common.UserContext;
 import com.gitnova.dto.ApiResponse;
 import com.gitnova.dto.NegotiationResponse;
 import com.gitnova.dto.PushRequest;
 import com.gitnova.dto.TransferMetadata;
-import com.gitnova.entity.RepoMember;
 import com.gitnova.entity.Repository;
-import com.gitnova.mapper.RepoMemberMapper;
-import com.gitnova.mapper.RepositoryMapper;
 import com.gitnova.service.ObjectNegotiationService;
+import com.gitnova.service.RepositoryAccessService;
 import com.gitnova.service.TransferService;
 import com.gitnova.storage.RepoKey;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,18 +32,18 @@ public class TransferController {
 
     private final ObjectNegotiationService negotiationService;
     private final TransferService transferService;
-    private final RepositoryMapper repositoryMapper;
-    private final RepoMemberMapper repoMemberMapper;
+    private final RepositoryAccessService repositoryAccessService;
     private final ObjectMapper objectMapper;
 
-    public TransferController(ObjectNegotiationService negotiationService,
-                              TransferService transferService,
-                              RepositoryMapper repositoryMapper,
-                              RepoMemberMapper repoMemberMapper, ObjectMapper objectMapper) {
+    public TransferController(
+            ObjectNegotiationService negotiationService,
+            TransferService transferService,
+            RepositoryAccessService repositoryAccessService,
+            ObjectMapper objectMapper
+    ) {
         this.negotiationService = negotiationService;
         this.transferService = transferService;
-        this.repositoryMapper = repositoryMapper;
-        this.repoMemberMapper = repoMemberMapper;
+        this.repositoryAccessService = repositoryAccessService;
         this.objectMapper = objectMapper;
     }
 
@@ -60,21 +56,21 @@ public class TransferController {
     @PostMapping("/negotiate")
     public ApiResponse<NegotiationResponse> negotiate(@PathVariable Long repoId,
                                                         @RequestBody PushRequest request) {
-        // TODO: Phase 2
-        // 1. 校验 repoId 存在 + 当前用户是仓库成员（用 repositoryMapper / repoMemberMapper）
-        // 2. 拼接 repoKey = ownerId + "/" + repoId
-        // 3. NegotiationResponse result = negotiationService.negotiate(repoKey, request);
-        // 4. return ApiResponse.success(result);
-        long userId= UserContext.getUserId();
-        Repository repo=repositoryMapper.selectById(repoId);
-        if(repo==null) return ApiResponse.error(404,"仓库不存在");
-        LambdaQueryWrapper<RepoMember>wrapper=new LambdaQueryWrapper<>();
-        wrapper.eq(RepoMember::getUserId,userId).eq(RepoMember::getRepoId,repoId);
-        RepoMember member=repoMemberMapper.selectOne(wrapper);
-        if(member==null) return ApiResponse.error(403,"无权访问该仓库");
-        String repoKey= RepoKey.of(repo.getOwnerId(),repo.getId()).value();
-        NegotiationResponse res=negotiationService.negotiate(repoId, repoKey, request);
-        return ApiResponse.success(res);
+        long actorId = UserContext.getUserId();
+        Repository repository = repositoryAccessService.requireWriteAccess(
+                repoId,
+                actorId
+        );
+        String repoKey = RepoKey.of(
+                repository.getOwnerId(),
+                repository.getId()
+        ).value();
+        NegotiationResponse result = negotiationService.negotiate(
+                repoId,
+                repoKey,
+                request
+        );
+        return ApiResponse.success(result);
     }
 
     /**
@@ -84,21 +80,43 @@ public class TransferController {
      * multipart：metadata（JSON）+ objects（二进制文件）
      */
     @PostMapping("/transfer")
-    public ApiResponse<?> transfer(@PathVariable Long repoId,
-                                   @RequestParam("metadata") String metadataJson,
-                                   @RequestParam("objects") MultipartFile objectsFile)throws Exception{
-            long userId = UserContext.getUserId();
-            Repository repo = repositoryMapper.selectById(repoId);
-            if (repo == null) return ApiResponse.error(404, "仓库不存在");
-            LambdaQueryWrapper<RepoMember> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(RepoMember::getRepoId, repoId).eq(RepoMember::getUserId, userId);
-            RepoMember member = repoMemberMapper.selectOne(wrapper);
-            if (member == null) return ApiResponse.error(403, "用户权限不足");
-            TransferMetadata metadata = objectMapper.readValue(metadataJson, TransferMetadata.class);
-            String repoKey= RepoKey.of(repo.getOwnerId(),repo.getId()).value();
-            int count = transferService.unpackAndStore(repoKey, objectsFile.getInputStream(), objectsFile.getSize());
-            transferService.updateHead(repoId, repoKey, metadata.getBaseHeadSha1(), metadata.getNewHeadSha1(),
-                    metadata.getBranchName(), userId, metadata.isReview());
-            return ApiResponse.success(Map.of("newHeadSha1", metadata.getNewHeadSha1(), "objectsStored", count));
+    public ApiResponse<?> transfer(
+            @PathVariable Long repoId,
+            @RequestParam("metadata") String metadataJson,
+            @RequestParam("objects") MultipartFile objectsFile
+    ) throws Exception {
+        long actorId = UserContext.getUserId();
+        Repository repository = repositoryAccessService.requireWriteAccess(
+                repoId,
+                actorId
+        );
+        TransferMetadata metadata = objectMapper.readValue(
+                metadataJson,
+                TransferMetadata.class
+        );
+        String repoKey = RepoKey.of(
+                repository.getOwnerId(),
+                repository.getId()
+        ).value();
+        int count = transferService.unpackAndStore(
+                repoKey,
+                objectsFile.getInputStream(),
+                objectsFile.getSize()
+        );
+        transferService.updateHead(
+                repoId,
+                repoKey,
+                metadata.getBaseHeadSha1(),
+                metadata.getNewHeadSha1(),
+                metadata.getBranchName(),
+                actorId,
+                metadata.isReview()
+        );
+        return ApiResponse.success(Map.of(
+                "newHeadSha1",
+                metadata.getNewHeadSha1(),
+                "objectsStored",
+                count
+        ));
     }
 }

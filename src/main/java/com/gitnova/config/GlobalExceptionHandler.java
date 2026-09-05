@@ -3,6 +3,7 @@ package com.gitnova.config;
 import com.gitnova.dto.ApiResponse;
 import com.gitnova.gitobject.CommitCodecException;
 import com.gitnova.gitlet.GitletException;
+import com.gitnova.service.RepositoryAccessService;
 import com.gitnova.service.TransferRejectedException;
 import com.gitnova.storage.ObjectStorageException;
 import com.gitnova.transfer.PackFormatException;
@@ -55,6 +56,19 @@ public class GlobalExceptionHandler {
                 ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.BAD_REQUEST;
         log.warn("Object storage failure [{}]: {}", ex.reason(), ex.getMessage());
         return ResponseEntity.status(status).body(ApiResponse.error(status.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(RepositoryAccessService.AccessException.class)
+    public ResponseEntity<ApiResponse<?>> handleRepositoryAccess(
+            RepositoryAccessService.AccessException exception
+    ) {
+        HttpStatus status = switch (exception.reason()) {
+            case REPOSITORY_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case FORBIDDEN -> HttpStatus.FORBIDDEN;
+        };
+        return ResponseEntity
+                .status(status)
+                .body(ApiResponse.error(status.value(), exception.getMessage()));
     }
 
     /**
