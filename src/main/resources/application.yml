@@ -10,6 +10,13 @@ spring:
     template:
       mandatory: true
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:500ms}
+
   # ===== 数据库 =====
   datasource:
     url: jdbc:mysql://localhost:3306/gitnova?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
@@ -105,6 +112,26 @@ gitnova:
     max-object-size: 32MB
     max-pack-size: 128MB
     io-buffer-size: 64KB
+
+  rate-limit:
+    # Local development stays independent of Redis unless explicitly enabled.
+    enabled: ${RATE_LIMIT_ENABLED:false}
+    fail-open: ${RATE_LIMIT_FAIL_OPEN:true}
+    user:
+      capacity-permits: 120
+      refill-permits-per-second: 2
+      request-cost: 1
+      idle-ttl: 10m
+    repository:
+      capacity-permits: 300
+      refill-permits-per-second: 5
+      request-cost: 1
+      idle-ttl: 10m
+    api:
+      capacity-permits: 600
+      refill-permits-per-second: 10
+      request-cost: 1
+      idle-ttl: 10m
 
   agent:
     artifact:
