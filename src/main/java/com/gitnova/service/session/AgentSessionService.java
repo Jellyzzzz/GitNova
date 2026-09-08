@@ -10,6 +10,7 @@ import com.gitnova.service.agent.workspace.WorkspaceTreeFingerprint;
 import org.springframework.stereotype.Service;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Application service coordinating the durable Session creation saga.
@@ -91,6 +92,14 @@ public class AgentSessionService {
         }
         return sessionStore.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown Session: " + sessionId));
+    }
+
+    public Optional<AgentSession> findByCreationIdempotencyKey(String creationIdempotencyKey) {
+        return sessionStore.findByCreationIdempotencyKey(
+                CreateSessionCommand.requireValidIdempotencyKey(
+                        creationIdempotencyKey
+                )
+        );
     }
 
     private void recordProvisioningFailure(

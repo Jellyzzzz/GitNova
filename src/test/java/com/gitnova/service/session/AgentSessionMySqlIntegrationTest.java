@@ -10,7 +10,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.PreparedStatement;
 import java.sql.Statement;
@@ -18,6 +21,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Actual MySQL contract test; excluded from the default unit lane. */
@@ -31,6 +35,9 @@ class AgentSessionMySqlIntegrationTest {
 
     @Autowired
     JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
 
     @Test
     void shouldPersistIdempotentSessionWorkspaceAndOrderedSteps() {
@@ -89,6 +96,45 @@ class AgentSessionMySqlIntegrationTest {
         );
     }
 
+    @Test
+    void shouldRollbackSessionWorkspaceAndStepWhenTransactionIsInterrupted() {
+        long ownerId = 7002L;
+        long repoId = insertRepository(ownerId);
+        RepoKey repoKey = RepoKey.of(ownerId, repoId);
+        String idempotencyKey = "mysql-rollback-it-" + UUID.randomUUID();
+        CreateSessionCommand command = CreateSessionCommand.prepare(
+                idempotencyKey,
+                9002L,
+                repoKey,
+                new SnapshotScope(GitObjectId.of("c".repeat(40)))
+        );
+        TransactionTemplate nested = new TransactionTemplate(transactionManager);
+        nested.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
+
+        assertThrows(ExpectedRollback.class, () -> nested.executeWithoutResult(status -> {
+            sessionStore.createProvisioning(command);
+            throw new ExpectedRollback();
+        }));
+
+        assertTrue(sessionStore.findByCreationIdempotencyKey(idempotencyKey).isEmpty());
+        assertEquals(
+                0L,
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM agent_workspace WHERE session_id = ?",
+                        Long.class,
+                        command.sessionId()
+                )
+        );
+        assertEquals(
+                0L,
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM agent_step WHERE session_id = ?",
+                        Long.class,
+                        command.sessionId()
+                )
+        );
+    }
+
     private long insertRepository(long ownerId) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
@@ -105,5 +151,8 @@ class AgentSessionMySqlIntegrationTest {
             throw new IllegalStateException("MySQL did not return the repository id");
         }
         return key.longValue();
+    }
+
+    private static final class ExpectedRollback extends RuntimeException {
     }
 }

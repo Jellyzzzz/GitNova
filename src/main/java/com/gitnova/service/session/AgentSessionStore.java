@@ -34,6 +34,11 @@ public interface AgentSessionStore {
 
     Optional<AgentSession> findByCreationIdempotencyKey(String creationIdempotencyKey);
 
+    final class CreationConflictException extends IllegalStateException {
+        public CreationConflictException(String message) {
+            super(message);
+        }
+    }
 
     record CreateResult(
             AgentSession session,

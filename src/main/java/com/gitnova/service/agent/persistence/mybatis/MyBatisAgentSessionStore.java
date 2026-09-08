@@ -65,7 +65,7 @@ public class MyBatisAgentSessionStore implements AgentSessionStore {
                 command.creationIdempotencyKey()
         );
         if (claimed == null) {
-            throw new IllegalStateException(
+            throw new CreationConflictException(
                     "Session identity conflicts with another creation request"
             );
         }
@@ -77,7 +77,7 @@ public class MyBatisAgentSessionStore implements AgentSessionStore {
             return CreateResult.alreadyExisting(toDomain(claimed, existingWorkspace));
         }
         if (!command.sessionId().equals(claimed.getSessionId())) {
-            throw new IllegalStateException(
+            throw new CreationConflictException(
                     "Session identity conflicts with another creation request"
             );
         }
@@ -266,7 +266,7 @@ public class MyBatisAgentSessionStore implements AgentSessionStore {
                 && Objects.equals(session.getRepoKey(), command.repoKey().value())
                 && Objects.equals(workspace.getBaseRevision(), command.source().baseSha1().value());
         if (!same) {
-            throw new IllegalStateException(
+            throw new CreationConflictException(
                     "creationIdempotencyKey is already bound to different Session semantics"
             );
         }

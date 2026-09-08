@@ -6,6 +6,7 @@ import com.gitnova.storage.RepoKey;
 
 import java.util.Objects;
 import java.util.UUID;
+
 /**
  * Trusted command for creating one Session and its logical Workspace identity.
  *
@@ -24,17 +25,12 @@ public record CreateSessionCommand(
     private static final int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
     public CreateSessionCommand {
-        requireNonBlank(creationIdempotencyKey, "creationIdempotencyKey");
+        creationIdempotencyKey = requireValidIdempotencyKey(creationIdempotencyKey);
         requireNonBlank(sessionId, "sessionId");
         Objects.requireNonNull(workspaceId, "workspaceId must not be null");
         Objects.requireNonNull(repoKey, "repoKey must not be null");
         Objects.requireNonNull(source, "source must not be null");
 
-        if (creationIdempotencyKey.length() > MAX_IDEMPOTENCY_KEY_LENGTH) {
-            throw new IllegalArgumentException(
-                    "creationIdempotencyKey exceeds the length limit"
-            );
-        }
         if (createdByActorId <= 0) {
             throw new IllegalArgumentException("createdByActorId must be positive");
         }
@@ -54,6 +50,7 @@ public record CreateSessionCommand(
                 source
         );
     }
+
     /**
      * Globally names the logical SESSION_CREATED event.
      *
@@ -68,6 +65,17 @@ public record CreateSessionCommand(
     public String workspaceMaterializedEventId() {
         return "workspace:materialized:" + workspaceId;
     }
+
+    public static String requireValidIdempotencyKey(String value) {
+        requireNonBlank(value, "creationIdempotencyKey");
+        if (value.length() > MAX_IDEMPOTENCY_KEY_LENGTH) {
+            throw new IllegalArgumentException(
+                    "creationIdempotencyKey exceeds the length limit"
+            );
+        }
+        return value;
+    }
+
     private static void requireNonBlank(String value, String field) {
         Objects.requireNonNull(value, field + " must not be null");
         if (value.isBlank()) {
