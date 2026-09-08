@@ -60,7 +60,6 @@ class RepoServiceTest {
     private static Dependencies dependencies() {
         RepositoryMapper repositoryMapper = mock(RepositoryMapper.class);
         RepoMemberMapper repoMemberMapper = mock(RepoMemberMapper.class);
-        GitletService gitletService = mock(GitletService.class);
         RepositoryAccessService repositoryAccessService = mock(
                 RepositoryAccessService.class
         );
@@ -71,7 +70,6 @@ class RepoServiceTest {
                 new RepoService(
                         repositoryMapper,
                         repoMemberMapper,
-                        gitletService,
                         repositoryAccessService
                 )
         );

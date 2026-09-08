@@ -23,9 +23,7 @@ public class RepoController {
         this.repoService = repoService;
     }
 
-    /**
-     * 创建仓库（内部调用 GitletService.init()）
-     */
+    /** Creates repository metadata and its owner membership. */
     @PostMapping
     public ApiResponse<?> createRepo(@RequestParam String name,
                                      @RequestParam(required = false) String description,

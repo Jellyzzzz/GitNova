@@ -1,23 +1,145 @@
 package com.gitnova.service;
 
 import com.gitnova.gitobject.CanonicalGitObjectCodec;
+import com.gitnova.gitobject.CommitObject;
+import com.gitnova.gitobject.GitObjectId;
 import com.gitnova.gitobject.GitObjectHasher;
+import com.gitnova.mapper.BranchMapper;
+import com.gitnova.mapper.CommitRecordMapper;
+import com.gitnova.mapper.RepositoryMapper;
 import com.gitnova.storage.FakeObjectStorage;
 import com.gitnova.storage.config.RepositoryStorageProperties;
 import com.gitnova.transfer.StreamingObjectPackDecoder;
 import com.gitnova.transfer.TransferProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.util.unit.DataSize;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class TransferServiceTest {
+
+    @Test
+    void shouldTreatAnAlreadyPublishedTargetAsAnIdempotentRetry() {
+        String repoKey = "7/42";
+        CanonicalGitObjectCodec codec = new CanonicalGitObjectCodec();
+        CommitObject commit = new CommitObject(
+                Optional.empty(),
+                Instant.parse("2026-09-06T00:00:00Z"),
+                "initial commit",
+                Map.of()
+        );
+        byte[] commitBytes = codec.encodeCommit(commit);
+        GitObjectId target = GitObjectHasher.sha1(commitBytes);
+        FakeObjectStorage objectStorage = new FakeObjectStorage();
+        objectStorage.writeObject(repoKey, target.value(), commitBytes);
+        RepositoryMapper repositoryMapper = mock(RepositoryMapper.class);
+        CommitRecordMapper commitRecordMapper = mock(CommitRecordMapper.class);
+        BranchMapper branchMapper = mock(BranchMapper.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+        when(branchMapper.findHead(42L, "main")).thenReturn(target.value());
+        TransferService transferService = new TransferService(
+                repositoryMapper,
+                commitRecordMapper,
+                branchMapper,
+                objectStorage,
+                eventPublisher,
+                null,
+                null,
+                codec
+        );
+
+        transferService.updateHead(
+                42L,
+                repoKey,
+                null,
+                target.value(),
+                "main",
+                7L,
+                false
+        );
+
+        verify(branchMapper, never()).compareAndSetHead(any(), any(), any(), any());
+        verifyNoInteractions(repositoryMapper, commitRecordMapper, eventPublisher);
+    }
+
+    @Test
+    void shouldRejectWhenAnotherWriterWinsTheBranchCas() {
+        String repoKey = "7/42";
+        CanonicalGitObjectCodec codec = new CanonicalGitObjectCodec();
+        CommitObject current = new CommitObject(
+                Optional.empty(),
+                Instant.parse("2026-09-06T00:00:00Z"),
+                "current",
+                Map.of()
+        );
+        byte[] currentBytes = codec.encodeCommit(current);
+        GitObjectId currentId = GitObjectHasher.sha1(currentBytes);
+        CommitObject target = new CommitObject(
+                Optional.of(currentId),
+                Instant.parse("2026-09-06T00:01:00Z"),
+                "target",
+                Map.of()
+        );
+        byte[] targetBytes = codec.encodeCommit(target);
+        GitObjectId targetId = GitObjectHasher.sha1(targetBytes);
+        FakeObjectStorage objectStorage = new FakeObjectStorage();
+        objectStorage.writeObject(repoKey, currentId.value(), currentBytes);
+        objectStorage.writeObject(repoKey, targetId.value(), targetBytes);
+        RepositoryMapper repositoryMapper = mock(RepositoryMapper.class);
+        CommitRecordMapper commitRecordMapper = mock(CommitRecordMapper.class);
+        BranchMapper branchMapper = mock(BranchMapper.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+        when(branchMapper.findHead(42L, "main")).thenReturn(currentId.value());
+        when(branchMapper.compareAndSetHead(
+                42L,
+                "main",
+                currentId.value(),
+                targetId.value()
+        )).thenReturn(0);
+        TransferService transferService = new TransferService(
+                repositoryMapper,
+                commitRecordMapper,
+                branchMapper,
+                objectStorage,
+                eventPublisher,
+                null,
+                null,
+                codec
+        );
+
+        TransferRejectedException exception = assertThrows(
+                TransferRejectedException.class,
+                () -> transferService.updateHead(
+                        42L,
+                        repoKey,
+                        currentId.value(),
+                        targetId.value(),
+                        "main",
+                        7L,
+                        false
+                )
+        );
+
+        assertEquals(TransferRejectedException.Reason.NON_FAST_FORWARD, exception.reason());
+        verifyNoInteractions(repositoryMapper, commitRecordMapper, eventPublisher);
+    }
 
     @Test
     void shouldUnpackAndStoreVerifiedObjectWithoutSpringContext(@TempDir Path tempDirectory) {

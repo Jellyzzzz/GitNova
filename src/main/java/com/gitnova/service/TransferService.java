@@ -111,11 +111,11 @@ public class TransferService {
                 throw new TransferRejectedException(TransferRejectedException.Reason.CORRUPT_OBJECT,
                         "branch head is not a valid Git object ID", exception);
             }
-            if (!currentId.value().equals(expectedBase)) {
-                throw nonFastForward();
-            }
             if (currentId.equals(targetId)) {
                 return;
+            }
+            if (!currentId.value().equals(expectedBase)) {
+                throw nonFastForward();
             }
             requireDescendsFrom(repoKey, targetId, currentId);
             if (branchMapper.compareAndSetHead(repoId, validatedBranch, currentId.value(), targetId.value()) != 1) {

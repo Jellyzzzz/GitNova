@@ -5,7 +5,6 @@ import com.gitnova.common.UserContext;
 import com.gitnova.dto.ApiResponse;
 import com.gitnova.entity.RepoMember;
 import com.gitnova.entity.Repository;
-import com.gitnova.gitlet.Utils;
 import com.gitnova.mapper.RepoMemberMapper;
 import com.gitnova.mapper.RepositoryMapper;
 import org.springframework.stereotype.Service;
@@ -21,29 +20,24 @@ public class RepoService {
 
     private final RepositoryMapper repositoryMapper;
     private final RepoMemberMapper repoMemberMapper;
-    private final GitletService gitletService;
     private final RepositoryAccessService repositoryAccessService;
 
     public RepoService(RepositoryMapper repositoryMapper,
                        RepoMemberMapper repoMemberMapper,
-                       GitletService gitletService,
                        RepositoryAccessService repositoryAccessService) {
         this.repositoryMapper = repositoryMapper;
         this.repoMemberMapper = repoMemberMapper;
-        this.gitletService = gitletService;
         this.repositoryAccessService = repositoryAccessService;
     }
 
-    /**
-     * 创建仓库（内部调用 GitletService.init()）
-     */
+    /** Creates repository metadata; canonical object storage is initialized lazily. */
     @Transactional(rollbackFor = Exception.class)
     public ApiResponse<?> createRepo(String name, String description, boolean isPrivate) {
         // TODO: Phase 1
         // 1. 校验仓库名唯一性（同一 owner 下）
         // 2. 写入 repository 表
         // 3. 写入 repo_member 表（owner 角色）
-        // 4. 调用 gitletService.init(repoPath) 初始化对象库
+        // Canonical ObjectStorage creates the repository namespace lazily on first push.
         Long userId= UserContext.getUserId();
         if(userId==null) return  ApiResponse.error(401,"fail");
 
@@ -71,9 +65,6 @@ public class RepoService {
         repoMember.setUserId(userId);
         repoMember.setRole("owner");
         repoMemberMapper.insert(repoMember);
-
-        String repoPath = Utils.join(String.valueOf(userId), String.valueOf(repo.getId())).getPath();
-        gitletService.init(repoPath);
 
         return ApiResponse.success(Map.of(
                 "id", repo.getId(),

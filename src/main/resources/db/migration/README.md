@@ -16,6 +16,7 @@ V1__baseline_existing_schema.sql
 V2__agent_session_foundation.sql
 V3__agent_task_run_foundation.sql
 V4__agent_outbox_quarantine.sql
+V5__scope_commit_record_to_repository.sql
 ```
 
 Flyway is the single migration mechanism. `baseline-on-migrate=1` adopts a legacy non-empty development
