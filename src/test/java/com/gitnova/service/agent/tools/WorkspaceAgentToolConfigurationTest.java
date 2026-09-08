@@ -36,11 +36,15 @@ class WorkspaceAgentToolConfigurationTest {
     }
 
     @Test
-    void shouldNotRegisterWorkspaceToolsWithoutGateway() {
+    void shouldFailStartupWithoutRequiredWorkspaceGateway() {
         contextRunner
                 .withBean(ObjectMapper.class, ObjectMapper::new)
                 .withUserConfiguration(WorkspaceAgentToolConfiguration.class)
-                .run(context -> assertThat(context).doesNotHaveBean(ListFilesTool.class));
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasMessageContaining("WorkspaceGateway");
+                });
     }
 
     @Test

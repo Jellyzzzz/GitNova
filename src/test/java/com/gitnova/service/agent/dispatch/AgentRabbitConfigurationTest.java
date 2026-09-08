@@ -2,7 +2,6 @@ package com.gitnova.service.agent.dispatch;
 
 import com.gitnova.service.agent.execution.AgentTaskRunStore;
 import com.gitnova.service.agent.execution.DurableRunExecutor;
-import com.gitnova.service.agent.runtime.AgentRuntime;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -17,20 +16,25 @@ class AgentRabbitConfigurationTest {
             .withBean(DurableRunExecutor.class, () -> mock(DurableRunExecutor.class));
 
     @Test
-    void shouldNotRegisterTheWorkerBeforeAgentRuntimeIsAvailable() {
+    void shouldRegisterWorkerFromDurableExecutionBoundary() {
         contextRunner.run(context ->
                 assertThat(context)
-                        .doesNotHaveBean(RunDispatchWorker.class)
+                        .hasSingleBean(RunDispatchWorker.class)
         );
     }
 
     @Test
-    void shouldRegisterTheWorkerWhenAllExecutionDependenciesAreAvailable() {
-        contextRunner
-                .withBean(AgentRuntime.class, () -> mock(AgentRuntime.class))
-                .run(context ->
-                        assertThat(context)
-                                .hasSingleBean(RunDispatchWorker.class)
-                );
+    void shouldFailStartupWhenDurableExecutorIsMissing() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(AgentRabbitConfiguration.class)
+                .withBean(
+                        AgentTaskRunStore.class,
+                        () -> mock(AgentTaskRunStore.class)
+                )
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasMessageContaining("DurableRunExecutor");
+                });
     }
 }

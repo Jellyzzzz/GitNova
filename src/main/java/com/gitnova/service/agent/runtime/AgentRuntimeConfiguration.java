@@ -8,7 +8,6 @@ import com.gitnova.service.agent.prompt.PromptAssembler;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolSetResolver;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,7 +22,6 @@ public class AgentRuntimeConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(WorkspaceGateway.class)
     public AgentRuntime agentRuntime(ModelGateway modelGateway,
                                      PromptAssembler promptAssembler,
                                      MessageFactory messageFactory,

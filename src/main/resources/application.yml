@@ -64,7 +64,9 @@ mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true     # 下划线转驼峰
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl   # 开发期打印SQL，生产期注释掉
+    # SQL 通过 SLF4J 按日志级别输出，避免定时轮询与 heartbeat 持续刷屏。
+    # 临时排查 SQL 时可将具体 Mapper 包的日志级别调为 DEBUG。
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   global-config:
     db-config:
       logic-delete-field: deleted          # 逻辑删除字段名（如有需要）

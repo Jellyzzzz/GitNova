@@ -11,7 +11,6 @@ import com.gitnova.service.session.AgentSessionStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
@@ -20,7 +19,6 @@ import java.util.Objects;
 import java.util.concurrent.ScheduledFuture;
 
 @Service
-@ConditionalOnBean(AgentRuntime.class)
 public class DefaultDurableRunExecutor implements DurableRunExecutor {
     private static final int LEASE_SECONDS = 30;
     private static final int HEARTBEAT_SECONDS = 10;

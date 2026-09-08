@@ -7,9 +7,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/** Registers Workspace-backed tools only when a concrete provider gateway is available. */
+/** Registers the Workspace-backed tools required by the Cloud Agent runtime. */
 @Configuration
-@ConditionalOnBean(WorkspaceGateway.class)
 public class WorkspaceAgentToolConfiguration {
 
     @Bean

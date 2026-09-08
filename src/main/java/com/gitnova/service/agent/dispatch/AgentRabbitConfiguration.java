@@ -2,14 +2,13 @@ package com.gitnova.service.agent.dispatch;
 
 import com.gitnova.service.agent.execution.AgentTaskRunStore;
 import com.gitnova.service.agent.execution.DurableRunExecutor;
-import com.gitnova.service.agent.runtime.AgentRuntime;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.support.converter.DefaultJackson2JavaTypeMapper;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -45,11 +44,14 @@ public class AgentRabbitConfiguration {
 
     @Bean
     public MessageConverter rabbitMessageConverter() {
-        return new Jackson2JsonMessageConverter();
+        Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter();
+        DefaultJackson2JavaTypeMapper typeMapper = new DefaultJackson2JavaTypeMapper();
+        typeMapper.setTrustedPackages("com.gitnova.service.agent.dispatch");
+        converter.setJavaTypeMapper(typeMapper);
+        return converter;
     }
 
     @Bean
-    @ConditionalOnBean({AgentRuntime.class, DurableRunExecutor.class})
     public RunDispatchWorker runDispatchWorker(
             AgentTaskRunStore taskRunStore,
             DurableRunExecutor runExecutor
