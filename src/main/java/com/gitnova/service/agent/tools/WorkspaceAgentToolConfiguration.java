@@ -2,8 +2,7 @@ package com.gitnova.service.agent.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
-import com.gitnova.service.agent.workspace.WorkspaceCommandExecutor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -52,7 +51,11 @@ public class WorkspaceAgentToolConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(WorkspaceCommandExecutor.class)
+    @ConditionalOnProperty(
+            prefix = "gitnova.workspace.docker",
+            name = "enabled",
+            havingValue = "true"
+    )
     public RunCommandTool runCommandTool(
             WorkspaceGateway workspaceGateway,
             ObjectMapper objectMapper

@@ -94,6 +94,14 @@ gitnova:
 
   workspace:
     base-path: ${WORKSPACE_BASE_PATH:./data/workspaces}
+    docker:
+      enabled: ${WORKSPACE_DOCKER_ENABLED:false}
+      executable: ${WORKSPACE_DOCKER_EXECUTABLE:docker}
+      image: ${WORKSPACE_DOCKER_IMAGE:gitnova-workspace:java21}
+      user: ${WORKSPACE_DOCKER_USER:1000:1000}
+      cpus: 1.0
+      memory-mb: 512
+      pids-limit: 128
 
 
   # LLM API配置（Phase 4 Agent使用）

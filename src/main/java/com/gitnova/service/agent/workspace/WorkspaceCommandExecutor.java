@@ -1,6 +1,8 @@
 package com.gitnova.service.agent.workspace;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.time.Duration;
 import java.util.List;
 
@@ -18,7 +20,21 @@ import java.util.List;
 @FunctionalInterface
 public interface WorkspaceCommandExecutor {
 
+    /** Outside the mounted tree: repository commands cannot remove this recovery guard. */
+    static Path pendingCommandFile(Path workspaceRoot) {
+        return workspaceRoot.resolveSibling("." + workspaceRoot.getFileName() + ".pending-command");
+    }
+
+    static void requireNoPendingCommand(Path workspaceRoot) {
+        if (!Files.notExists(pendingCommandFile(workspaceRoot), LinkOption.NOFOLLOW_LINKS)) {
+            throw new WorkspaceOperationException(WorkspaceOperationException.Reason.WORKSPACE_UNAVAILABLE,
+                    "WORKSPACE_COMMAND_UNRECONCILED",
+                    "A previous command has not been confirmed stopped; reconcile its container before continuing");
+        }
+    }
+
     ProcessResult execute(
+            Path workspaceRoot,
             Path workingDirectory,
             List<String> argv,
             Duration timeout

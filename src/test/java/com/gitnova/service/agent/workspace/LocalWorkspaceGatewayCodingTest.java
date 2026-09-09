@@ -231,7 +231,7 @@ class LocalWorkspaceGatewayCodingTest {
     @Test
     void shouldSerializeCommandMutationAndAdvanceGenerationWhenTreeChanges() throws Exception {
         AtomicInteger executions = new AtomicInteger();
-        WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) -> {
+        WorkspaceCommandExecutor executor = (workspaceRoot, workingDirectory, argv, timeout) -> {
             executions.incrementAndGet();
             Files.writeString(workingDirectory.resolve("Generated.java"), "class Generated {}\n");
             return new WorkspaceCommandExecutor.ProcessResult(
@@ -268,7 +268,7 @@ class LocalWorkspaceGatewayCodingTest {
 
     @Test
     void shouldTreatNonZeroCommandExitAsObservedCommandOutcome() {
-        WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) ->
+        WorkspaceCommandExecutor executor = (workspaceRoot, workingDirectory, argv, timeout) ->
                 new WorkspaceCommandExecutor.ProcessResult(
                         false,
                         1,
@@ -299,7 +299,7 @@ class LocalWorkspaceGatewayCodingTest {
     @Test
     void shouldRejectEscapingCommandDirectoryBeforeInvokingExecutor() {
         AtomicInteger executions = new AtomicInteger();
-        WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) -> {
+        WorkspaceCommandExecutor executor = (workspaceRoot, workingDirectory, argv, timeout) -> {
             executions.incrementAndGet();
             throw new AssertionError("escaping command must not execute");
         };
@@ -326,7 +326,7 @@ class LocalWorkspaceGatewayCodingTest {
     @Test
     void shouldBoundCommandStreamsAndPreserveTruncationState() {
         String oversized = "x".repeat(WorkspaceGateway.MAX_COMMAND_STREAM_BYTES + 100);
-        WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) ->
+        WorkspaceCommandExecutor executor = (workspaceRoot, workingDirectory, argv, timeout) ->
                 new WorkspaceCommandExecutor.ProcessResult(
                         true,
                         null,
@@ -359,7 +359,7 @@ class LocalWorkspaceGatewayCodingTest {
 
     @Test
     void shouldAdvanceGenerationWhenTimedOutCommandStillChangedWorkspace() throws Exception {
-        WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) -> {
+        WorkspaceCommandExecutor executor = (workspaceRoot, workingDirectory, argv, timeout) -> {
             Files.writeString(workingDirectory.resolve("timeout-output.txt"), "partial output\n");
             return new WorkspaceCommandExecutor.ProcessResult(
                     true,
@@ -394,9 +394,36 @@ class LocalWorkspaceGatewayCodingTest {
     }
 
     @Test
+    void unresolvedContainerBlocksRefreshAndReleasesRejectedMutationLock() throws Exception {
+        Fixture fixture = fixture(null);
+        Files.writeString(WorkspaceCommandExecutor.pendingCommandFile(fixture.root()), "gitnova-command-test\n");
+        assertEquals("WORKSPACE_COMMAND_UNRECONCILED", assertThrows(WorkspaceOperationException.class,
+                () -> fixture.gateway().refreshWorkspace(fixture.workspaceId())).errorCode());
+        assertThrows(WorkspaceOperationException.class, () -> fixture.runCommand(
+                new WorkspaceGateway.CommandRequest(0, List.of("true"), ".", 1, "must not run")));
+        // The failed acquisition must close the file lock, so an operator-reconciled retry is possible.
+        Files.delete(WorkspaceCommandExecutor.pendingCommandFile(fixture.root()));
+        var retry = fixture.runCommand(new WorkspaceGateway.CommandRequest(0, List.of("true"), ".", 1, "retry"));
+        assertEquals("COMMAND_EXECUTOR_UNAVAILABLE", retry.errorCode());
+    }
+
+    @Test
+    void uncertainCommandCleanupCannotPublishVerifiedGeneration() {
+        Fixture fixture = fixture((root, directory, argv, timeout) -> {
+            Files.writeString(root.resolve("partial.txt"), "confirmed write");
+            Files.writeString(WorkspaceCommandExecutor.pendingCommandFile(root), "gitnova-command-test\n");
+            throw new java.io.IOException("cleanup unavailable");
+        });
+        var result = fixture.runCommand(new WorkspaceGateway.CommandRequest(0, List.of("true"), ".", 1, "uncertain cleanup"));
+        assertEquals("WORKSPACE_STATE_UNVERIFIED", result.errorCode());
+        assertEquals(1, result.generationAfter());
+        assertThrows(WorkspaceOperationException.class, () -> fixture.gateway().refreshWorkspace(fixture.workspaceId()));
+    }
+
+    @Test
     void shouldRejectACommandFromTheSupersededFenceBeforeExecution() {
         AtomicInteger executions = new AtomicInteger();
-        WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) -> {
+        WorkspaceCommandExecutor executor = (workspaceRoot, workingDirectory, argv, timeout) -> {
             executions.incrementAndGet();
             return new WorkspaceCommandExecutor.ProcessResult(
                     false,
@@ -438,7 +465,7 @@ class LocalWorkspaceGatewayCodingTest {
     void shouldHoldWorkspaceWriteLockForTheWholeCommand() throws Exception {
         CountDownLatch commandStarted = new CountDownLatch(1);
         CountDownLatch releaseCommand = new CountDownLatch(1);
-        WorkspaceCommandExecutor executor = (workingDirectory, argv, timeout) -> {
+        WorkspaceCommandExecutor executor = (workspaceRoot, workingDirectory, argv, timeout) -> {
             commandStarted.countDown();
             if (!releaseCommand.await(2, TimeUnit.SECONDS)) {
                 throw new IllegalStateException("test did not release command");

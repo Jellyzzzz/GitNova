@@ -601,6 +601,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             WorkspaceCommandExecutor.ProcessResult execution;
             try {
                 execution = commandExecutor.execute(
+                        state.root(),
                         workingDirectory,
                         request.argv(),
                         Duration.ofSeconds(request.timeoutSeconds())
@@ -811,6 +812,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                     LinkOption.NOFOLLOW_LINKS
             );
             lock = channel.lock();
+            WorkspaceCommandExecutor.requireNoPendingCommand(state.root());
 
             long fileSize = channel.size();
             if (fileSize > MAX_FENCE_FILE_BYTES) {
@@ -849,13 +851,16 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                 channel.force(true);
             }
             return new WorkspaceMutationLock(channel, lock, accepted);
-        } catch (IOException | NumberFormatException exception) {
+        } catch (IOException | NumberFormatException | WorkspaceOperationException exception) {
             if (channel != null) {
                 try {
                     channel.close();
                 } catch (IOException closeFailure) {
                     exception.addSuppressed(closeFailure);
                 }
+            }
+            if (exception instanceof WorkspaceOperationException workspaceException) {
+                throw workspaceException;
             }
             throw workspaceFailure(
                     WorkspaceOperationException.Reason.FILESYSTEM_FAILURE,
@@ -1157,6 +1162,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             String fingerprintBefore
     ) {
         try {
+            WorkspaceCommandExecutor.requireNoPendingCommand(state.root());
             String fingerprintAfter = WorkspaceTreeFingerprint.capture(state.root());
             if (!fingerprintBefore.equals(fingerprintAfter)) {
                 state.advanceGeneration();
@@ -1175,6 +1181,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
     private boolean refreshStateFromDisk(
             LocalWorkspaceRegistry.LocalWorkspaceState state
     ) {
+        WorkspaceCommandExecutor.requireNoPendingCommand(state.root());
         return state.refreshFingerprint(WorkspaceTreeFingerprint.capture(state.root()));
     }
 

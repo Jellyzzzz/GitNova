@@ -474,7 +474,7 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                 README_PATH, "status: failing\n",
                 "src/CalculatorTest.java", "class CalculatorTest {}\n"
         );
-        WorkspaceCommandExecutor commandExecutor = (workingDirectory, argv, timeout) -> {
+        WorkspaceCommandExecutor commandExecutor = (workspaceRoot, workingDirectory, argv, timeout) -> {
             boolean passed = VALIDATION_COMMAND.equals(argv)
                     && FIXED_CALCULATOR.equals(Files.readString(
                     workingDirectory.resolve(CALCULATOR_PATH)
@@ -489,7 +489,7 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
 
     private Fixture provisionMediumBatchWorkspace() {
         Map<String, String> files = mediumBatchFiles();
-        WorkspaceCommandExecutor commandExecutor = (workingDirectory, argv, timeout) -> {
+        WorkspaceCommandExecutor commandExecutor = (workspaceRoot, workingDirectory, argv, timeout) -> {
             boolean passed = BATCH_VALIDATION_COMMAND.equals(argv)
                     && Files.readString(workingDirectory.resolve(PRICE_PATH))
                     .contains("return subtotal + tax;")
