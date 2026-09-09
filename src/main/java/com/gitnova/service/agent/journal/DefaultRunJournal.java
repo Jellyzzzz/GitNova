@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.AgentStepType;
+import com.gitnova.mapper.agent.AgentStepMapper;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,16 +14,25 @@ import java.util.Objects;
 public class DefaultRunJournal implements RunJournal {
     private final AgentEventAppender appender;
     private final ObjectMapper objectMapper;
+    private final AgentStepMapper stepMapper;
 
     public DefaultRunJournal(
             AgentEventAppender appender,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            AgentStepMapper stepMapper
     ) {
         this.appender = Objects.requireNonNull(appender, "appender must not be null");
+        this.stepMapper = Objects.requireNonNull(stepMapper, "stepMapper must not be null");
         this.objectMapper = Objects.requireNonNull(
                 objectMapper,
                 "objectMapper must not be null"
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasModelHistory(RunJournalScope scope) {
+        return stepMapper.hasModelCallStarted(Objects.requireNonNull(scope).runId());
     }
 
     @Override

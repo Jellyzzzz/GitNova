@@ -4,6 +4,7 @@ import com.gitnova.service.agent.runtime.AgentExecutionContext;
 import com.gitnova.service.agent.runtime.AgentRunContext;
 import com.gitnova.service.agent.runtime.AgentRunResult;
 import com.gitnova.service.agent.runtime.AgentRuntime;
+import com.gitnova.service.agent.journal.RunJournalScope;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
 import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
 import com.gitnova.service.session.AgentSession;
@@ -114,7 +115,11 @@ public class DefaultDurableRunExecutor implements DurableRunExecutor {
                 executionControl
         );
         try {
-            AgentRunResult result = runtime.run(executionContext, executionControl);
+            RunJournalScope journalScope = new RunJournalScope(
+                    run.sessionId(), run.taskId(), run.runId(), workerId,
+                    fencingToken, run.executionConfigDigest());
+            AgentRunResult result = runtime.run(executionContext, executionControl,
+                    journalScope, run.lastRunStepSequence());
             executionControl.requireLease();
 
             AgentTaskRunStore.TerminalOutcome outcome = switch (result.status()) {

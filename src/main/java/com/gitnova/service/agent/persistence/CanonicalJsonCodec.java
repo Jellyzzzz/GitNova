@@ -39,6 +39,10 @@ public final class CanonicalJsonCodec {
         return objectMapper.createObjectNode();
     }
 
+    public EncodedJson encodeValue(Object value) {
+        return encode(objectMapper.valueToTree(Objects.requireNonNull(value)));
+    }
+
     private JsonNode sortObjectFields(JsonNode value) {
         if (value.isObject()) {
             ObjectNode sorted = objectMapper.createObjectNode();

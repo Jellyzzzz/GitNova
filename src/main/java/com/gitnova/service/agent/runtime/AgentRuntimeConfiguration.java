@@ -8,6 +8,8 @@ import com.gitnova.service.agent.prompt.PromptAssembler;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolSetResolver;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
+import com.gitnova.service.agent.journal.RunJournal;
+import com.gitnova.service.agent.persistence.CanonicalJsonCodec;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,13 +30,17 @@ public class AgentRuntimeConfiguration {
                                      ToolRegistry toolRegistry,
                                      ObjectMapper objectMapper,
                                      WorkspaceGateway workspaceGateway,
-                                     ToolSetResolver toolSetResolver) {
+                                     ToolSetResolver toolSetResolver,
+                                     RunJournal journal,
+                                     CanonicalJsonCodec canonicalJson) {
         return new AgentRuntime(modelGateway,
                 promptAssembler,
                 messageFactory,
                 toolRegistry,
                 workspaceGateway,
                 new CompletionInspector(objectMapper, workspaceGateway),
-                toolSetResolver);
+                toolSetResolver,
+                journal,
+                canonicalJson);
     }
 }

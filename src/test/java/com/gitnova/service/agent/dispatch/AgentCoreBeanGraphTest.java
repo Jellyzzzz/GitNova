@@ -12,6 +12,8 @@ import com.gitnova.service.agent.runtime.AgentRuntimeConfiguration;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolSetResolver;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
+import com.gitnova.service.agent.journal.RunJournal;
+import com.gitnova.service.agent.persistence.CanonicalJsonCodec;
 import com.gitnova.service.session.AgentSessionStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -55,6 +57,12 @@ class AgentCoreBeanGraphTest {
 
     @Configuration(proxyBeanMethods = false)
     static class TestDependencies {
+
+        @Bean
+        RunJournal runJournal() { return mock(RunJournal.class); }
+
+        @Bean
+        CanonicalJsonCodec canonicalJsonCodec(ObjectMapper mapper) { return new CanonicalJsonCodec(mapper); }
 
         @Bean
         ObjectMapper objectMapper() {

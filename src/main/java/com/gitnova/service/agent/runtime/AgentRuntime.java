@@ -24,6 +24,9 @@ import com.gitnova.service.agent.tools.FinishTaskTool;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.workspace.WorkspaceOperationException;
 import com.gitnova.service.agent.execution.AgentExecutionControl;
+import com.gitnova.service.agent.journal.*;
+import com.gitnova.service.agent.persistence.AgentEventAppender;
+import com.gitnova.service.agent.persistence.CanonicalJsonCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +34,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Provider-neutral universal Agent loop.
@@ -55,6 +60,20 @@ public final class AgentRuntime {
         private int completionCorrectionCount;
         private ProtocolDeviation lastProtocolDeviation;
         private ValidationEvidence latestSuccessfulValidation;
+        private RunJournalScope journalScope;
+        private long throughSequence;
+        private String modelCallId;
+        private String terminalCallId;
+        private int feedbackCount;
+        private final Set<String> seenToolCalls = new HashSet<>();
+
+        void committed(AgentEventAppender.AppendResult result) {
+            if (result == null || result.runStepSequence() == null
+                    || result.runStepSequence() <= throughSequence || result.alreadyCommitted()) {
+                throw new IllegalStateException("Runtime cannot replay a committed event without recovery projection");
+            }
+            throughSequence = result.runStepSequence();
+        }
 
         private RunState(List<ModelMessage> initialMessages) {
             this.messages = new ArrayList<>(initialMessages);
@@ -76,6 +95,8 @@ public final class AgentRuntime {
     private final WorkspaceGateway workspaceGateway;
     private final CompletionInspector completionInspector;
     private final ToolSetResolver toolSetResolver;
+    private final RunJournal journal;
+    private final CanonicalJsonCodec canonicalJson;
 
     public AgentRuntime(
             ModelGateway modelGateway,
@@ -86,6 +107,20 @@ public final class AgentRuntime {
             CompletionInspector completionInspector,
             ToolSetResolver toolSetResolver
     ) {
+        this(modelGateway, promptAssembler, messageFactory, toolRegistry, workspaceGateway,
+                completionInspector, toolSetResolver, null, null);
+    }
+
+    /** Production construction requires the durable journal; the shorter constructor is standalone only. */
+    public AgentRuntime(ModelGateway modelGateway, PromptAssembler promptAssembler,
+                        MessageFactory messageFactory, ToolRegistry toolRegistry,
+                        WorkspaceGateway workspaceGateway, CompletionInspector completionInspector,
+                        ToolSetResolver toolSetResolver, RunJournal journal, CanonicalJsonCodec canonicalJson) {
+        if ((journal == null) != (canonicalJson == null)) {
+            throw new IllegalArgumentException("Journal and codec must be supplied together");
+        }
+        this.journal = journal;
+        this.canonicalJson = canonicalJson;
         this.modelGateway = Objects.requireNonNull(modelGateway, "modelGateway must not be null");
         this.promptAssembler = Objects.requireNonNull(
                 promptAssembler,
@@ -118,8 +153,24 @@ public final class AgentRuntime {
             AgentExecutionContext context,
             AgentExecutionControl executionControl
     ) {
+        if (journal != null) {
+            throw new IllegalStateException("Durable Runtime requires a RunJournalScope");
+        }
+        return run(context, executionControl, null, 0);
+    }
+
+    public AgentRunResult run(AgentExecutionContext context, AgentExecutionControl executionControl,
+                              RunJournalScope scope, long throughSequence) {
         Objects.requireNonNull(context, "context must not be null");
         Objects.requireNonNull(executionControl, "executionControl must not be null");
+        if (throughSequence < 0 || (journal == null) != (scope == null)) {
+            throw new IllegalArgumentException("Invalid journal scope or watermark");
+        }
+        if (scope != null && (!scope.runId().equals(context.context().runId())
+                || !scope.sessionId().equals(context.sessionId())
+                || scope.fencingToken() != context.executionPermit().fencingToken())) {
+            throw new IllegalArgumentException("Journal scope does not match execution authority");
+        }
         AgentRuntimePolicy policy = context.runtimePolicy();
         AgentExecutionConfig executionConfig =
                 context.executionConfig();
@@ -135,6 +186,12 @@ public final class AgentRuntime {
         RunState state = RunState.start(
                 messageFactory.initialMessages(prompt, context.taskText())
         );
+        state.journalScope = scope;
+        state.throughSequence = throughSequence;
+        if (journal != null && journal.hasModelHistory(scope)) {
+            // Until the Context Projector is connected, stop explicitly rather than replay side effects.
+            return terminate(state, AgentTerminationReason.RECOVERY_CONTEXT_REQUIRED);
+        }
         boolean finishTaskAvailable = false;
         for (ToolDefinition definition : toolDefinitions) {
             if (FinishTaskTool.NAME.equals(definition.name())) {
@@ -163,6 +220,13 @@ public final class AgentRuntime {
 
             ModelRequest request = buildRequest(context, state, toolDefinitions, policy);
             executionControl.requireLease();
+            state.modelCallId = request.requestId();
+            if (journal != null) {
+                state.committed(journal.appendModelCallStarted(scope, new ModelCallStartedPayload(
+                        state.modelCallId, canonicalJson.encodeValue(request).digest(),
+                        state.throughSequence, beforeModel.generationAfter())));
+            }
+            executionControl.requireLease();
             state.modelCallCount++;
             ModelResponse response;
             try {
@@ -171,7 +235,10 @@ public final class AgentRuntime {
                 return terminate(state, AgentTerminationReason.MODEL_GATEWAY_FAILURE);
             }
             executionControl.requireLease();
-
+            if (journal != null) {
+                state.committed(journal.appendModelResponse(scope,
+                        ModelResponsePayload.from(state.modelCallId, response)));
+            }
             state.modelUsages.add(response.usage());
             state.messages.add(messageFactory.assistant(response));
 
@@ -242,12 +309,12 @@ public final class AgentRuntime {
         if (!refresh.changed()) {
             return;
         }
-        state.messages.add(messageFactory.harnessFeedback(
+        appendFeedback(state, HarnessFeedbackKind.WORKSPACE_DRIFT,
                 "The Workspace changed outside the current Agent tool execution and is now "
                         + "authoritative at generation " + refresh.generationAfter() + ". "
                         + "Any validation or write prepared against an earlier generation is "
                         + "stale. Read the latest files or diff before retrying a mutation."
-        ));
+        );
     }
 
     private ModelRequest buildRequest(
@@ -276,6 +343,12 @@ public final class AgentRuntime {
             List<ToolCall> toolCalls,
             AgentRuntimePolicy policy
     ) {
+        // A provider must not reuse a call identity, even across different assistant turns.
+        for (ToolCall call : toolCalls) {
+            if (!state.seenToolCalls.add(call.id())) {
+                return Optional.of(terminate(state, AgentTerminationReason.INVALID_MODEL_PROTOCOL));
+            }
+        }
         if (state.toolCallCount + toolCalls.size() > policy.maxToolCalls()) {
             return Optional.of(terminate(
                     state,
@@ -359,7 +432,7 @@ public final class AgentRuntime {
         );
         for (ToolCall call : rejectedCalls) {
             state.toolCallCount++;
-            state.messages.add(messageFactory.tool(call, rejection));
+            appendToolObservation(state, call, rejection);
         }
     }
 
@@ -375,9 +448,9 @@ public final class AgentRuntime {
             ));
         }
         state.protocolCorrectionCount++;
-        state.messages.add(messageFactory.harnessFeedback(
+        appendFeedback(state, HarnessFeedbackKind.PROTOCOL_CORRECTION,
                 "The task is not complete. Call finishTask alone with the structured completion draft."
-        ));
+        );
         return Optional.empty();
     }
 
@@ -395,7 +468,7 @@ public final class AgentRuntime {
         );
         for (ToolCall toolCall : toolCalls) {
             state.toolCallCount++;
-            state.messages.add(messageFactory.tool(toolCall, rejection));
+            appendToolObservation(state, toolCall, rejection);
         }
         return consumeProtocolCorrectionOrTerminate(state, policy);
     }
@@ -412,7 +485,7 @@ public final class AgentRuntime {
                 "finishTask is the only terminal tool supported by this Runtime",
                 false
         );
-        state.messages.add(messageFactory.tool(toolCall, rejection));
+        appendToolObservation(state, toolCall, rejection);
         state.lastProtocolDeviation = ProtocolDeviation.MIXED_TERMINAL_TOOL_CALLS;
         return consumeProtocolCorrectionOrTerminate(state, policy);
     }
@@ -443,7 +516,7 @@ public final class AgentRuntime {
         );
         state.toolCallCount++;
         ToolResult result = toolRegistry.execute(execution, call.name(), call.arguments());
-        state.messages.add(messageFactory.tool(call, result));
+        appendToolObservation(state, call, result);
         if (result.successful() || result.partiallySuccessful()) {
             state.successfulToolCallCount++;
         }
@@ -515,7 +588,8 @@ public final class AgentRuntime {
         );
         state.toolCallCount++;
         ToolResult result = toolRegistry.execute(execution, call.name(), call.arguments());
-        state.messages.add(messageFactory.tool(call, result));
+        state.terminalCallId = call.id();
+        appendToolObservation(state, call, result);
 
         if (!result.successful()) {
             if (result.status() == ToolStatus.INVALID_ARGUMENT) {
@@ -548,6 +622,10 @@ public final class AgentRuntime {
                     AgentTerminationReason.COMPLETION_INSPECTION_FAILURE
             ));
         }
+        if (journal != null) {
+            state.committed(journal.appendCompletionDecision(state.journalScope,
+                    new CompletionDecisionPayload(state.modelCallId, call.id(), decision)));
+        }
         if (decision.accepted()) {
             return Optional.of(complete(state, decision.outcome()));
         }
@@ -572,12 +650,34 @@ public final class AgentRuntime {
             ));
         }
         state.completionCorrectionCount++;
-        state.messages.add(messageFactory.harnessFeedback(
+        appendFeedback(state, HarnessFeedbackKind.COMPLETION_CORRECTION,
                 "The completion draft was rejected:\n"
                         + String.join("\n", feedback)
                         + "\nGather or refresh any required evidence, then call finishTask alone."
-        ));
+        );
         return Optional.empty();
+    }
+
+    private void appendToolObservation(RunState state, ToolCall call, ToolResult result) {
+        if (journal != null) {
+            state.committed(journal.appendToolResult(state.journalScope,
+                    new ToolResultPayload(state.modelCallId, call.id(), call.name(), result)));
+        }
+        state.messages.add(messageFactory.tool(call, result));
+    }
+
+    private void appendFeedback(RunState state, HarnessFeedbackKind kind, String text) {
+        if (journal != null) {
+            String cause = null;
+            if (kind == HarnessFeedbackKind.COMPLETION_CORRECTION) {
+                cause = "run:" + state.journalScope.runId() + ":tool-call:" + state.terminalCallId + ":result";
+            } else if (state.modelCallId != null && kind == HarnessFeedbackKind.PROTOCOL_CORRECTION) {
+                cause = "run:" + state.journalScope.runId() + ":model-call:" + state.modelCallId + ":response";
+            }
+            state.committed(journal.appendHarnessFeedback(state.journalScope,
+                    new HarnessFeedbackPayload("feedback-" + (++state.feedbackCount), kind, text), cause));
+        }
+        state.messages.add(messageFactory.harnessFeedback(text));
     }
 
     private AgentRunResult complete(

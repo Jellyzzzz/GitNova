@@ -38,7 +38,8 @@ class DefaultRunJournalTest {
         when(appender.appendFence(any(), any())).thenReturn(
                 new AgentEventAppender.AppendResult(1L, 2L, 3L, false)
         );
-        journal = new DefaultRunJournal(appender, new ObjectMapper());
+        journal = new DefaultRunJournal(appender, new ObjectMapper(),
+                mock(com.gitnova.mapper.agent.AgentStepMapper.class));
     }
 
     @Test

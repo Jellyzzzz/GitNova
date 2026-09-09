@@ -11,6 +11,12 @@ import org.apache.ibatis.annotations.Select;
 @Mapper
 public interface AgentStepMapper {
 
+    @Select("""
+            SELECT EXISTS(SELECT 1 FROM agent_step
+                WHERE run_id = #{runId} AND step_type = 'MODEL_CALL_STARTED')
+            """)
+    boolean hasModelCallStarted(@Param("runId") String runId);
+
     @Insert("""
             INSERT INTO agent_step (
                 event_id, event_digest,

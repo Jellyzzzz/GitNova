@@ -3,6 +3,9 @@ package com.gitnova.service.agent.journal;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 
 public interface RunJournal {
+    /** Recovery must project committed history, not start an existing execution from an empty transcript. */
+    boolean hasModelHistory(RunJournalScope scope);
+
     AgentEventAppender.AppendResult appendModelCallStarted(
             RunJournalScope scope,
             ModelCallStartedPayload payload
