@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,6 +50,34 @@ class MyBatisAgentSessionStoreTest {
 
     @Mock
     AgentEventAppender eventAppender;
+
+    @Test
+    void shouldReturnEmptyListWhenNoSessionsMatch() {
+        when(sessionMapper.selectByRepositoryAndCreator(42L, 11L, 20)).thenReturn(List.of());
+
+        assertEquals(List.of(), store().selectByRepositoryAndCreator(42L, 11L, 20));
+
+        verifyNoInteractions(workspaceMapper, eventAppender);
+    }
+
+    @Test
+    void shouldMapSessionsInQueryOrderWithoutAppendingEvents() {
+        AgentSessionEntity first = persistedSession("session-2", "request-2", 11L, 1L);
+        AgentSessionEntity second = persistedSession("session-1", "request-1", 11L, 1L);
+        when(sessionMapper.selectByRepositoryAndCreator(42L, 11L, 20))
+                .thenReturn(List.of(first, second));
+        when(workspaceMapper.selectBySessionId("session-2"))
+                .thenReturn(persistedWorkspace("session-2"));
+        when(workspaceMapper.selectBySessionId("session-1"))
+                .thenReturn(persistedWorkspace("session-1"));
+
+        List<AgentSession> sessions = store().selectByRepositoryAndCreator(42L, 11L, 20);
+
+        assertEquals(List.of("session-2", "session-1"),
+                sessions.stream().map(AgentSession::sessionId).toList());
+        assertEquals(SOURCE, sessions.get(0).source());
+        verifyNoInteractions(eventAppender);
+    }
 
     @Test
     void shouldCreateSessionWorkspaceAndFirstStepAsOneStoreOperation() {

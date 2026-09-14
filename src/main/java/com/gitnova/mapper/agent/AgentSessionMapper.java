@@ -8,6 +8,8 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.util.List;
+
 @Mapper
 public interface AgentSessionMapper extends BaseMapper<AgentSessionEntity> {
     @Insert("""
@@ -62,6 +64,18 @@ public interface AgentSessionMapper extends BaseMapper<AgentSessionEntity> {
             """)
     AgentSessionEntity selectForUpdateByCreationIdempotencyKey(
             @Param("creationIdempotencyKey") String creationIdempotencyKey
+    );
+    @Select("""
+            SELECT * FROM agent_session
+            WHERE repo_id = #{repoId}
+              AND created_by_actor_id = #{actorId}
+            ORDER BY created_at DESC, session_id DESC
+            LIMIT #{limit}
+            """)
+    List<AgentSessionEntity> selectByRepositoryAndCreator(
+            @Param("repoId") Long repoId,
+            @Param("actorId") Long actorId,
+            @Param("limit") int limit
     );
 
     @Update("""

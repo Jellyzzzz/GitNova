@@ -1,5 +1,6 @@
 package com.gitnova.service.session;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -92,6 +93,9 @@ public interface AgentSessionStore {
             requireNonBlank(safeMessage, "safeMessage");
         }
     }
+
+    /** Returns the creator's most recent Sessions in this repository, or an empty list. */
+    List<AgentSession> selectByRepositoryAndCreator(Long repoId, Long actorId, int limit);
 
     private static void requireNonBlank(String value, String field) {
         Objects.requireNonNull(value, field + " must not be null");

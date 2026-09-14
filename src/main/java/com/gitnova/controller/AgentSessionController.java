@@ -11,14 +11,11 @@ import com.gitnova.service.session.AgentSessionStore;
 import com.gitnova.service.session.CreateSessionCommand;
 import com.gitnova.service.session.RepositoryRevisionService;
 import com.gitnova.storage.RepoKey;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -95,6 +92,24 @@ public class AgentSessionController {
             session = resumeExisting(winner, actorId, repoKey);
         }
         return ApiResponse.success(SessionResponse.from(session));
+    }
+
+    @GetMapping
+    public ApiResponse<List<SessionResponse>> listSessions(
+            @PathVariable Long repoId,
+            @RequestParam(defaultValue = "20") int limit
+    ) {
+        Long actorId = UserContext.getUserId();
+        if (actorId == null || actorId <= 0) {
+            throw new IllegalStateException("Authenticated actor is missing");
+        }
+        repositoryAccessService.requireReadAccess(repoId, actorId);
+        List<AgentSession> sessions = agentSessionService.listSessions(repoId, actorId, limit);
+        List<SessionResponse> responses = new ArrayList<>();
+        for (AgentSession session : sessions) {
+            responses.add(SessionResponse.from(session));
+        }
+        return ApiResponse.success(List.copyOf(responses));
     }
 
     private AgentSession resumeExisting(

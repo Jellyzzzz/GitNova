@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -28,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,6 +51,44 @@ class AgentSessionServiceTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void shouldReturnEmptySessionsWithoutTouchingTheWorkspace() {
+        when(sessionStore.selectByRepositoryAndCreator(42L, 11L, 20)).thenReturn(List.of());
+
+        assertEquals(List.of(), service().listSessions(42L, 11L, 20));
+
+        verify(sessionStore).selectByRepositoryAndCreator(42L, 11L, 20);
+        verifyNoInteractions(workspaceProvider, workspaceRegistry);
+    }
+
+    @Test
+    void shouldRejectInvalidSessionQueryParametersBeforeReadingTheStore() {
+        AgentSessionService service = service();
+        for (Long invalidId : new Long[] {null, 0L, -1L}) {
+            assertEquals("repoId must be positive", assertThrows(IllegalArgumentException.class,
+                    () -> service.listSessions(invalidId, 11L, 20)).getMessage());
+            assertEquals("actorId must be positive", assertThrows(IllegalArgumentException.class,
+                    () -> service.listSessions(42L, invalidId, 20)).getMessage());
+        }
+        for (int invalidLimit : new int[] {-1, 0, 1001}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.listSessions(42L, 11L, invalidLimit));
+        }
+
+        verifyNoInteractions(sessionStore, workspaceProvider, workspaceRegistry);
+    }
+
+    @Test
+    void shouldAcceptBothSessionQueryLimitBoundaries() {
+        for (int limit : new int[] {1, 1000}) {
+            when(sessionStore.selectByRepositoryAndCreator(42L, 11L, limit)).thenReturn(List.of());
+
+            assertEquals(List.of(), service().listSessions(42L, 11L, limit));
+
+            verify(sessionStore).selectByRepositoryAndCreator(42L, 11L, limit);
+        }
+    }
 
     @Test
     void shouldProvisionThePersistedWorkspaceIdentityAndActivateTheSession() throws Exception {

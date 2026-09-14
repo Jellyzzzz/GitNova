@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <title>GitNova · Workspace</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <section id="login-view" class="login-view">
+    <div class="login-brand"><span class="mark">N</span><span>GitNova</span></div>
+    <div class="login-card">
+      <p class="eyebrow">YOUR CODE. YOUR WORKSPACE.</p>
+      <h1>登录你的工作台</h1>
+      <p class="muted">从代码仓库开始，建立持续工作的 Session。</p>
+      <form id="login-form">
+        <label for="username">用户名</label>
+        <input id="username" name="username" autocomplete="username" required maxlength="50" autofocus>
+        <label for="password">密码</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="100">
+        <p id="login-error" class="error" role="alert" hidden></p>
+        <button class="button primary full" type="submit">登录 GitNova</button>
+      </form>
+      <p class="small muted">使用现有 GitNova 账户。登录凭据仅保留在当前浏览器标签页，退出时清除。</p>
+    </div>
+    <p class="login-footer">Git-native Cloud Coding Platform</p>
+  </section>
+
+  <div id="workspace-view" hidden>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="GitNova 首页"><span class="mark small-mark">N</span>GitNova</a>
+      <span class="divider">/</span><span class="top-label">工作台</span>
+      <div class="account"><span id="account-name"></span><button id="logout" class="button quiet">退出登录</button></div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar" aria-label="仓库导航">
+        <div class="section-title"><h2>我的仓库 <span id="repo-count" class="count">0</span></h2><button id="new-repo" class="button primary compact">＋ 新建</button></div>
+        <label class="sr-only" for="repo-search">筛选仓库</label>
+        <input id="repo-search" type="search" placeholder="查找仓库…" autocomplete="off">
+        <div id="repo-list" class="repo-list" aria-live="polite"></div>
+        <button id="refresh-repos" class="button quiet full">刷新仓库列表</button>
+        <div class="sidebar-note"><span class="eyebrow">WORKSPACE, NOT A CHAT</span><p>一个 Session，一个持续演化的工作区。</p><p class="small">Task 与 Agent 执行将在后续接入。</p></div>
+      </aside>
+
+      <main>
+        <div id="notice" class="notice" role="status" hidden></div>
+        <section id="welcome" class="empty welcome">
+          <span class="large-glyph" aria-hidden="true">⌘</span><h1>让代码有一个工作空间</h1>
+          <p>从左侧选择仓库，或创建你的第一个仓库。</p>
+          <p class="small muted">本地 commit → CLI push → 创建 Session</p>
+        </section>
+        <section id="repo-view" hidden>
+          <div class="repo-heading"><div class="repo-title"><span class="repo-symbol" aria-hidden="true">▣</span><h1 id="repo-name"></h1><span id="repo-visibility" class="badge"></span></div><button id="refresh-current" class="button">↻ 刷新</button></div>
+          <p id="repo-description" class="muted"></p>
+          <div class="tabs"><span class="tab active">▣ &nbsp; Sessions <span id="session-count" class="count">—</span></span><span class="tab-note">仓库工作区</span></div>
+          <div class="repo-meta"><span>Repository ID <code id="repo-id"></code></span><span>创建于 <span id="repo-created"></span></span></div>
+          <details class="push-guide">
+            <summary>从本地推送代码 <span class="muted">使用 GitNova CLI</span></summary>
+            <div class="guide-content"><p>在已经完成 <code>init / add / commit</code> 的本地 Gitlet 仓库中执行。先在终端安全设置 <code>GITNOVA_TOKEN</code>，不要把 token 写进命令参数。</p>
+              <p class="small muted">以下为 CLI 参数，不是标准 git push。将它们传给现有 GitNova CLI 启动命令：</p>
+              <div class="command"><code id="push-command"></code><button id="copy-push" class="button compact">复制参数</button></div>
+              <p class="small muted">推送成功后点击刷新，再从分支创建 Session。仅创建仓库元数据还不足以物化工作区。</p>
+            </div>
+          </details>
+          <div class="sessions-heading"><div><h2>你的 Sessions</h2><p class="muted small">每个 Session 绑定独立工作区，并固定创建时的 base revision。</p></div><button id="new-session" class="button primary">＋ 创建 Session</button></div>
+          <div id="session-list" class="session-list" aria-live="polite"></div>
+          <p class="small muted list-footnote">仅显示你在此仓库创建的最近 20 个 Session，暂不支持翻页。后续 push 不会重置已有工作区。</p>
+        </section>
+        <footer class="page-footer"><span>GitNova</span><span>Repository → Session → Workspace</span></footer>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="repo-dialog" aria-labelledby="repo-dialog-title">
+    <div class="dialog-heading"><h2 id="repo-dialog-title">创建仓库</h2><button type="button" class="button quiet" data-close="repo-dialog" aria-label="关闭">✕</button></div>
+    <form id="repo-form">
+      <label for="new-repo-name">仓库名称 <span class="required">*</span></label><input id="new-repo-name" name="name" required minlength="3" maxlength="100" pattern="[A-Za-z0-9_.\-]+" placeholder="my-project">
+      <p class="small muted">3–100 个字符，支持字母、数字、点、下划线和连字符。</p>
+      <label for="new-repo-description">描述 <span class="muted">（可选）</span></label><textarea id="new-repo-description" name="description" maxlength="255" rows="3" placeholder="这个仓库用来做什么？"></textarea>
+      <label for="new-repo-visibility">可见性</label><select id="new-repo-visibility" name="isPrivate"><option value="true">Private · 私有仓库</option><option value="false">Public · 公开仓库</option></select>
+      <p id="repo-error" class="error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button" data-close="repo-dialog">取消</button><button type="submit" class="button primary">创建仓库</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="session-dialog" aria-labelledby="session-dialog-title">
+    <div class="dialog-heading"><h2 id="session-dialog-title">创建 Session</h2><button type="button" class="button quiet" data-close="session-dialog" aria-label="关闭">✕</button></div>
+    <form id="session-form">
+      <p>为 <strong id="session-repo-name"></strong> 创建一个独立工作区。</p>
+      <label for="branch-name">源分支</label><input id="branch-name" name="branchName" required value="main" maxlength="255" autocomplete="off">
+      <div class="info">从该分支当前 commit 物化 Workspace。已有 Session 不会被修改，也不会因之后的 push 自动切换版本。</div>
+      <p id="session-error" class="error" role="alert" hidden></p>
+      <p class="small muted">可能需要一些时间。若网络中断，重试同一仓库与分支会沿用原幂等键；刷新页面后仍可重试。</p>
+      <div class="dialog-actions"><button type="button" class="button" data-close="session-dialog">取消</button><button type="submit" class="button primary">创建工作区</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

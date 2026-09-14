@@ -9,6 +9,7 @@ import com.gitnova.service.agent.workspace.WorkspaceSpec;
 import com.gitnova.service.agent.workspace.WorkspaceTreeFingerprint;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -84,6 +85,18 @@ public class AgentSessionService {
             throw exception;
         }
     }
+    public List<AgentSession> listSessions(Long repoId, Long actorId, int limit) {
+        if (repoId == null || repoId <= 0) {
+            throw new IllegalArgumentException("repoId must be positive");
+        }
+        if (actorId == null || actorId <= 0) {
+            throw new IllegalArgumentException("actorId must be positive");
+        }
+        if (limit < 1 || limit > 1000) {
+            throw new IllegalArgumentException("limit must be in range 1..1000");
+        }
+        return sessionStore.selectByRepositoryAndCreator(repoId, actorId, limit);
+    }
 
     public AgentSession require(String sessionId) {
         Objects.requireNonNull(sessionId, "sessionId must not be null");
@@ -141,4 +154,5 @@ public class AgentSessionService {
                  ATOMIC_PUBLISH_UNAVAILABLE -> false;
         };
     }
+
 }

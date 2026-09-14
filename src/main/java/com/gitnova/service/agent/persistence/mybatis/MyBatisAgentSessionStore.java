@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -221,6 +223,17 @@ public class MyBatisAgentSessionStore implements AgentSessionStore {
         return session == null
                 ? Optional.empty()
                 : Optional.of(toDomain(session, requireWorkspace(session.getSessionId())));
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public List<AgentSession> selectByRepositoryAndCreator(Long repoId, Long actorId, int limit) {
+        List<AgentSessionEntity> entries = sessionMapper.selectByRepositoryAndCreator(repoId, actorId, limit);
+        List<AgentSession> sessions = new ArrayList<>();
+        for (AgentSessionEntity entry : entries) {
+            sessions.add(toDomain(entry, requireWorkspace(entry.getSessionId())));
+        }
+        return List.copyOf(sessions);
     }
 
     private AgentSession requireAggregate(String sessionId) {

@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,6 +36,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -48,6 +50,66 @@ class AgentSessionControllerTest {
     @AfterEach
     void clearUserContext() {
         UserContext.clear();
+    }
+
+    @Test
+    void shouldReturnAnEmptyArrayWithTheDefaultLimit() throws Exception {
+        Dependencies dependencies = dependencies();
+        UserContext.setUserId(11L);
+        when(dependencies.agentSessionService.listSessions(42L, 11L, 20))
+                .thenReturn(List.of());
+
+        MockMvcBuilders.standaloneSetup(dependencies.controller).build()
+                .perform(get("/api/repos/42/agent/sessions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        InOrder order = inOrder(dependencies.repositoryAccessService, dependencies.agentSessionService);
+        order.verify(dependencies.repositoryAccessService).requireReadAccess(42L, 11L);
+        order.verify(dependencies.agentSessionService).listSessions(42L, 11L, 20);
+        verifyNoInteractions(dependencies.repositoryRevisionService);
+    }
+
+    @Test
+    void shouldBindExplicitLimitAndUseAuthenticatedActor() throws Exception {
+        Dependencies dependencies = dependencies();
+        UserContext.setUserId(11L);
+        when(dependencies.agentSessionService.listSessions(42L, 11L, 5))
+                .thenReturn(List.of(session("session-1", "request-1", 11L,
+                        REPO_KEY, AgentSession.Status.ACTIVE)));
+
+        MockMvcBuilders.standaloneSetup(dependencies.controller).build()
+                .perform(get("/api/repos/42/agent/sessions")
+                        .param("limit", "5").param("actorId", "999"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].sessionId").value("session-1"))
+                .andExpect(jsonPath("$.data[0].baseRevision").value(SOURCE.baseSha1().value()));
+
+        verify(dependencies.agentSessionService).listSessions(42L, 11L, 5);
+    }
+
+    @Test
+    void shouldNotQuerySessionsWhenRepositoryAccessIsDenied() {
+        Dependencies dependencies = dependencies();
+        UserContext.setUserId(11L);
+        when(dependencies.repositoryAccessService.requireReadAccess(42L, 11L))
+                .thenThrow(new IllegalStateException("denied"));
+
+        assertThrows(IllegalStateException.class, () -> dependencies.controller.listSessions(42L, 20));
+
+        verifyNoInteractions(dependencies.agentSessionService);
+    }
+
+    @Test
+    void shouldNotQuerySessionsWithoutAnAuthenticatedActor() {
+        Dependencies dependencies = dependencies();
+
+        assertThrows(IllegalStateException.class, () -> dependencies.controller.listSessions(42L, 20));
+
+        verifyNoInteractions(dependencies.repositoryAccessService, dependencies.agentSessionService);
     }
 
     @Test
