@@ -1,14 +1,18 @@
 package com.gitnova.service.agent.journal;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.gitnova.mapper.agent.AgentStepMapper;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.AgentStepType;
-import com.gitnova.mapper.agent.AgentStepMapper;
+import com.gitnova.storage.artifact.ArtifactRef;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.util.Objects;
+import java.util.Optional;
 
 @Component
 public class DefaultRunJournal implements RunJournal {
@@ -68,6 +72,10 @@ public class DefaultRunJournal implements RunJournal {
                 scope.executionConfigDigest()
         );
         persistedPayload.put("eventId", eventId);
+        if (payload.contextInput() != null) {
+            persistedPayload.put("contextThroughSessionSequence", payload.contextThroughSessionSequence());
+            persistedPayload.set("contextInput", objectMapper.valueToTree(payload.contextInput()));
+        }
 
         return append(scope, new AgentEventAppender.AppendCommand(
                 eventId,
@@ -75,7 +83,7 @@ public class DefaultRunJournal implements RunJournal {
                 scope.taskId(),
                 scope.runId(),
                 AgentStepType.MODEL_CALL_STARTED,
-                1,
+                payload.contextInput() == null ? 1 : 2,
                 persistedPayload,
                 null,
                 scope.runId(),
@@ -146,6 +154,60 @@ public class DefaultRunJournal implements RunJournal {
                 null,
                 null
         ));
+    }
+
+    @Override
+    @Transactional
+    public AgentEventAppender.AppendResult appendToolObservation(
+            RunJournalScope scope, String toolCallId, String contextPolicyVersion, JsonNode observation) {
+        Objects.requireNonNull(scope, "scope");
+        Objects.requireNonNull(observation, "observation");
+        if (toolCallId == null || toolCallId.isBlank()
+                || contextPolicyVersion == null || contextPolicyVersion.isBlank()) {
+            throw new IllegalArgumentException("Tool Call identity and context policy are required");
+        }
+        JsonNode reference = observation.path("externalization").path("artifact");
+        try {
+            objectMapper.treeToValue(reference, ArtifactRef.class);
+        } catch (IOException | IllegalArgumentException exception) {
+            throw new IllegalArgumentException("Observation must contain a valid Artifact reference", exception);
+        }
+        if (!reference.isObject()) throw new IllegalArgumentException("Artifact reference is required");
+        String cause = "run:" + scope.runId() + ":tool-call:" + toolCallId + ":result";
+        if (!stepMapper.hasToolResult(scope.sessionId(), scope.runId(), cause)) {
+            throw new IllegalStateException("Tool Result must be recorded before its Observation projection");
+        }
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("toolCallId", toolCallId);
+        payload.put("contextPolicyVersion", contextPolicyVersion);
+        payload.set("observation", observation.deepCopy());
+        return append(scope, new AgentEventAppender.AppendCommand(
+                "run:" + scope.runId() + ":tool-call:" + toolCallId + ":observation",
+                scope.sessionId(), scope.taskId(), scope.runId(),
+                AgentStepType.TOOL_OBSERVATION_PROJECTED, 1, payload, cause,
+                scope.runId(), null, null
+        ));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ArtifactRef> findArtifact(String sessionId, String artifactId) {
+        if (sessionId == null || sessionId.isBlank() || artifactId == null
+                || !artifactId.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("Invalid Session or Artifact identity");
+        }
+        String payload = stepMapper.selectArtifactProjection(sessionId, artifactId);
+        if (payload == null) return Optional.empty();
+        try {
+            ArtifactRef reference = objectMapper.treeToValue(objectMapper.readTree(payload)
+                    .path("observation").path("externalization").path("artifact"), ArtifactRef.class);
+            if (reference == null || !artifactId.equals(reference.artifactId())) {
+                throw new IllegalStateException("Persisted Artifact reference does not match the lookup");
+            }
+            return Optional.of(reference);
+        } catch (IOException | IllegalArgumentException exception) {
+            throw new IllegalStateException("Persisted Artifact reference is invalid", exception);
+        }
     }
 
     @Override

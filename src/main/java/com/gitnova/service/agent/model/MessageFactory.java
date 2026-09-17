@@ -52,6 +52,14 @@ public final class MessageFactory {
         return new ModelMessage(ModelRole.TOOL, observation.toString(), List.of(), toolCall.id());
     }
 
+    /** Wraps an already prepared/durably recorded model-visible projection; performs no storage I/O. */
+    public ModelMessage toolObservation(ToolCall toolCall, JsonNode observation) {
+        Objects.requireNonNull(toolCall, "toolCall");
+        Objects.requireNonNull(observation, "observation");
+        if (!observation.isObject()) throw new IllegalArgumentException("Observation must be an object");
+        return new ModelMessage(ModelRole.TOOL, observation.toString(), List.of(), toolCall.id());
+    }
+
     /**
      * Adds Harness-generated protocol or verifier feedback that has no preceding tool call.
      * It uses USER because a TOOL message would require a real toolCallId.

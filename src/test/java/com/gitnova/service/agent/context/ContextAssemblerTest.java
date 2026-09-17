@@ -17,13 +17,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ContextAssemblerTest {
 
-    private final ContextAssembler assembler = new ContextAssembler();
-
     @Test
     void shouldKeepAllGroupsWhenHistoryIsSmallerThanWindow() {
         List<InteractionGroup> groups = List.of(group("g1", 1), group("g2", 3));
 
-        ContextAssembler.WindowSelection result = assembler.selectWindow(groups, 3);
+        ContextAssembler.WindowSelection result = ContextAssembler.selectWindow(groups, 3);
 
         assertTrue(result.groupsToCompact().isEmpty());
         assertEquals(groups, result.groupsToKeep());
@@ -33,7 +31,7 @@ class ContextAssemblerTest {
     void shouldKeepAllGroupsWhenHistoryExactlyFillsWindow() {
         List<InteractionGroup> groups = List.of(group("g1", 1), group("g2", 3));
 
-        ContextAssembler.WindowSelection result = assembler.selectWindow(groups, 2);
+        ContextAssembler.WindowSelection result = ContextAssembler.selectWindow(groups, 2);
 
         assertTrue(result.groupsToCompact().isEmpty());
         assertEquals(groups, result.groupsToKeep());
@@ -47,7 +45,7 @@ class ContextAssemblerTest {
         InteractionGroup g4 = group("g4", 7);
         InteractionGroup g5 = group("g5", 9);
 
-        ContextAssembler.WindowSelection result = assembler.selectWindow(
+        ContextAssembler.WindowSelection result = ContextAssembler.selectWindow(
                 List.of(g1, g2, g3, g4, g5),
                 3
         );
@@ -58,7 +56,7 @@ class ContextAssemblerTest {
 
     @Test
     void shouldAcceptEmptyHistory() {
-        ContextAssembler.WindowSelection result = assembler.selectWindow(List.of(), 3);
+        ContextAssembler.WindowSelection result = ContextAssembler.selectWindow(List.of(), 3);
 
         assertTrue(result.groupsToCompact().isEmpty());
         assertTrue(result.groupsToKeep().isEmpty());
@@ -69,7 +67,7 @@ class ContextAssemblerTest {
     void shouldRequirePositiveWindowSize(int keepRecentGroups) {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> assembler.selectWindow(List.of(), keepRecentGroups)
+                () -> ContextAssembler.selectWindow(List.of(), keepRecentGroups)
         );
     }
 
@@ -79,9 +77,9 @@ class ContextAssemblerTest {
         groupsWithNull.add(group("g1", 1));
         groupsWithNull.add(null);
 
-        assertThrows(NullPointerException.class, () -> assembler.selectWindow(null, 3));
+        assertThrows(NullPointerException.class, () -> ContextAssembler.selectWindow(null, 3));
         assertThrows(NullPointerException.class,
-                () -> assembler.selectWindow(groupsWithNull, 3));
+                () -> ContextAssembler.selectWindow(groupsWithNull, 3));
     }
 
     @Test
@@ -96,7 +94,7 @@ class ContextAssemblerTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> assembler.selectWindow(List.of(open), 3)
+                () -> ContextAssembler.selectWindow(List.of(open), 3)
         );
     }
 
@@ -113,9 +111,9 @@ class ContextAssemblerTest {
         );
 
         assertThrows(IllegalArgumentException.class,
-                () -> assembler.selectWindow(List.of(first, earlier), 2));
+                () -> ContextAssembler.selectWindow(List.of(first, earlier), 2));
         assertThrows(IllegalArgumentException.class,
-                () -> assembler.selectWindow(List.of(first, overlapping), 2));
+                () -> ContextAssembler.selectWindow(List.of(first, overlapping), 2));
     }
 
     @Test
@@ -123,7 +121,7 @@ class ContextAssemblerTest {
         InteractionGroup first = group("g1", 1);
         InteractionGroup second = group("g2", 10);
 
-        ContextAssembler.WindowSelection result = assembler.selectWindow(
+        ContextAssembler.WindowSelection result = ContextAssembler.selectWindow(
                 List.of(first, second),
                 1
         );
@@ -138,7 +136,7 @@ class ContextAssemblerTest {
                 List.of(group("g1", 1), group("g2", 3))
         );
 
-        ContextAssembler.WindowSelection result = assembler.selectWindow(input, 1);
+        ContextAssembler.WindowSelection result = ContextAssembler.selectWindow(input, 1);
         input.clear();
 
         assertEquals(1, result.groupsToCompact().size());

@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.gitnova.service.agent.context.ObservationPolicy;
+import com.gitnova.service.agent.context.ContextBudget;
 import com.gitnova.service.agent.runtime.AgentCapability;
 import com.gitnova.service.agent.runtime.AgentExecutionConfig;
 import com.gitnova.service.agent.runtime.AgentRuntimePolicy;
@@ -20,7 +22,7 @@ import java.util.Set;
 /** Stable wire-format codec for the complete Frozen Execution Contract. */
 @Component
 public final class AgentExecutionConfigCodec {
-    private static final int SCHEMA_VERSION = 1;
+    private static final int SCHEMA_VERSION = 3;
 
     private final CanonicalJsonCodec canonicalJson;
     private final ObjectMapper objectMapper;
@@ -43,7 +45,9 @@ public final class AgentExecutionConfigCodec {
         Objects.requireNonNull(config, "config must not be null");
 
         ObjectNode root = canonicalJson.objectNode();
-        root.put("schemaVersion", SCHEMA_VERSION);
+        // Preserve old contracts byte-for-byte, including their digest. Never inject live defaults.
+        root.put("schemaVersion", config.contextBudget() != null ? SCHEMA_VERSION
+                : config.observationPolicy() == null ? 1 : 2);
         encodePolicy(root.putObject("policy"), config.policy());
 
         ArrayNode capabilities = root.putArray("capabilities");
@@ -63,6 +67,14 @@ public final class AgentExecutionConfigCodec {
         toolSetNode.put("definitionDigest", toolSet.definitionDigest());
         root.put("contextPolicyVersion", config.contextPolicyVersion());
 
+        ObservationPolicy observation = config.observationPolicy();
+
+        if (observation != null) {
+            ObjectNode observationNode = root.putObject("observationPolicy");
+            observationNode.put("maxInlineTokens", observation.maxInlineTokens());
+            observationNode.put("maxPreviewTokens", observation.maxPreviewTokens());
+        }
+        if (config.contextBudget() != null) root.set("contextBudget", objectMapper.valueToTree(config.contextBudget()));
         return canonicalJson.encode(root);
     }
 
@@ -75,7 +87,7 @@ public final class AgentExecutionConfigCodec {
         try {
             ObjectNode root = requireObject(objectMapper.readTree(json), "execution config");
             int schemaVersion = requireInt(root, "schemaVersion");
-            if (schemaVersion != SCHEMA_VERSION) {
+            if (schemaVersion < 1 || schemaVersion > SCHEMA_VERSION) {
                 throw invalid(
                         "unsupported execution config schemaVersion: " + schemaVersion
                 );
@@ -94,11 +106,40 @@ public final class AgentExecutionConfigCodec {
                     root,
                     "contextPolicyVersion"
             );
+            ObservationPolicy observationPolicy = null;
+            if (schemaVersion >= 2) {
+                ObjectNode observationNode = requireObject(root.get("observationPolicy"), "observationPolicy");
+                observationPolicy = new ObservationPolicy(
+                        requireInt(observationNode, "maxInlineTokens"),
+                        requireInt(observationNode, "maxPreviewTokens"));
+            } else if (root.has("observationPolicy")) {
+                throw invalid("observationPolicy requires execution config schemaVersion 2");
+            }
+            ContextBudget contextBudget = null;
+            if (schemaVersion == 3) {
+                ObjectNode node = requireObject(root.get("contextBudget"), "contextBudget");
+                for (String field : List.of("contextWindowTokens", "safetyMarginTokens")) {
+                    JsonNode value = requirePresent(node, field);
+                    if (!value.isIntegralNumber() || !value.canConvertToLong()) throw invalid(field + " must be a long");
+                }
+                if (!node.path("summaryTriggerRatio").isNumber() || !node.path("compactTriggerRatio").isNumber()) {
+                    throw invalid("Context trigger ratios must be explicit numbers");
+                }
+                contextBudget = new ContextBudget(node.get("contextWindowTokens").longValue(),
+                        node.get("safetyMarginTokens").longValue(),
+                        node.get("summaryTriggerRatio").doubleValue(),
+                        node.get("compactTriggerRatio").doubleValue(),
+                        requireInt(node, "keepRecentGroups"));
+            } else if (root.has("contextBudget")) {
+                throw invalid("contextBudget requires execution config schemaVersion 3");
+            }
             return new AgentExecutionConfig(
                     policy,
                     capabilities,
                     toolSet,
-                    contextPolicyVersion
+                    contextPolicyVersion,
+                    observationPolicy,
+                    contextBudget
             );
         } catch (JsonProcessingException exception) {
             throw invalid("execution config JSON is invalid", exception);

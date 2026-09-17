@@ -1,6 +1,8 @@
 package com.gitnova.service.agent.task;
 
 import com.gitnova.dto.ToolDefinition;
+import com.gitnova.service.agent.context.ObservationPolicy;
+import com.gitnova.service.agent.context.ContextBudget;
 import com.gitnova.service.agent.execution.AgentExecutionPersistenceException;
 import com.gitnova.service.agent.execution.AgentTaskRequest;
 import com.gitnova.service.agent.execution.AgentTaskRunStore;
@@ -28,13 +30,17 @@ public class AgentTaskService {
     private final AgentRuntimePolicy policy;
     private final ToolRegistry toolRegistry;
     private final ToolSetSnapFactory toolSetSnapFactory;
+    private final ObservationPolicy observationPolicy;
+    private final ContextBudget contextBudget;
 
-    public AgentTaskService(AgentSessionService sessionService, AgentTaskRunStore agentTaskRunStore, AgentRuntimePolicy policy, ToolRegistry toolRegistry, ToolSetSnapFactory toolSetSnapFactory) {
+    public AgentTaskService(AgentSessionService sessionService, AgentTaskRunStore agentTaskRunStore, AgentRuntimePolicy policy, ToolRegistry toolRegistry, ToolSetSnapFactory toolSetSnapFactory, ObservationPolicy observationPolicy, ContextBudget contextBudget) {
         this.sessionService = Objects.requireNonNull(sessionService);
         this.agentTaskRunStore =Objects.requireNonNull(agentTaskRunStore);
         this.policy = Objects.requireNonNull(policy);
         this.toolRegistry =Objects.requireNonNull(toolRegistry);
         this.toolSetSnapFactory =Objects.requireNonNull(toolSetSnapFactory);
+        this.observationPolicy =Objects.requireNonNull(observationPolicy);
+        this.contextBudget = Objects.requireNonNull(contextBudget);
     }
 
     public AgentTaskRunStore.CreateResult create(RepoKey repoKey,String sessionId,long actorId,String message,String idempotencyKey){
@@ -51,7 +57,7 @@ public class AgentTaskService {
         List<ToolDefinition>definitions=toolRegistry.definitions(capabilities);
         ToolSetSnap toolSet=toolSetSnapFactory.create(definitions);
 
-        AgentExecutionConfig config=new AgentExecutionConfig(policy,capabilities.granted(),toolSet,CONTEXT_POLICY_VERSION);
+        AgentExecutionConfig config=new AgentExecutionConfig(policy,capabilities.granted(),toolSet,CONTEXT_POLICY_VERSION,observationPolicy,contextBudget);
 
         CreateTaskCommand command=CreateTaskCommand.prepare(idempotencyKey,sessionId,actorId,request,config);
         return agentTaskRunStore.createTaskWithInitialRun(command);

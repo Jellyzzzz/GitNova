@@ -154,3 +154,14 @@ gitnova:
       max-final-draft-corrections: 1
       max-output-tokens: 4096
       temperature: 0.0
+      # Explicit model-matched capacity; no guessed provider window or duplicate output reserve.
+      context:
+        context-window-tokens: ${AGENT_CONTEXT_WINDOW_TOKENS}
+        safety-margin-tokens: ${AGENT_CONTEXT_SAFETY_MARGIN_TOKENS}
+        # Initial experiment settings, not measured optima.
+        summary-trigger-ratio: ${AGENT_CONTEXT_SUMMARY_TRIGGER_RATIO:0.8}
+        compact-trigger-ratio: ${AGENT_CONTEXT_COMPACT_TRIGGER_RATIO:0.9}
+        keep-recent-groups: ${AGENT_CONTEXT_KEEP_RECENT_GROUPS:4}
+      observation:
+          max-inline-tokens: ${AGENT_OBSERVATION_MAX_INLINE_TOKENS:4096}
+          max-preview-tokens: ${AGENT_OBSERVATION_MAX_PREVIEW_TOKENS:1024}

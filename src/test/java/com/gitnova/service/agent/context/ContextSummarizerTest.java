@@ -43,7 +43,7 @@ class ContextSummarizerTest {
         assertEquals(17, output.summary().throughSessionSequence());
         assertEquals("Inspect the failing test next.", output.summary().content());
         assertEquals(usage, output.usage());
-        assertEquals("summary-request-1", output.requestId());
+        assertTrue(output.requestId().startsWith("summary-request-1:"));
 
         ModelRequest request = gateway.receivedRequests().get(0);
         assertTrue(request.tools().isEmpty());
@@ -51,6 +51,19 @@ class ContextSummarizerTest {
                 request.messages().stream().map(ModelMessage::role).toList());
         assertTrue(request.messages().get(1).content().contains("11..17"));
         assertFalse(request.messages().get(1).content().contains("PREVIOUS SUMMARY"));
+    }
+
+    @Test
+    void shouldIncludeEarlierTaskConstraintsAndUseDistinctSummaryCallIdentities() {
+        var input = new SummaryInput("session-1", "Add tests", null, List.of(group),
+                List.of(new SessionContextService.TaskMessage("old-task", 5, "Do not change the public API")));
+        var first = summarizer.summarize(input);
+        gateway.enqueueResponse(new ModelResponse("response-2", "Keep the public API", List.of(), usage, ModelFinishReason.STOP));
+        var second = summarizer.summarize(input);
+        assertNotEquals(first.requestId(), second.requestId());
+        assertTrue(gateway.receivedRequests().get(0).messages().get(1).content().contains("Do not change the public API"));
+        assertThrows(IllegalArgumentException.class, () -> new SummaryInput("session-1", "Add tests", null, List.of(group),
+                List.of(new SessionContextService.TaskMessage("future-task", 18, "Not in coverage"))));
     }
 
     @Test

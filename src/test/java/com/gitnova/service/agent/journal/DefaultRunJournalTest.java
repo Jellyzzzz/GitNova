@@ -2,6 +2,8 @@ package com.gitnova.service.agent.journal;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.gitnova.mapper.agent.AgentStepMapper;
+import com.gitnova.storage.artifact.ArtifactRef;
 import com.gitnova.service.agent.completion.CompletionDecision;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.AgentStepType;
@@ -12,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -31,6 +34,7 @@ class DefaultRunJournalTest {
 
     private AgentEventAppender appender;
     private DefaultRunJournal journal;
+    private AgentStepMapper stepMapper;
 
     @BeforeEach
     void setUp() {
@@ -38,8 +42,8 @@ class DefaultRunJournalTest {
         when(appender.appendFence(any(), any())).thenReturn(
                 new AgentEventAppender.AppendResult(1L, 2L, 3L, false)
         );
-        journal = new DefaultRunJournal(appender, new ObjectMapper(),
-                mock(com.gitnova.mapper.agent.AgentStepMapper.class));
+        stepMapper = mock(AgentStepMapper.class);
+        journal = new DefaultRunJournal(appender, new ObjectMapper(), stepMapper);
     }
 
     @Test
@@ -133,6 +137,54 @@ class DefaultRunJournalTest {
         assertEquals(false, command.persistedPayload().path("decision").path("accepted").asBoolean());
         assertEquals(true, command.persistedPayload().path("decision").path("correctable").asBoolean());
         assertAuthority();
+    }
+
+    @Test
+    void shouldAppendProjectionWithStableIdentityAfterToolResult() {
+        var mapper = new ObjectMapper();
+        var observation = mapper.createObjectNode().put("status", "SUCCESS");
+        observation.putObject("externalization").set("artifact", mapper.valueToTree(
+                new ArtifactRef(DIGEST, DIGEST, 100, "application/json")));
+        String cause = "run:run-1:tool-call:tool-1:result";
+        when(stepMapper.hasToolResult("session-1", "run-1", cause)).thenReturn(true);
+
+        journal.appendToolObservation(SCOPE, "tool-1", "context-policy-1", observation);
+        observation.put("status", "changed after append");
+
+        var command = capturedCommand();
+        assertEquals(AgentStepType.TOOL_OBSERVATION_PROJECTED, command.stepType());
+        assertEquals(1, command.schemaVersion());
+        assertEquals(cause, command.causationEventId());
+        assertEquals("run:run-1:tool-call:tool-1:observation", command.eventId());
+        assertEquals("SUCCESS", command.persistedPayload().at("/observation/status").asText());
+        assertAuthority();
+    }
+
+    @Test
+    void shouldRefuseProjectionBeforeResultAndRejectInvalidReference() {
+        var mapper = new ObjectMapper();
+        var observation = mapper.createObjectNode();
+        assertThrows(IllegalArgumentException.class,
+                () -> journal.appendToolObservation(SCOPE, "tool-1", "context-policy-1", observation));
+        observation.putObject("externalization").set("artifact", mapper.valueToTree(
+                new ArtifactRef(DIGEST, DIGEST, 100, "application/json")));
+        assertThrows(IllegalStateException.class,
+                () -> journal.appendToolObservation(SCOPE, "tool-1", "context-policy-1", observation));
+        org.mockito.Mockito.verifyNoInteractions(appender);
+    }
+
+    @Test
+    void shouldResolveArtifactOnlyFromGivenSessionProjection() {
+        var mapper = new ObjectMapper();
+        var payload = mapper.createObjectNode();
+        var reference = new ArtifactRef(DIGEST, DIGEST, 100, "application/json");
+        payload.putObject("observation").putObject("externalization")
+                .set("artifact", mapper.valueToTree(reference));
+        when(stepMapper.selectArtifactProjection("session-1", DIGEST)).thenReturn(payload.toString());
+        assertEquals(reference, journal.findArtifact("session-1", DIGEST).orElseThrow());
+        assertTrue(journal.findArtifact("other-session", DIGEST).isEmpty());
+        when(stepMapper.selectArtifactProjection("session-1", DIGEST)).thenReturn("{}");
+        assertThrows(IllegalStateException.class, () -> journal.findArtifact("session-1", DIGEST));
     }
 
     private AgentEventAppender.AppendCommand capturedCommand() {

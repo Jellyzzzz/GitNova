@@ -132,6 +132,13 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
+        <!-- 本地 BPE token 估计；参考编码不等同于各 Provider 的实际计费分词 -->
+        <dependency>
+            <groupId>com.knuddels</groupId>
+            <artifactId>jtokkit</artifactId>
+            <version>1.1.0</version>
+        </dependency>
+
         <!-- ===== API文档 ===== -->
         <!-- Springdoc OpenAPI（Swagger UI）：Week 5压测文档用 -->
         <dependency>

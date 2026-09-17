@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class StorageConfigurationTest {
 
@@ -33,6 +34,15 @@ class StorageConfigurationTest {
                     Path.of("build/test-artifacts"),
                     context.getBean(ArtifactStorageProperties.class).basePath()
             );
+            assertEquals(8 * 1024 * 1024, context.getBean(ArtifactStorageProperties.class).maxArtifactBytes());
+            assertEquals(4096, context.getBean(ArtifactStorageProperties.class).maxReadBytes());
         });
+    }
+
+    @Test
+    void shouldRejectReadLimitLargerThanStorageLimit() {
+        contextRunner.withPropertyValues("gitnova.agent.artifact.max-artifact-bytes=100",
+                        "gitnova.agent.artifact.max-read-bytes=101")
+                .run(context -> assertNotNull(context.getStartupFailure()));
     }
 }

@@ -62,7 +62,8 @@ public class ContextSummarizer {
         }
 
         String source=renderSource(input);
-        ModelResponse response=modelGateway.complete(buildSummaryRequest(requestId,source));
+        String callRequestId = requestId + ":" + UUID.randomUUID();
+        ModelResponse response=modelGateway.complete(buildSummaryRequest(callRequestId,source));
         if(response==null){
             throw new IllegalStateException("Summary model returned no response");
         }
@@ -82,7 +83,7 @@ public class ContextSummarizer {
         return new SummaryOutput(
                 candidate,
                 response.usage(),
-                requestId
+                callRequestId
         );
     }
 
@@ -91,6 +92,28 @@ public class ContextSummarizer {
         out.append("CURRENT TASK\n")
         .append(input.taskText)
         .append("\n\n");
+
+        // Session projection supplies the complete ordered prefix, including standalone feedback.
+        // Legacy callers may still supply only groups + user messages below.
+        if (!input.history().isEmpty()) {
+            if (input.previousSummary() != null) {
+                out.append("PREVIOUS SUMMARY throughSessionSequence=")
+                        .append(input.previousSummary().throughSessionSequence()).append('\n')
+                        .append(input.previousSummary().content()).append("\n\n");
+            }
+            for (SessionContextService.HistoryEntry entry : input.history()) {
+                out.append("HISTORY sequence=").append(entry.firstSessionSequence()).append("..")
+                        .append(entry.lastSessionSequence()).append('\n');
+                for (ModelMessage message : entry.messages()) appendMessage(out, message);
+            }
+            return out.toString();
+        }
+
+        for (SessionContextService.TaskMessage user : input.userMessages()) {
+            out.append("HISTORICAL USER TASK ").append(user.taskId())
+                    .append(" sequence=").append(user.sessionSequence()).append('\n')
+                    .append(user.text()).append("\n\n");
+        }
 
         ContextSummary previousSummary=input.previousSummary;
         if(previousSummary!=null){
@@ -167,12 +190,38 @@ public class ContextSummarizer {
     private ModelRequest buildSummaryRequest(String requestId,String source){
         return new ModelRequest(model,List.of(new ModelMessage(ModelRole.SYSTEM,SUMMARY_INSTRUCTIONS,List.of(),null),new ModelMessage(ModelRole.USER,source,List.of(),null)),List.of(),summaryMaxOutputTokens,null,requestId);
     }
-    public record SummaryInput(String sessionId,String taskText,ContextSummary previousSummary, List<InteractionGroup>groupToCompact){
+    public record SummaryInput(String sessionId,String taskText,ContextSummary previousSummary, List<InteractionGroup>groupToCompact,
+                               List<SessionContextService.TaskMessage> userMessages,
+                               List<SessionContextService.HistoryEntry> history){
+        public SummaryInput(String sessionId, String taskText, ContextSummary previousSummary, List<InteractionGroup> groupToCompact) {
+            this(sessionId, taskText, previousSummary, groupToCompact, List.of(), List.of());
+        }
+        public SummaryInput(String sessionId, String taskText, ContextSummary previousSummary, List<InteractionGroup> groupToCompact,
+                            List<SessionContextService.TaskMessage> userMessages) {
+            this(sessionId, taskText, previousSummary, groupToCompact, userMessages, List.of());
+        }
         public SummaryInput{
             requireNonBlank(sessionId,"sessionId");
             requireNonBlank(taskText,"taskText");
             Objects.requireNonNull(groupToCompact,"groupToCompact must not be null");
             groupToCompact=List.copyOf(groupToCompact);
+            userMessages = List.copyOf(userMessages);
+            history = List.copyOf(history);
+            long lastSequence = previousSummary == null ? 0 : previousSummary.throughSessionSequence();
+            long end = groupToCompact.isEmpty() ? lastSequence : groupToCompact.get(groupToCompact.size() - 1).lastSessionSequence();
+            for (SessionContextService.TaskMessage user : userMessages) {
+                if (user.sessionSequence() <= lastSequence || user.sessionSequence() > end) {
+                    throw new IllegalArgumentException("Historical user messages must be ordered within summary coverage");
+                }
+                lastSequence = user.sessionSequence();
+            }
+            lastSequence = previousSummary == null ? 0 : previousSummary.throughSessionSequence();
+            for (SessionContextService.HistoryEntry entry : history) {
+                if (entry.firstSessionSequence() <= lastSequence || entry.lastSessionSequence() > end) {
+                    throw new IllegalArgumentException("Summary history must be ordered within coverage");
+                }
+                lastSequence = entry.lastSessionSequence();
+            }
         }
 
     }
