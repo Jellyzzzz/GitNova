@@ -50,6 +50,21 @@ class DefaultRunJournalTest {
     }
 
     @Test
+    void shortResourceLookupUsesSourceSequenceWithinTheTrustedSession() throws Exception {
+        var mapper = new ObjectMapper();
+        var ref = new ArtifactRef("a".repeat(64), "a".repeat(64), 100, "application/json");
+        var projection = mapper.createObjectNode();
+        projection.putObject("observation").putObject("externalization").set("artifact", mapper.valueToTree(ref));
+        when(stepMapper.selectArtifactProjectionBySource("session-1", 24)).thenReturn(projection.toString());
+        assertEquals(ref, journal.findArtifactBySource("session-1", 24).orElseThrow());
+        assertTrue(journal.findArtifactBySource("session-1", 25).isEmpty());
+        assertTrue(journal.findArtifactBySource("session-other", 24).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> journal.findArtifactBySource("session-1", 0));
+        when(stepMapper.selectArtifactProjectionBySource("session-1", 26)).thenReturn("{\"observation\":{}}");
+        assertThrows(IllegalStateException.class, () -> journal.findArtifactBySource("session-1", 26));
+    }
+
+    @Test
     void thinkingResponseUsesVersionedPayloadAndPreservesTheExactOriginal() {
         String reasoning = "  original\nreasoning\r\n  ";
         var response = new ModelResponse("response", "Ready", java.util.List.of(),

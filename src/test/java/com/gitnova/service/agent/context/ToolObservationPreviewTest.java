@@ -72,7 +72,7 @@ class ToolObservationPreviewTest {
         assertEquals(1, preview.at("/payload/exitCode").asInt());
         assertEquals(9, preview.at("/payload/generationAfter").asInt());
         assertTrue(preview.path("truncated").asBoolean());
-        assertTrue(preview.at("/payload/stdout").asText().startsWith("START"));
+        assertTrue(preview.at("/payload/stdout").asText().startsWith("L1 START"));
         assertTrue(preview.at("/payload/stdout").asText().endsWith("END"));
         assertEquals(ref.artifactId(), preview.at("/externalization/artifact/artifactId").asText());
         assertEquals("/payload/stdout", preview.at("/externalization/previewedFields/0").asText());
@@ -129,5 +129,57 @@ class ToolObservationPreviewTest {
         var result = ToolResult.success(mapper.createObjectNode().put("generation", 3).put("stdout", "abc"));
         assertThrows(IllegalArgumentException.class, () -> renderer.preview("runCommand", result, ref, 10));
         assertEquals(3, result.payload().path("generation").asInt());
+    }
+
+    @Test
+    void commandPreviewKeepsMiddleDiagnosticsAndIssuesReadableShortPathsWithoutHashes() throws Exception {
+        var failures = java.util.Set.of(66, 70, 74, 78, 86, 90, 94);
+        StringBuilder log = new StringBuilder();
+        for (int line = 1; line <= 162; line++) {
+            log.append(line == 1 ? "columns=[orderNumber,total]" : line == 162
+                    ? "BATCH SUMMARY cases=160 passed=153 failed=7" : failures.contains(line)
+                    ? "FAIL [" + line + ",expected=100,actual=99]" : "PASS [" + line + ",expected=100,actual=100]").append('\n');
+        }
+        var result = ToolResult.success(mapper.createObjectNode().put("exitCode", 1).put("generationBefore", 0)
+                .put("generationAfter", 0).put("stdout", log.toString()).put("stderr", "")
+                .put("stdoutTruncated", false).put("stderrTruncated", false));
+        var stored = renderer.preview("runCommand", result, ref, 1024, "session", 24);
+        var visible = mapper.readTree(new MessageFactory(mapper).toolObservation(
+                new ToolCall("call", "runCommand", mapper.createObjectNode()), stored).content());
+        assertEquals("artifact://tool-results/24/stdout.txt", visible.at("/externalization/resources/stdout.txt").asText());
+        assertFalse(visible.path("externalization").has("artifact"));
+        assertTrue(stored.path("externalization").has("artifact")); // Journal retains integrity metadata.
+        assertTrue(renderer.estimateTokens(visible) <= 1024);
+        String excerpt = visible.at("/payload/stdout").asText();
+        for (int line : failures) assertTrue(excerpt.contains("L" + line + " FAIL [" + line + ",expected=100,actual=99]"), excerpt);
+        var counts = visible.path("externalization").path("text").path("/payload/stdout");
+        assertEquals(162, counts.path("capturedLines").asInt());
+        assertEquals(162, counts.path("displayedLines").asInt() + counts.path("omittedLines").asInt());
+        assertFalse(counts.path("captureTruncated").asBoolean());
+        assertFalse(visible.path("truncated").asBoolean());
+        assertEquals(1, visible.at("/payload/exitCode").asInt());
+    }
+
+    @Test
+    void oversizedDiagnosticLineDoesNotHideOtherSmallDiagnostics() {
+        var result = ToolResult.success(mapper.createObjectNode().put("exitCode", 1)
+                .put("stdout", "HEADER\nFAIL " + "中文🧪".repeat(5000) + "\nERROR exact small message\nTAIL\n"));
+        var preview = renderer.preview("runCommand", result, ref, 900, "session", 24);
+        assertTrue(preview.at("/payload/stdout").asText().contains("L3 ERROR exact small message"));
+        assertTrue(renderer.estimateTokens(preview) <= 900);
+        assertTrue(preview.path("externalization").path("omittedCounts").path("/payload/stdout").asInt() >= 1);
+    }
+
+    @Test
+    void diffExcerptKeepsItsFileAndHunkHeadersAndNeverSelectsAnOrphanTail() {
+        String diff = "--- a/A.java\n+++ b/A.java\n@@ -1,1 +1,1000 @@\n-old\n" + "+new\n".repeat(1000)
+                + "--- a/B.java\n+++ b/B.java\n@@ -1 +1 @@\n-x\n+y\n";
+        var result = ToolResult.success(mapper.createObjectNode().put("generation", 4).put("unifiedDiff", diff));
+        var visible = renderer.preview("getWorkspaceDiff", result, ref, 800, "session", 24);
+        String excerpt = visible.at("/payload/unifiedDiff").asText();
+        assertTrue(excerpt.startsWith("L1 --- a/A.java\nL2 +++ b/A.java\nL3 @@ -1,1 +1,1000 @@"));
+        assertFalse(excerpt.contains("+++ b/B.java"));
+        assertTrue(visible.path("externalization").path("previewOnly").asBoolean());
+        assertTrue(renderer.estimateTokens(visible) <= 800);
     }
 }

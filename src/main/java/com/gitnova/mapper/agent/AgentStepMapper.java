@@ -70,6 +70,19 @@ public interface AgentStepMapper {
     String selectArtifactProjection(@Param("sessionId") String sessionId,
                                     @Param("artifactId") String artifactId);
 
+    /** The public number identifies the source result, never the later projection event. */
+    @Select("""
+            SELECT projection.payload_json FROM agent_step source
+            JOIN agent_step projection ON projection.causation_event_id = source.event_id
+              AND projection.session_id = source.session_id AND projection.run_id = source.run_id
+            WHERE source.session_id = #{sessionId} AND source.session_sequence = #{sourceSequence}
+              AND source.step_type = 'TOOL_RESULT' AND source.schema_version = 1
+              AND projection.step_type = 'TOOL_OBSERVATION_PROJECTED' AND projection.schema_version = 1
+            ORDER BY projection.session_sequence LIMIT 1
+            """)
+    String selectArtifactProjectionBySource(@Param("sessionId") String sessionId,
+                                            @Param("sourceSequence") long sourceSequence);
+
     @Insert("""
             INSERT INTO agent_step (
                 event_id, event_digest,

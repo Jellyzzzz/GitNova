@@ -32,6 +32,9 @@ public interface RunJournal {
 
     Optional<ArtifactRef> findArtifact(String sessionId, String artifactId);
 
+    /** Only a committed result/projection pair in this Session authorizes the short resource path. */
+    Optional<ArtifactRef> findArtifactBySource(String sessionId, long sourceSequence);
+
     AgentEventAppender.AppendResult appendHarnessFeedback(
             RunJournalScope scope,
             HarnessFeedbackPayload payload,

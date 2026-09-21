@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.gitnova.dto.ToolCall;
 import com.gitnova.dto.ToolDefinition;
+import com.gitnova.gitobject.GitObjectReader;
+import com.gitnova.service.agent.tools.ReadFileTool;
 import okhttp3.OkHttpClient;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -35,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 
 @Tag("gateway")
 class OpenAiCompatibleModelGatewayTest {
@@ -199,6 +202,18 @@ class OpenAiCompatibleModelGatewayTest {
         assertEquals("function", providerTool.path("type").asText());
         assertEquals("getDiff", providerTool.path("function").path("name").asText());
         assertTrue(providerTool.path("function").path("parameters").isObject());
+    }
+
+    @Test
+    void shouldSendReadFileConditionalArgumentsWithoutFlatteningTheSchema() throws Exception {
+        ToolDefinition tool = new ReadFileTool(mock(GitObjectReader.class)).definition();
+        server.enqueue(successfulTextResponse("read-schema", "Ready."));
+        gateway.complete(new ModelRequest("review-model", simpleRequest().messages(), List.of(tool), 256, 0.0, "schema-test"));
+
+        JsonNode sent = objectMapper.readTree(server.takeRequest().getBody().readUtf8())
+                .path("tools").get(0).path("function").path("parameters");
+        assertEquals(tool.inputSchema(), sent);
+        assertEquals(3, sent.path("anyOf").size());
     }
 
     @Test

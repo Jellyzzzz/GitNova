@@ -42,6 +42,7 @@ public class ReadFileTool implements AgentTool {
 
     private final GitObjectReader gitObjectReader;
     private final WorkspaceGateway workspaceGateway;
+    private final ArtifactTextReader artifactReader;
 
     public ReadFileTool(GitObjectReader gitObjectReader) {
         this(gitObjectReader, (WorkspaceGateway) null);
@@ -51,16 +52,22 @@ public class ReadFileTool implements AgentTool {
             GitObjectReader gitObjectReader,
             WorkspaceGateway workspaceGateway
     ) {
+        this(gitObjectReader, workspaceGateway, null);
+    }
+
+    public ReadFileTool(GitObjectReader gitObjectReader, WorkspaceGateway workspaceGateway, ArtifactTextReader artifactReader) {
         this.gitObjectReader = gitObjectReader;
         this.workspaceGateway = workspaceGateway;
+        this.artifactReader = artifactReader;
     }
 
     @Autowired
     public ReadFileTool(
             GitObjectReader gitObjectReader,
-            ObjectProvider<WorkspaceGateway> workspaceGatewayProvider
+            ObjectProvider<WorkspaceGateway> workspaceGatewayProvider,
+            ArtifactTextReader artifactReader
     ) {
-        this(gitObjectReader, workspaceGatewayProvider.getIfAvailable());
+        this(gitObjectReader, workspaceGatewayProvider.getIfAvailable(), artifactReader);
     }
 
     @Override
@@ -68,33 +75,70 @@ public class ReadFileTool implements AgentTool {
         ObjectNode schema = JsonNodeFactory.instance.objectNode();
         schema.put("type", "object");
         ObjectNode properties = schema.putObject("properties");
-        properties.putObject("revision").put("type", "string");
+        properties.putObject("revision").put("type", "string")
+                .put("description", "Required for repository files: BASE, TARGET or WORKSPACE. Omit for artifact:// paths.");
         properties.putObject("filePath")
                 .put("type", "string")
-                .put("maxLength", 4096);
+                .put("maxLength", 4096)
+                .put("description", "Repository-relative file path, or an exact artifact:// path issued by the Harness.");
         properties.putObject("startLine")
                 .put("type", "integer")
-                .put("minimum", 1);
+                .put("minimum", 1)
+                .put("description", "Inclusive 1-based start. Required with endLine unless using an Artifact cursor.");
         properties.putObject("endLine")
                 .put("type", "integer")
-                .put("minimum", 1);
-        schema.putArray("required")
-                .add("revision")
-                .add("filePath")
-                .add("startLine")
-                .add("endLine");
+                .put("minimum", 1)
+                .put("description", "Inclusive end; request at most 200 lines. Omit when using an Artifact cursor.");
+        properties.putObject("cursor").put("type", "string").put("maxLength", 256)
+                .put("description", "Artifact continuation only: copy the returned nextRequest. Do not add revision or line bounds.");
+        schema.putArray("required").add("filePath");
         schema.put("additionalProperties", false);
+
+        // Keep the existing flat arguments, but declare the three valid forms explicitly.
+        ObjectNode repositoryRead = schema.deepCopy();
+        repositoryRead.put("description", "Repository file: revision and both line bounds are required; cursor is forbidden.");
+        repositoryRead.withObject("properties").remove("cursor");
+        ((ObjectNode) repositoryRead.path("properties").path("filePath")).put("pattern", "^(?!artifact:)");
+        repositoryRead.withArray("required").add("revision").add("startLine").add("endLine");
+
+        ObjectNode artifactRange = schema.deepCopy();
+        artifactRange.put("description", "Historical Artifact: both line bounds are required; revision and cursor are forbidden.");
+        artifactRange.withObject("properties").remove(List.of("revision", "cursor"));
+        ((ObjectNode) artifactRange.path("properties").path("filePath")).put("pattern", "^artifact:");
+        artifactRange.withArray("required").add("startLine").add("endLine");
+
+        ObjectNode artifactCursor = schema.deepCopy();
+        artifactCursor.put("description", "Historical Artifact continuation: cursor is required; revision and line bounds are forbidden.");
+        artifactCursor.withObject("properties").remove(List.of("revision", "startLine", "endLine"));
+        ((ObjectNode) artifactCursor.path("properties").path("filePath")).put("pattern", "^artifact:");
+        artifactCursor.withArray("required").add("cursor");
+        schema.putArray("anyOf").add(repositoryRead).add(artifactRange).add(artifactCursor);
         return new ToolDefinition(
                 "readFile",
-                "Reads a bounded line range from BASE, TARGET, or the current WORKSPACE",
+                "Choose one form: repository {filePath,revision,startLine,endLine}; "
+                        + "Artifact {filePath,startLine,endLine}; Artifact continuation {filePath,cursor}. "
+                        + "filePath alone is never enough. Artifacts are captured historical evidence, not current files.",
                 schema
         );
     }
 
     @Override
     public ToolResult execute(ToolExecutionContext execution, JsonNode arguments) {
-        AgentRunContext run = execution.run();
+        if (arguments == null || !arguments.isObject() || !arguments.path("filePath").isTextual()) {
+            return invalidArgument("INVALID_READ_ARGUMENTS", "filePath is required");
+        }
         String filePath = arguments.path("filePath").asText();
+        if (filePath.startsWith("artifact:")) {
+            if (artifactReader == null) return ToolResult.error(ToolStatus.INTERNAL_ERROR, "ARTIFACT_READER_UNAVAILABLE",
+                    "Historical resource reading is not configured", false);
+            return artifactReader.read(execution, filePath, arguments);
+        }
+        if (arguments.has("cursor") || !arguments.path("revision").isTextual()
+                || !arguments.path("startLine").isIntegralNumber() || !arguments.path("startLine").canConvertToInt()
+                || !arguments.path("endLine").isIntegralNumber() || !arguments.path("endLine").canConvertToInt()) {
+            return invalidArgument("INVALID_READ_ARGUMENTS", "Repository reads require revision and integer startLine/endLine; no cursor");
+        }
+        AgentRunContext run = execution.run();
         int startLine = arguments.path("startLine").asInt();
         int requestedEndLine = arguments.path("endLine").asInt();
 

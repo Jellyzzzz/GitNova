@@ -2,6 +2,7 @@ package com.gitnova.storage.artifact;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.gitnova.service.agent.runtime.AgentExecutionContext;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.storage.config.ArtifactStorageProperties;
@@ -106,6 +107,22 @@ public final class LocalArtifactStore {
     /** reference must come from a committed, authorized journal record, never directly from model args. */
     public ArtifactReadResult read(AgentExecutionContext context, ArtifactRef reference,
                                    long offset, int maxBytes) throws IOException {
+        if (maxBytes > properties.maxReadBytes()) throw new IllegalArgumentException("Invalid artifact read range");
+        return readVerified(context, reference, offset, maxBytes);
+    }
+
+    /** Decode the immutable JSON only after checking its full digest. Storage size bounds this allocation. */
+    public JsonNode readToolResult(AgentExecutionContext context, ArtifactRef reference) throws IOException {
+        if (reference.sizeBytes() > properties.maxArtifactBytes() || reference.sizeBytes() > Integer.MAX_VALUE) {
+            throw new IOException("Artifact exceeds storage limit");
+        }
+        String content = readVerified(context, reference, 0, Math.max(4, (int) reference.sizeBytes())).content();
+        return objectMapper.reader().with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                .readTree(content);
+    }
+
+    private ArtifactReadResult readVerified(AgentExecutionContext context, ArtifactRef reference,
+                                            long offset, int maxBytes) throws IOException {
         Objects.requireNonNull(reference, "reference");
         if (!reference.artifactId().matches("[0-9a-f]{64}")
                 || !reference.artifactId().equals(reference.sha256())
@@ -113,7 +130,7 @@ public final class LocalArtifactStore {
             throw new IllegalArgumentException("Unsupported artifact reference");
         }
         if (offset < 0 || offset > reference.sizeBytes() || maxBytes < 4
-                || maxBytes > properties.maxReadBytes()) {
+                || maxBytes > Math.max(4, properties.maxArtifactBytes())) {
             throw new IllegalArgumentException("Invalid artifact read range");
         }
         if (reference.sizeBytes() > properties.maxArtifactBytes()) {

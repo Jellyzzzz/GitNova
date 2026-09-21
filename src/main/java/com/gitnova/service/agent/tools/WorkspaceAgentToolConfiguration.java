@@ -29,9 +29,10 @@ public class WorkspaceAgentToolConfiguration {
     @Bean
     public SearchTextTool searchTextTool(
             WorkspaceGateway workspaceGateway,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ArtifactTextReader artifactReader
     ) {
-        return new SearchTextTool(workspaceGateway, objectMapper);
+        return new SearchTextTool(workspaceGateway, objectMapper, artifactReader);
     }
 
     @Bean

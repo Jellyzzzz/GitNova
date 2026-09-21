@@ -22,6 +22,10 @@ import com.gitnova.service.agent.prompt.AssembledPrompt;
 import com.gitnova.service.agent.prompt.PromptAssembler;
 import com.gitnova.service.agent.tool.*;
 import com.gitnova.service.agent.tools.ReadArtifactTool;
+import com.gitnova.service.agent.tools.ReadFileTool;
+import com.gitnova.service.agent.tools.SearchTextTool;
+import com.gitnova.service.agent.tools.ArtifactTextReader;
+import com.gitnova.gitobject.GitObjectReader;
 import com.gitnova.service.agent.workspace.*;
 import com.gitnova.storage.artifact.ArtifactRef;
 import com.gitnova.storage.artifact.LocalArtifactStore;
@@ -261,6 +265,57 @@ class AgentRuntimeArtifactTest {
         var view = ArgumentCaptor.forClass(RunStateView.class);
         verify(inspector).inspect(eq(context), view.capture(), eq(results.get(1).result()));
         assertEquals(7, view.getValue().latestSuccessfulValidation().orElseThrow().generation());
+    }
+
+    @Test
+    void unifiedReadAndSearchUseCommittedSourceStepWithoutRecursiveExternalization() throws Exception {
+        var reader = new ArtifactTextReader(store, journal, mapper, new TokenEstimator());
+        registry = new ToolRegistry(List.of(command, finish,
+                new ReadFileTool(mock(GitObjectReader.class), workspace, reader),
+                new SearchTextTool(workspace, mapper, reader)));
+        context = context(new ObservationPolicy(1024, 800), registry);
+        runtime = new AgentRuntime(model, prompt, new MessageFactory(mapper), registry, workspace, inspector,
+                AgentTestExecutionConfigs.resolver(registry), journal, new CanonicalJsonCodec(mapper), store, preview);
+        when(journal.findArtifactBySource(eq("session"), anyLong())).thenAnswer(call -> {
+            for (JsonNode projection : projections) {
+                var metadata = projection.path("externalization");
+                if (metadata.path("sourceStepSequence").asLong() == (long) call.getArgument(1)) {
+                    return Optional.of(mapper.treeToValue(metadata.path("artifact"), ArtifactRef.class));
+                }
+            }
+            return Optional.empty();
+        });
+        doAnswer(call -> {
+            ModelRequest request = call.getArgument(0);
+            requests.add(request);
+            if (requests.size() == 1) return response("command", "runCommand");
+            if (requests.size() == 2) {
+                var observation = mapper.readTree(request.messages().get(3).content());
+                var metadata = observation.path("externalization");
+                assertFalse(metadata.has("artifact"));
+                assertEquals(5, metadata.path("sourceStepSequence").asLong()); // Projection is Step 6.
+                String path = metadata.path("resources").path("stdout.txt").asText();
+                assertEquals("artifact://tool-results/5/stdout.txt", path);
+                return new ModelResponse("read", "", List.of(
+                        new ToolCall("read", "readFile", mapper.createObjectNode().put("filePath", path).put("startLine", 1).put("endLine", 100)),
+                        new ToolCall("search", "searchText", mapper.createObjectNode().put("path", path).put("query", "stack frame").put("caseSensitive", true))),
+                        ModelUsage.unknown(), ModelFinishReason.TOOL_CALLS);
+            }
+            return response("finish", "finishTask");
+        }).when(model).complete(any());
+        assertEquals(AgentRunStatus.COMPLETED, run().status());
+        var messages = requests.get(2).messages();
+        for (String id : List.of("read", "search")) {
+            var message = messages.stream().filter(m -> id.equals(m.toolCallId())).findFirst().orElseThrow();
+            var observation = mapper.readTree(message.content());
+            assertEquals("SUCCESS", observation.path("status").asText());
+            assertFalse(observation.has("externalization"));
+            assertTrue(observation.path("payload").path("historical").asBoolean());
+            assertTrue(preview.estimateTokens(observation) > 1024); // Even large pages don't create new Artifacts.
+        }
+        assertEquals(1, projections.size());
+        verify(store, times(1)).saveToolResult(any(), any());
+        verify(command, times(1)).execute(any(), any());
     }
 
     @Test

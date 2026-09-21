@@ -24,7 +24,8 @@ import static org.mockito.Mockito.mock;
 
 class WorkspaceAgentToolConfigurationTest {
 
-    private final ApplicationContextRunner contextRunner = new ApplicationContextRunner();
+    private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+            .withBean(ArtifactTextReader.class, () -> mock(ArtifactTextReader.class));
 
     @Test
     void shouldRegisterWorkspaceToolsWhenGatewayExists() {

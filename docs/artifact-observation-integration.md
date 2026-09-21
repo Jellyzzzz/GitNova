@@ -3,9 +3,8 @@
 ## 本次范围
 
 已实现存储、回读工具、确定性预览、Journal 接口及 Runtime 工具结果接线。
-未接管 `buildRequest` 或整体上下文预算；这部分由用户继续实现。
-`ContextAssembler`、摘要触发策略、预算分配由后续主流程接入。
-不新增 Artifact 表，不改 Task / Run / Workspace 的生命周期，不把文件路径暴露给模型。
+本次修改统一历史资源的读取入口并改进预览，不改变现有 `buildRequest`、Session 上下文组装或摘要触发策略。
+不新增 Artifact 表，不改 Task / Run / Workspace 的生命周期，不把物理存储路径暴露给模型。
 
 ## 三个不同位置
 
@@ -23,8 +22,9 @@
 - `LocalArtifactStore.saveToolResult(context, result)`：完整写入后返回引用。
 - `ToolObservationPreview.preview(name, result, ref, budget)`：只产生新的模型可见 JSON，不修改原始 result。
 - `RunJournal.appendToolObservation(...)`：在完整 TOOL_RESULT 之后追加 TOOL_OBSERVATION_PROJECTED。
-- `MessageFactory.toolObservation(call, observation)`：只序列化，保持原 toolCallId，不负责 I/O。
-- `readArtifact`：模型输入 artifactId、offset、maxBytes；Session / repo 来自可信执行上下文。
+- `MessageFactory.toolObservation(call, observation)`：保留原 toolCallId；新协议在序列化时去除后台 ArtifactRef，旧投影仍保留 hash 入口。不负责 I/O。
+- `readFile` / `searchText`：按下面的协议读取/搜索历史资源；Session / repo 来自可信执行上下文。
+- `readArtifact`：兼容旧 hash + offset + maxBytes 引用，不删除旧定义或历史数据。
 
 `TOOL_OBSERVATION_PROJECTED` 是模型视图记录，不是第二个工具执行结果，也不能生成第二条相同 callId 的 TOOL message。
 
@@ -32,14 +32,16 @@
 
 ```java
 // 工具已执行完。所有 verifier / evidence 提取仍使用原始 result。
-state.committed(journal.appendToolResult(scope, fullResultPayload));
+var source = journal.appendToolResult(scope, fullResultPayload);
+state.committed(source);
 
 if (observationPolicy != null && preview.supports(call.name())
         && preview.exceedsInlineBudget(result, observationPolicy)) {
-    // 必须先确认本 Run 冻结工具集中允许 readArtifact。
+    // 必须先确认本 Run 冻结工具集中允许 readFile（或旧 readArtifact）。
     // 不允许为了让引用可读而偷偷扩大本次 Run 的授权工具集。
     ArtifactRef ref = store.saveToolResult(context, result);
-    JsonNode observation = preview.preview(call.name(), result, ref, observationPolicy.maxPreviewTokens());
+    JsonNode observation = preview.preview(call.name(), result, ref,
+            observationPolicy.maxPreviewTokens(), context.sessionId(), source.sessionSequence());
     state.committed(journal.appendToolObservation(
             scope, call.id(), contextPolicyVersion, observation));
     state.messages.add(messageFactory.toolObservation(call, observation));
@@ -48,7 +50,7 @@ if (observationPolicy != null && preview.supports(call.name())
 }
 ```
 
-新策略启用时，Run 启动先要求 Journal、Artifact 组件及冻结工具集中的 readArtifact 均可用；
+新策略启用时，Run 启动先要求 Journal、Artifact 组件及冻结工具集中的 readFile 或 readArtifact 可用；
 否则在第一次模型调用之前返回 CONTEXT_PREPARATION_FAILURE，不临时扩大工具集。
 旧配置（没有 ObservationPolicy）继续完整内置；独立测试可通过旧配置运行，但不允许生成不可回读的引用。
 大结果保存失败或必要预览字段仍超预算，返回 CONTEXT_PREPARATION_FAILURE；当前工具真实结果已先记录，
@@ -87,17 +89,72 @@ AgentTaskService 将 ObservationPolicy 与已授权工具定义一起冻结。
 要求服务端私有的支持这些操作的文件系统；不支持时失败，不静默降级。
 
 回读先从当前 Session 的 committed projection 查询服务端 ArtifactRef，再校验文件大小与完整 SHA-256。
-只保留所请求的有限字节，避免将大文件整体装入内存；每次回读会扫描完整文件做校验，时间复杂度 O(artifact bytes)。
+旧 readArtifact 只保留所请求的有限字节，每次仍扫描完整文件校验。
+新文本视图先验证并解析有存储上限的完整 JSON，再按行/游标输出；当前时间和内存为 O(artifact bytes)，**不是流式 JSON 解码**。
+默认原始 Artifact 上限 8 MiB；不扩大该上限。未来若需要处理远超此规模的日志，应单独改为持久化文本视图或流式索引。
 返回的是历史结果，不证明当前文件或 validation 仍然有效。
 模型不能传物理路径、repoKey 或 sessionId；已知 artifactId 也不能越过 Session 授权。
 
 ## 预览与限制
 
 可缩短日志 stdout/stderr、diff、搜索匹配、文件内容/目录列表等明确的正文。
-数组保留完整条目，字符串保留头尾；status、错误码、generation、exitCode、原始 truncated 等不改写。
-省略情况通过 `externalization.previewedFields` 和 `capturedCounts` 显式记录。
-capturedCounts 只代表保存结果中原有的数组条目数或字符串 Unicode code point 数，不伪造仓库总数。
-applyPatch / terminal / readArtifact 不进入此预览路径。
+数组保留完整条目。命令日志优先选择 FAIL/ERROR/EXCEPTION 等候选行，再选头尾及相邻上下文；按原始行号排序、去重，逐行保留原文。
+关键词仅用于选段，不推断任务成功/失败；无关键词不能证明没有错误。超长单行不吞掉全部预览预算，可用游标回读。
+Diff 按完整 hunk 边界选择带文件/hunk 头的前缀；若首个 hunk 本身太大，只展示其头部并提供完整 diff 引用。
+预览明确标为 previewOnly，**不能作为完整 patch 使用**。
+status、错误码、generation、exitCode、原始 truncated 等不改写。
+新 `previewFormat=line-excerpts` 的 capturedCounts 表示条目数/文本行数，omittedCounts 表示预览省略量；旧无格式标志的文本计数仍是 Unicode code point 数，不重写历史。
+`text` 元数据进一步给出 capturedLines/capturedBytes/displayedLines/omittedLines/captureTruncated。日志预览中的 L<n> 是原始行号，不是重新计数。
+applyPatch / terminal / readArtifact 和指向 Artifact 的 readFile/searchText 不进入外置路径，避免递归生成新 Artifact。
+
+## 统一历史资源协议
+
+```json
+{"filePath":"src/Main.java","revision":"WORKSPACE","startLine":1,"endLine":100}
+{"filePath":"artifact://tool-results/24/stdout.txt","startLine":60,"endLine":100}
+{"path":"artifact://tool-results/24/stdout.txt","query":"FAIL","caseSensitive":true}
+```
+
+- `24` 是本 Session 原始 TOOL_RESULT 的 sessionSequence。回读以因果关联 JOIN 已提交的投影取 ArtifactRef；不是模型生成的文件地址，也不是投影 Step 自己的序号。
+- 路径严格匹配，不接受任意 scheme、host、编码路径、`..`、query 或 fragment；不落入 Workspace 路径解析，不发起网络请求。
+- 已存在的视图才可读取：stdout.txt/stderr.txt 为解码后文本、diff.patch 为 unifiedDiff；数组支持 lines/matches/files/entries/paths/hunks.jsonl，逐条序列化；result.json 保留完整结构。
+- 不建立第二套内容存储；视图从已校验的不可变 JSON 派生。result.json 中字符串换行仍转义，因此日志应优先用 stdout.txt/stderr.txt。
+- Artifact 禁止 revision；仓库文件仍要求 revision 和行范围。searchText 不带 path 时仍搜索整个当前 Workspace；带 path 当前仅支持 Artifact，不支持指定 Workspace 子目录。
+- 读取为 1-based、包含末行，每段最多 200 行。返回预算固定为完整 ToolResult 的 2048 参考 tokens；这是服务端上限，不是 Provider 精确计数或整份 ModelRequest 上限。
+- `nextRequest` 可直接作为下一次工具参数。超长单行可分段，characterOffset 为该行 Unicode code point 偏移；cursor 是资源/Session/查询绑定的续读位置，不是授权凭证。
+- 搜索是 literal（非正则），每个匹配行返回一条；长行返回命中附近的片段及 readRequest。返回数量仅指本页匹配行；hasMore 表示尚有未扫描内容，不保证一定还有命中。
+- 所有回读继续引用同一资源，历史结果不改变 Workspace generation，也不证明当前验证通过。
+- captureTruncated 表示捕获本身不完整；预览省略和分页不把它改成 true。已丢失输出无法通过 Artifact 找回；捕获末行可能不完整时 completeLine=false。
+- sourceSessionId 随预览和页面返回。短路径只能在原 Session 解释；未来跨 Session Memory 必须保留来源作用域并重新授权，不能裸搬 `/24/`。
+
+### readFile 参数形式与实验调用次数
+
+`readFile` 的 Schema 用 `anyOf` 明确三个互斥的参数形式，字段仍是原来的扁平结构，没有新增 mode 或包装对象：
+
+| 读取对象 | 必填参数 | 不允许混入 |
+|---|---|---|
+| 仓库文件 | filePath、revision、startLine、endLine | cursor |
+| Artifact 行范围 | filePath、startLine、endLine | revision、cursor |
+| Artifact 续读 | filePath、cursor | revision、startLine、endLine |
+
+`ToolSchemaValidator` 复用现有 required/type/additionalProperties 校验各分支，并支持路径 pattern；
+缺失字段或混用形式在 Registry 分发前返回 SCHEMA_VALIDATION_FAILED。范围、版本可用性、路径安全、
+Artifact 授权与游标真实性仍由原工具执行边界检查；这里不是完整 JSON Schema 校验器，也没有开启 Provider strict 模式。
+DeepSeek 的[工具调用文档](https://api-docs.deepseek.com/guides/tool_calls/)列出 anyOf；
+本次 MockWebServer 验证网关完整发送分支 Schema，不等于真实 Provider 已验证或模型一定不再漏参数。
+
+服务默认 maxModelCalls 原本就是 20，现在也可用 `AGENT_MAX_MODEL_CALLS` 配置；
+此前四组实验通过命令行单独覆盖为 14。后续使用
+`evaluation/context-large-output/scenario-multitask-128k-20calls.json`，将实验上限改为 20，
+其他实验额度不变（包括 maxToolCalls=35）。用 `run_multitask.py --scenario` 显式选择该文件；
+旧的 `scenario-multitask-128k.json` 和已保存的 14 次实验结果保留。
+此轮不调整 Run 状态投影、分页预算或读取提示策略。
+
+### 升级注意
+
+ReadFile/SearchText 定义已变化，旧 Task 冻结的 definitionDigest 可能不再匹配。保留 ToolSetResolver 的拒绝逻辑；不篡改旧配置、摘要或 Step。部署后创建新 Task 做验证，旧排队执行需要显式迁移/新执行，不能静默套用新工具定义。
+旧投影无 resources 时 MessageFactory 不剔除 ArtifactRef；新投影的完整 hash 留在 Journal，模型仅拿到可访问路径。
+模型可见历史与本轮实时输出使用同一个 MessageFactory 规则，避免跨 Task 读取时重新暴露另一种引用格式。
 
 ## Token 判断标准
 
@@ -110,7 +167,7 @@ estimatedTokens <= maxInlineTokens → 完整内置（恰好等于也允许）
 estimatedTokens >  maxInlineTokens → 对支持预览且允许回读的工具执行外置
 
 外置后重新计量整个 Observation：
-预览正文 + 保留字段 + ArtifactRef + externalization 元数据
+预览正文 + 保留字段 + 可见路径/读取提示 + externalization 元数据
 estimatedTokens <= maxPreviewTokens 才满足预览预算
 ```
 

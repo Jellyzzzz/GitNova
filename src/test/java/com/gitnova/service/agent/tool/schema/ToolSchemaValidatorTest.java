@@ -80,6 +80,39 @@ class ToolSchemaValidatorTest {
         assertTrue(ToolSchemaValidator.validate(definition, arguments).isEmpty());
     }
 
+    @Test
+    void shouldValidateAnyOfWithTheSameRequiredTypeAndUnknownFieldRules() {
+        ObjectNode schema = definition().inputSchema().deepCopy();
+        ObjectNode paged = schema.deepCopy();
+        ObjectNode simple = schema.deepCopy();
+        simple.withObject("properties").remove("pageSize");
+        simple.putArray("required").add("path");
+        schema.putArray("required").add("path");
+        schema.putArray("anyOf").add(paged).add(simple);
+        ToolDefinition tool = new ToolDefinition("read", "read", schema);
+        ObjectNode args = JsonNodeFactory.instance.objectNode().put("path", "src/A.java");
+        assertTrue(ToolSchemaValidator.validate(tool, args).isEmpty());
+        args.put("pageSize", 10);
+        assertTrue(ToolSchemaValidator.validate(tool, args).isEmpty());
+        args.putNull("pageSize");
+        assertTrue(ToolSchemaValidator.validate(tool, args).contains("arguments must match one of the declared anyOf forms"));
+    }
+
+    @Test
+    void shouldUsePatternSearchAndRejectWhenNoAlternativeMatches() {
+        ObjectNode schema = definition().inputSchema().deepCopy();
+        ObjectNode source = schema.deepCopy();
+        ((ObjectNode) source.path("properties").path("path")).put("pattern", "^src/");
+        ObjectNode tests = schema.deepCopy();
+        ((ObjectNode) tests.path("properties").path("path")).put("pattern", "^test/");
+        schema.putArray("anyOf").add(source).add(tests);
+        ToolDefinition tool = new ToolDefinition("read", "read", schema);
+        ObjectNode args = JsonNodeFactory.instance.objectNode().put("path", "test/A.java").put("pageSize", 10);
+        assertTrue(ToolSchemaValidator.validate(tool, args).isEmpty());
+        args.put("path", "other/A.java");
+        assertEquals(List.of("arguments must match one of the declared anyOf forms"), ToolSchemaValidator.validate(tool, args));
+    }
+
     private ToolDefinition definition() {
         ObjectNode schema = JsonNodeFactory.instance.objectNode();
         schema.put("type", "object");

@@ -254,8 +254,9 @@ public final class AgentRuntime {
             throw new IllegalStateException("finishTask must be registered and authorized");
         }
         if (observationPolicy != null && (journal == null || artifactStore == null
-                || toolDefinitions.stream().noneMatch(definition -> ReadArtifactTool.NAME.equals(definition.name())))) {
-            logger.error("Externalization requires durable storage and authorized readArtifact: runId={}",
+                || toolDefinitions.stream().noneMatch(definition -> ReadArtifactTool.NAME.equals(definition.name())
+                        || "readFile".equals(definition.name())))) {
+            logger.error("Externalization requires durable storage and an authorized Artifact reader: runId={}",
                     context.context().runId());
             return terminate(state, AgentTerminationReason.CONTEXT_PREPARATION_FAILURE);
         }
@@ -814,12 +815,17 @@ public final class AgentRuntime {
 
     private boolean appendToolObservation(AgentExecutionContext context, RunState state,
                                           ToolCall call, ToolResult result) {
+        long sourceSequence = 0;
         if (journal != null) {
-            state.committed(journal.appendToolResult(state.journalScope,
-                    new ToolResultPayload(state.modelCallId, call.id(), call.name(), result)));
+            var committed = journal.appendToolResult(state.journalScope,
+                    new ToolResultPayload(state.modelCallId, call.id(), call.name(), result));
+            state.committed(committed);
+            sourceSequence = committed.sessionSequence();
         }
         ObservationPolicy policy = context.executionConfig().observationPolicy();
-        if (policy == null || !observationPreview.supports(call.name())) {
+        boolean artifactRead = "readFile".equals(call.name()) && call.arguments().path("filePath").asText().startsWith("artifact:")
+                || "searchText".equals(call.name()) && call.arguments().path("path").asText().startsWith("artifact:");
+        if (policy == null || !observationPreview.supports(call.name()) || artifactRead) {
             state.messages.add(messageFactory.tool(call, result));
             return true;
         }
@@ -831,7 +837,9 @@ public final class AgentRuntime {
                 return true;
             }
             ArtifactRef reference = artifactStore.saveToolResult(context, result);
-            observation = observationPreview.preview(call.name(), result, reference, policy.maxPreviewTokens());
+            boolean unifiedReader = context.executionConfig().toolSet().enabledDefinitionNames().contains("readFile");
+            observation = observationPreview.preview(call.name(), result, reference, policy.maxPreviewTokens(),
+                    context.sessionId(), unifiedReader ? sourceSequence : 0);
         } catch (IOException | IllegalArgumentException exception) {
             // The tool already ran. Never fabricate a failed ToolResult or re-execute it here.
             // Do not log raw observations, secrets or server paths from exception messages.

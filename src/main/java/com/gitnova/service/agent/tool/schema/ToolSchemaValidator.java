@@ -6,13 +6,17 @@ import com.gitnova.dto.ToolDefinition;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.regex.Pattern;
 
 public final class ToolSchemaValidator {
     private ToolSchemaValidator() {}
     public static List<String> validate(ToolDefinition definition, JsonNode arguments){
+        return validate(definition.inputSchema(), arguments);
+    }
+
+    private static List<String> validate(JsonNode schema, JsonNode arguments) {
         List<String>errors=new ArrayList<>();
         if(arguments==null||!arguments.isObject()) return List.of("arguments must be a JSON object");
-        JsonNode schema=definition.inputSchema();
         for(JsonNode field:schema.path("required")){
             String name=field.asText();
             if(!arguments.has(name)||arguments.get(name).isNull()){
@@ -37,6 +41,20 @@ public final class ToolSchemaValidator {
             if (!matchesType(value, typeNode)) {
                 errors.add("field '" + name + "' must be " + describeType(typeNode));
             }
+            if (value.isTextual() && propSchema.path("pattern").isTextual()
+                    && !Pattern.compile(propSchema.path("pattern").asText()).matcher(value.asText()).find()) {
+                errors.add("field '" + name + "' does not match its required pattern");
+            }
+        }
+        if (schema.has("anyOf")) {
+            boolean matched = false;
+            for (JsonNode alternative : schema.path("anyOf")) {
+                if (validate(alternative, arguments).isEmpty()) {
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) errors.add("arguments must match one of the declared anyOf forms");
         }
         return errors;
     }

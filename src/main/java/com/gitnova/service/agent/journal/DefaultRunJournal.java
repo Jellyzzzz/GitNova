@@ -191,6 +191,24 @@ public class DefaultRunJournal implements RunJournal {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<ArtifactRef> findArtifactBySource(String sessionId, long sourceSequence) {
+        if (sessionId == null || sessionId.isBlank() || sourceSequence <= 0) {
+            throw new IllegalArgumentException("Invalid Session or source sequence");
+        }
+        String payload = stepMapper.selectArtifactProjectionBySource(sessionId, sourceSequence);
+        if (payload == null) return Optional.empty();
+        try {
+            ArtifactRef reference = objectMapper.treeToValue(objectMapper.readTree(payload)
+                    .path("observation").path("externalization").path("artifact"), ArtifactRef.class);
+            if (reference == null) throw new IllegalStateException("Persisted Artifact reference is missing");
+            return Optional.of(reference);
+        } catch (IOException | IllegalArgumentException exception) {
+            throw new IllegalStateException("Persisted Artifact reference is invalid", exception);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<ArtifactRef> findArtifact(String sessionId, String artifactId) {
         if (sessionId == null || sessionId.isBlank() || artifactId == null
                 || !artifactId.matches("[0-9a-f]{64}")) {

@@ -2,6 +2,7 @@ package com.gitnova.service.agent.model;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.dto.ToolCall;
 import com.gitnova.service.agent.prompt.AssembledPrompt;
 import com.gitnova.service.agent.tool.ToolResult;
@@ -53,12 +54,20 @@ public final class MessageFactory {
         return new ModelMessage(ModelRole.TOOL, observation.toString(), List.of(), toolCall.id());
     }
 
+    /** Keep integrity metadata in the journal, but use short Session-scoped paths in new observations. */
+    public static JsonNode modelVisibleObservation(JsonNode observation) {
+        if (!observation.path("externalization").path("resources").isObject()) return observation;
+        ObjectNode visible = observation.deepCopy();
+        ((ObjectNode) visible.get("externalization")).remove("artifact");
+        return visible;
+    }
+
     /** Wraps an already prepared/durably recorded model-visible projection; performs no storage I/O. */
     public ModelMessage toolObservation(ToolCall toolCall, JsonNode observation) {
         Objects.requireNonNull(toolCall, "toolCall");
         Objects.requireNonNull(observation, "observation");
         if (!observation.isObject()) throw new IllegalArgumentException("Observation must be an object");
-        return new ModelMessage(ModelRole.TOOL, observation.toString(), List.of(), toolCall.id());
+        return new ModelMessage(ModelRole.TOOL, modelVisibleObservation(observation).toString(), List.of(), toolCall.id());
     }
 
     /**
