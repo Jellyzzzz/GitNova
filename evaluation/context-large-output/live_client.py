@@ -44,10 +44,12 @@ def query(sql):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=["setup", "run"])
-    parser.add_argument("--arm", choices=list("ABCD"))
+    parser.add_argument("--arm")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--repository", type=Path, required=True)
     parser.add_argument("--scenario", type=Path, default=FIXTURE / "scenario.json")
+    parser.add_argument("--fixture-root", type=Path, default=FIXTURE,
+                        help="Public fixture/tasks root; leaves the HTTP and push protocol unchanged")
     parser.add_argument("--follow-up", help="Stable name for a new Task in this arm's existing Session")
     parser.add_argument("--task-file", type=Path, help="User message for --follow-up")
     parser.add_argument("--continue-after-failure", action="store_true",
@@ -60,10 +62,14 @@ def main():
         parser.error("--task-file requires --follow-up")
     if args.continue_after_failure and not args.follow_up:
         parser.error("--continue-after-failure requires --follow-up")
-    message = (args.task_file or FIXTURE / "TASK.md").read_text()
+    fixture = args.fixture_root.resolve()
+    desired = json.loads(args.scenario.read_text())
+    if args.arm and (not re.fullmatch(r"[A-Za-z0-9-]{1,16}", args.arm) or args.arm not in desired["arms"]):
+        parser.error("arm must be declared by the scenario")
+    initial_task = fixture / desired["tasks"][0]["file"] if desired.get("tasks") else fixture / "TASK.md"
+    message = (args.task_file or initial_task).read_text()
     if not message.strip():
         parser.error("Task message must not be blank")
-    desired = json.loads(args.scenario.read_text())
     os.umask(0o077)
     args.output.mkdir(parents=True, exist_ok=True)
     state_file = args.output / ".client-state.json"
@@ -76,8 +82,8 @@ def main():
         actor = request("/api/auth/register", {"username": username, "password": password,
                         "email": username + "@example.test"}, form=True)
         token = request("/api/auth/login", {"username": username, "password": password}, form=True)
-        repository = request("/api/repos", {"name": "pricing-" + suffix,
-                             "description": "Controlled context large-output experiment", "isPrivate": "true"}, token, form=True)
+        repository = request("/api/repos", {"name": "context-" + suffix,
+                             "description": "Controlled context experiment", "isPrivate": "true"}, token, form=True)
         state = {"suffix": suffix, "username": username, "password": password, "token": token,
                  "actorId": actor["id"], "repoId": repository["id"], "arms": {}}
         state_file.write_text(json.dumps(state, indent=2))
@@ -135,8 +141,8 @@ def main():
                     raise ValueError("Preceding Task did not complete; preserve the failure instead of continuing silently")
         actual = {str(file.relative_to(workspace_root)): hashlib.sha256(file.read_bytes()).hexdigest()
                   for file in sorted(workspace_root.rglob("*")) if file.is_file()}
-        expected = {str(file.relative_to(FIXTURE / "repository")): hashlib.sha256(file.read_bytes()).hexdigest()
-                    for file in sorted((FIXTURE / "repository").rglob("*")) if file.is_file()}
+        expected = {str(file.relative_to(fixture / "repository")): hashlib.sha256(file.read_bytes()).hexdigest()
+                    for file in sorted((fixture / "repository").rglob("*")) if file.is_file()}
         if not args.follow_up and (actual != expected or workspace["generation"] != 0):
             raise AssertionError("Experiment must begin with exactly the unchanged fixture and generation 0")
         (output / "initial-workspace.json").write_text(json.dumps({"files": actual, **workspace}, indent=2))
@@ -162,16 +168,22 @@ def main():
     assert config["contextBudget"].get("summaryEnabled", True) == switches["summarization"]
     assert config["observationPolicy"].get("externalizationEnabled", True) == switches["externalization"]
     for key in ("contextWindowTokens", "safetyMarginTokens", "summaryTriggerRatio", "compactTriggerRatio", "keepRecentGroups"):
-        assert config["contextBudget"][key] == desired["experiment"][key], key
+        assert config["contextBudget"][key] == switches.get(key, desired["experiment"].get(key)), key
     for key in ("maxInlineTokens", "maxPreviewTokens"):
         assert config["observationPolicy"][key] == desired["experiment"][key], key
     for key in ("maxOutputTokens", "maxModelCalls", "maxToolCalls"):
         assert config["policy"][key] == desired["experiment"][key], key
     assert config["policy"]["temperature"] == desired["temperature"]
     assert config["policy"]["model"] == desired["model"]
+    if "reasoningEffort" in desired:
+        assert config["policy"]["thinking"] == {"mode": desired["thinkingMode"], "effort": desired["reasoningEffort"]}
+    if "summaryThinking" in desired:
+        assert config["policy"]["summaryThinking"] == desired["summaryThinking"]
+    if desired.get("thinkingMode") == "enabled":
+        assert "edit" in config["toolSet"]["enabledDefinitionNames"]
     assert "readArtifact" in config["toolSet"]["enabledDefinitionNames"]
     previous = None
-    deadline = time.monotonic() + 900
+    deadline = time.monotonic() + desired["experiment"].get("taskWallClockLimitSeconds", 900)
     while True:
         current = query(run_sql)[0]
         counts = query("SELECT JSON_OBJECT('type',step_type,'count',COUNT(*)) FROM agent_step "

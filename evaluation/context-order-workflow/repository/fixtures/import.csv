@@ -1,0 +1,11 @@
+requestId,actorId,sku,quantity,percent,destination
+REQ001,alice,BOOK,1,10,east
+REQ002,alice,PEN,not-a-number,0,east
+REQ003,alice,PEN,2,50,east
+REQ001,alice,BOOK,1,10,east
+REQ001,alice,BOOK,1,20,east
+REQ004,alice,UNKNOWN,1,0,east
+REQ005,bob,MUG,1,0,west
+REQ006,alice,BAG,101,0,east
+REQ007,alice,CARD,3,50,east
+REQ008,alice,CASE,1,10,east

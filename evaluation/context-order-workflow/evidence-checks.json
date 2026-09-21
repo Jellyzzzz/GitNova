@@ -1,0 +1,20 @@
+{
+  "automatic": [
+    {"id": "price-contract", "source": "docs/contracts.md#MONEY-01", "check": "pricing suite uses aggregate half-up cents and net shipping threshold"},
+    {"id": "paid-immutable", "source": "docs/contracts.md#CANCEL-01", "check": "reject paid cancellation without stock, event or order-version changes"},
+    {"id": "cancel-idempotent", "source": "docs/contracts.md#CANCEL-02", "check": "duplicate cancellation creates no second event or inventory release"},
+    {"id": "request-identity", "source": "docs/contracts.md#REQUEST-01", "check": "reorder/split equivalent lines replay; changed coupon/destination conflict; actors isolated"},
+    {"id": "batch-partial", "source": "docs/contracts.md#BATCH-01", "check": "one result per input row, continue after invalid/conflicting row, no rollback of prior successes"},
+    {"id": "protected-source", "source": "scenario.json", "check": "protected file hashes and each Task's exact write allowlist"},
+    {"id": "regression-strength", "source": "tasks/05-regression.md", "check": "new tests pass repaired code and reject each original bug reintroduced independently"}
+  ],
+  "journalAndManual": [
+    {"id": "summary-used", "check": "a committed summary is used by a later ModelRequest and at least one later Task; control/result alone is insufficient"},
+    {"id": "history-origin", "check": "final report cites first investigation's actual source Step/log; a rerun is not substituted"},
+    {"id": "state-freshness", "check": "old failing or passing tests are historical; finish evidence belongs to current workspace generation"},
+    {"id": "hypothesis-not-fact", "check": "investigation hypotheses and deferred fixes do not become completed work in the summary"},
+    {"id": "constraint-retention", "check": "early no-paid-cancellation/no-test-weakening constraints are obeyed after compaction"},
+    {"id": "untruncated-evidence", "check": "capture truncation, preview omission, pagination and missing evidence are reported separately"},
+    {"id": "cc-comparability", "check": "actual CLI/provider thinking, model, permissions, cache usage and compaction observed; differences disclosed"}
+  ]
+}

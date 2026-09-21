@@ -25,7 +25,15 @@ def snapshot(workspace):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--fixture-root", type=Path, default=ROOT)
+    parser.add_argument("--scenario", type=Path)
     args = parser.parse_args()
+    fixture = args.fixture_root.resolve()
+    scenario = json.loads((args.scenario or ROOT / "scenario-multitask-128k.json").read_text())
+    policy = scenario["experiment"]
+    stage_verifier = scenario.get("verifier") == "stage"
+    max_turns = policy["maxModelCalls"]
+    wall_limit = policy.get("taskWallClockLimitSeconds", 600)
     os.umask(0o077)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -40,7 +48,7 @@ def main():
     token = credentials.get("ANTHROPIC_AUTH_TOKEN")
     if not token:
         raise ValueError("No configured DeepSeek credential; no request was sent")
-    shutil.copytree(ROOT / "repository", workspace)
+    shutil.copytree(fixture / "repository", workspace)
     initial = snapshot(workspace)
     subprocess.run(["git", "-c", "init.defaultBranch=main", "init", "-q"], cwd=workspace, check=True)
     subprocess.run(["git", "add", "--", *initial], cwd=workspace, check=True)
@@ -60,19 +68,22 @@ def main():
                 "ANTHROPIC_DEFAULT_SONNET_MODEL": "deepseek-v4-flash",
                 "ANTHROPIC_DEFAULT_OPUS_MODEL": "deepseek-v4-flash",
                 "CLAUDE_CODE_SUBAGENT_MODEL": "deepseek-v4-flash",
-                "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "128000", "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "4096",
-                "MAX_THINKING_TOKENS": "0", "CLAUDE_CODE_MAX_RETRIES": "2", "API_TIMEOUT_MS": "60000",
+                "CLAUDE_CODE_MAX_CONTEXT_TOKENS": str(policy["contextWindowTokens"]),
+                "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(policy["maxOutputTokens"]),
+                "MAX_THINKING_TOKENS": "0", "CLAUDE_CODE_MAX_RETRIES": "2",
+                "API_TIMEOUT_MS": str(policy.get("callTimeoutSeconds", 60) * 1000),
                 "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
                 "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1", "DISABLE_AUTOUPDATER": "1"})
-    scenario = json.loads((ROOT / "scenario-multitask-128k.json").read_text())
     session_id = str(uuid.uuid4())
     manifest = {"cliVersion": subprocess.check_output(["claude", "--version"], text=True).strip(),
                 "requestedModel": "deepseek-v4-flash", "endpoint": base_url,
                 "sessionId": session_id, "workspace": str(workspace), "initialFiles": initial,
-                "requestedContextWindow": 128000, "requestedMaxOutput": 4096,
+                "requestedContextWindow": policy["contextWindowTokens"], "requestedMaxOutput": policy["maxOutputTokens"],
                 "requestedThinking": "disabled", "temperature": "native CLI default, not forced",
-                "maxTurnsPerTask": 14, "processTimeoutSeconds": 600,
-                "taskDigests": {t["name"]: hashlib.sha256((ROOT / t["file"]).read_bytes()).hexdigest()
+                "maxTurnsPerTask": max_turns, "processTimeoutSeconds": wall_limit,
+                "contextSettingVerified": False,
+                "comparability": "Native CLI policy; requested environment settings do not prove effective limits or thinking mode.",
+                "taskDigests": {t["name"]: hashlib.sha256((fixture / t["file"]).read_bytes()).hexdigest()
                                 for t in scenario["tasks"]}, "tasks": []}
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
     print(f"Claude Code {manifest['cliVersion']}; session={session_id}; workspace={workspace}", flush=True)
@@ -81,14 +92,14 @@ def main():
         task_dir.mkdir()
         before = snapshot(workspace)
         # Native tools/prompt, but no account-specific plugins, MCP, browser or extra agents.
-        allowed = ["Read", "Glob", "Grep", "Bash(sh run-tests.sh)",
+        allowed = ["Read", "Glob", "Grep", "Bash(sh run-tests.sh)", "Bash(sh run-tests.sh *)",
                    "Bash(git diff *)", "Bash(git status *)", "Bash(git show *)", "Bash(pwd)", "Bash(ls *)"]
         for relative in task["editableFiles"]:
             allowed.extend([f"Edit(./{relative})", f"Write(./{relative})"])
         command = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--safe-mode",
                    "--setting-sources", "", "--settings", '{"alwaysThinkingEnabled":false}',
                    "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--no-chrome",
-                   "--disable-slash-commands", "--model", "deepseek-v4-flash", "--max-turns", "14",
+                   "--disable-slash-commands", "--model", "deepseek-v4-flash", "--max-turns", str(max_turns),
                    "--permission-mode", "dontAsk", "--tools", "Bash,Read,Glob,Grep,Edit,Write",
                    "--allowedTools", *allowed,
                    "--session-id" if index == 0 else "--resume", session_id]
@@ -101,7 +112,7 @@ def main():
             process = subprocess.Popen(command, cwd=workspace, env=env, stdin=subprocess.PIPE,
                                        stdout=stdout, stderr=stderr, start_new_session=True)
             try:
-                process.communicate((ROOT / task["file"]).read_bytes(), timeout=600)
+                process.communicate((fixture / task["file"]).read_bytes(), timeout=wall_limit)
             except subprocess.TimeoutExpired:
                 timed_out = True
                 os.killpg(process.pid, signal.SIGTERM)
@@ -124,19 +135,45 @@ def main():
                   "usage": final.get("usage") if final else None,
                   "modelUsage": final.get("modelUsage") if final else None,
                   "permissionDenials": final.get("permission_denials") if final else None}
-        verify = [sys.executable, str(ROOT / "verify.py"), "--candidate", str(workspace),
+        verify = [sys.executable, str(fixture / "verify.py"), "--candidate", str(workspace),
                   "--output", str(task_dir / "verification")]
-        if (workspace / "src/test/java/pricing/EdgeRegression.java").exists():
+        if stage_verifier:
+            verify += ["--stage", str(index + 1)]
+        elif (workspace / "src/test/java/pricing/EdgeRegression.java").exists():
             verify.append("--followup-tests")
         with (task_dir / "verification.log").open("w") as log:
-            verified = subprocess.run(verify, stdout=log, stderr=subprocess.STDOUT, timeout=150)
+            verified = subprocess.run(verify, stdout=log, stderr=subprocess.STDOUT, timeout=240)
         record["independentVerificationPassed"] = verified.returncode == 0
-        record["edgeRegressionPresent"] = (workspace / "src/test/java/pricing/EdgeRegression.java").exists()
+        edge = "orderflow" if stage_verifier else "pricing"
+        record["edgeRegressionPresent"] = (workspace / f"src/test/java/{edge}/EdgeRegression.java").exists()
+        messages = {}
+        thinking_blocks = set()
+        for event in events:
+            message = event.get("message", {})
+            if event.get("type") == "assistant" and message.get("id"):
+                messages[message["id"]] = message
+                # stream-json may emit separate content blocks with the SAME message id.
+                # The last tool/text block must not erase an earlier observed thinking block.
+                for block in message.get("content", []):
+                    if block.get("type") == "thinking" and block.get("thinking"):
+                        thinking_blocks.add((message["id"], hashlib.sha256(block["thinking"].encode()).hexdigest()))
+        record["assistantMessages"] = len(messages)
+        record["responseModels"] = sorted({m.get("model", "") for m in messages.values()})
+        record["thinkingBlocks"] = len(thinking_blocks)
+        record["compactionEvents"] = sum(event.get("subtype") == "compact_boundary" for event in events)
+        # On a compacting Task, CLI result.usage can omit internal compaction calls.
+        # Keep both original records, but account from modelUsage once, never add both.
+        model_usage = record.get("modelUsage")
+        record["accountedTokensIncludingCache"] = (
+            sum(usage["inputTokens"] + usage.get("cacheReadInputTokens", 0)
+                + usage.get("cacheCreationInputTokens", 0) + usage["outputTokens"]
+                for usage in model_usage.values()) if model_usage else None
+        )
         manifest["tasks"].append(record)
         (output / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
         print(f"{task['name']}: exit={process.returncode}, result={record['resultSubtype']}, "
               f"scope={record['writeScopePassed']}, verified={record['independentVerificationPassed']}", flush=True)
-        if timed_out or not record["writeScopePassed"] or not finals or (final and final.get("is_error")):
+        if timed_out or not record["writeScopePassed"] or not finals or (final and final.get("is_error")) or not record["independentVerificationPassed"]:
             print("Stop and inspect this sample; do not silently rerun it", flush=True)
             break
     print(f"Evidence: {output / 'manifest.json'}", flush=True)

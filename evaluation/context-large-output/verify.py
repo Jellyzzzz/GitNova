@@ -18,7 +18,7 @@ EDITABLE = {
 }
 
 
-def execute(workspace, image, command, output, label):
+def execute(workspace, image, command, output, label, oracle_directory=None):
     container = "gitnova-scenario2-" + uuid.uuid4().hex
     arguments = [
         "docker", "run", "--rm", "--name", container,
@@ -29,7 +29,7 @@ def execute(workspace, image, command, output, label):
         "--tmpfs", "/tmp:rw,nosuid,nodev,size=128m,mode=1777",
         "--env", "HOME=/tmp", "--workdir", "/workspace",
         "--mount", f"type=bind,src={workspace},dst=/workspace,readonly",
-        "--mount", f"type=bind,src={ROOT / 'oracle'},dst=/oracle,readonly",
+        "--mount", f"type=bind,src={oracle_directory or ROOT / 'oracle'},dst=/oracle,readonly",
         "--entrypoint", "/usr/bin/timeout", image,
         "--kill-after=2s", "40s", "sh", "-c", command,
     ]

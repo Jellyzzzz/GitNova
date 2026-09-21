@@ -1,0 +1,49 @@
+{
+  "scenario": "orderflow-session-context",
+  "status": "fixture-ready-live-calibration-required",
+  "verifier": "stage",
+  "repository": "repository",
+  "model": "deepseek-v4-flash",
+  "thinkingMode": "disabled",
+  "temperature": 0,
+  "experiment": {
+    "contextWindowTokens": 128000,
+    "safetyMarginTokens": 1024,
+    "compactTriggerRatio": 0.9,
+    "keepRecentGroups": 2,
+    "maxOutputTokens": 4096,
+    "maxModelCalls": 20,
+    "maxToolCalls": 35,
+    "callTimeoutSeconds": 60,
+    "readTimeoutSeconds": 60,
+    "maxInlineTokens": 4096,
+    "maxPreviewTokens": 1024,
+    "taskWallClockLimitSeconds": 900
+  },
+  "arms": {
+    "G70": {"executor": "gitnova", "externalization": true, "summarization": true, "summaryTriggerRatio": 0.7},
+    "G75": {"executor": "gitnova", "externalization": true, "summarization": true, "summaryTriggerRatio": 0.75},
+    "G80": {"executor": "gitnova", "externalization": true, "summarization": true, "summaryTriggerRatio": 0.8},
+    "G85": {"executor": "gitnova", "externalization": true, "summarization": true, "summaryTriggerRatio": 0.85},
+    "CC": {"executor": "claude-code", "contextPolicy": "native", "requestedContextWindowTokens": 128000,
+      "requestedMaxOutputTokens": 4096, "requestedMaxTurns": 20,
+      "note": "Requested settings require live verification; CLI max-turns is not identical to model-call count."}
+  },
+  "tasks": [
+    {"name": "investigate", "file": "tasks/01-investigate.md", "editableFiles": [], "requiredSuites": ["contract", "inventory"]},
+    {"name": "pricing", "file": "tasks/02-pricing.md", "editableFiles": [
+      "src/main/java/orderflow/pricing/PricingPolicy.java", "src/main/java/orderflow/pricing/ShippingPolicy.java"
+    ], "requiredSuites": ["contract", "inventory", "pricing"]},
+    {"name": "cancellation", "file": "tasks/03-cancellation.md", "editableFiles": [
+      "src/main/java/orderflow/order/CancellationService.java"
+    ], "requiredSuites": ["contract", "inventory", "pricing", "cancellation"]},
+    {"name": "requests", "file": "tasks/04-requests.md", "editableFiles": [
+      "src/main/java/orderflow/request/RequestFingerprint.java", "src/main/java/orderflow/batch/BatchImporter.java"
+    ], "requiredSuites": ["contract", "inventory", "pricing", "cancellation", "idempotency", "batch", "workflow"]},
+    {"name": "regression", "file": "tasks/05-regression.md", "editableFiles": [
+      "src/test/java/orderflow/EdgeRegression.java", "run-tests.sh"
+    ], "requiredSuites": ["contract", "inventory", "pricing", "cancellation", "idempotency", "batch", "workflow", "edge"]},
+    {"name": "delivery", "file": "tasks/06-delivery.md", "editableFiles": [],
+      "requiredSuites": ["contract", "inventory", "pricing", "cancellation", "idempotency", "batch", "workflow", "edge"]}
+  ]
+}
