@@ -150,7 +150,7 @@ gitnova:
       base-path: ${AGENT_ARTIFACT_BASE_PATH:./data/agent-artifacts}
     runtime:
       model: ${gitnova.llm.model:deepseek-v4-flash}
-      max-model-calls: 20
+      max-model-calls: ${AGENT_MAX_MODEL_CALLS:20}
       max-tool-calls: 50
       max-protocol-corrections: 1
       max-final-draft-corrections: 1

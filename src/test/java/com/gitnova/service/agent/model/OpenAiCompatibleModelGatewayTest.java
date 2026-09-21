@@ -65,7 +65,9 @@ class OpenAiCompatibleModelGatewayTest {
 
     @Test
     void shouldBindExplicitTimeoutsFromApplicationConfiguration() throws IOException {
-        var environment = new MockEnvironment();
+        var environment = new MockEnvironment()
+                .withProperty("AGENT_CONTEXT_WINDOW_TOKENS", "128000")
+                .withProperty("AGENT_CONTEXT_SAFETY_MARGIN_TOKENS", "2000");
         environment.getPropertySources().addLast(new YamlPropertySourceLoader()
                 .load("application", new ClassPathResource("application.yml")).get(0));
         var runner = new ApplicationContextRunner()
@@ -80,6 +82,7 @@ class OpenAiCompatibleModelGatewayTest {
             assertEquals(60000, client.callTimeoutMillis());
             assertEquals(60000, client.readTimeoutMillis());
             assertEquals("4096", environment.getProperty("gitnova.agent.runtime.max-output-tokens"));
+            assertEquals("20", environment.getProperty("gitnova.agent.runtime.max-model-calls"));
         });
 
         // Existing total-timeout configuration must also change the default read deadline.
@@ -93,6 +96,7 @@ class OpenAiCompatibleModelGatewayTest {
         });
 
         environment.withProperty("LLM_READ_TIMEOUT_SECONDS", "30")
+                .withProperty("AGENT_MAX_MODEL_CALLS", "24")
                 .withProperty("AGENT_MAX_OUTPUT_TOKENS", "8192");
         runner.run(context -> {
             assertNull(context.getStartupFailure());
@@ -101,6 +105,7 @@ class OpenAiCompatibleModelGatewayTest {
             assertEquals(75000, client.callTimeoutMillis());
             assertEquals(30000, client.readTimeoutMillis());
             assertEquals("8192", environment.getProperty("gitnova.agent.runtime.max-output-tokens"));
+            assertEquals("24", environment.getProperty("gitnova.agent.runtime.max-model-calls"));
         });
         assertEquals(ModelThinking.disabled(), Binder.get(environment)
                 .bind("gitnova.agent.runtime", AgentRuntimeProperties.class).get().thinking());
