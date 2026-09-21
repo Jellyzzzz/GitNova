@@ -1,5 +1,6 @@
 package com.gitnova.service.agent.journal;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.gitnova.dto.ToolCall;
 import com.gitnova.service.agent.model.ModelFinishReason;
 import com.gitnova.service.agent.model.ModelResponse;
@@ -15,8 +16,14 @@ public record ModelResponsePayload(
         String text,
         List<ToolCall>toolCalls,
         ModelUsage usage,
-        ModelFinishReason finishReason
+        ModelFinishReason finishReason,
+        @JsonInclude(JsonInclude.Include.NON_NULL) String reasoningContent
 ) {
+    public ModelResponsePayload(String modelCallId, String responseId, String text, List<ToolCall> toolCalls,
+                                ModelUsage usage, ModelFinishReason finishReason) {
+        this(modelCallId, responseId, text, toolCalls, usage, finishReason, null);
+    }
+
     public ModelResponsePayload{
         requireNonBlank(modelCallId,"modelCallId");
         requireNonBlank(responseId,"responseId");
@@ -36,7 +43,7 @@ public record ModelResponsePayload(
     }
 
     public static ModelResponsePayload from(String modelCallId, ModelResponse response){
-        return new ModelResponsePayload(modelCallId,response.responseId(),response.text(),response.toolCalls(),response.usage(),response.finishReason());
+        return new ModelResponsePayload(modelCallId,response.responseId(),response.text(),response.toolCalls(),response.usage(),response.finishReason(),response.reasoningContent());
     }
 
     private static void requireNonBlank(String value,String field){

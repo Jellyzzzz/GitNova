@@ -50,6 +50,12 @@ public final class TokenEstimator {
             } else {
                 frame.putNull("content");
             }
+            // Thinking history is real input for DeepSeek tool-enabled requests, not free metadata.
+            // Conservatively count it for tool-less requests too; providers may ignore it there.
+            if (message.reasoningContent() != null) {
+                contentTokens = Math.addExact(contentTokens, estimateText(message.reasoningContent()).tokens());
+                frame.put("reasoning_content", "");
+            }
             if (message.toolCallId() != null) frame.put("tool_call_id", message.toolCallId());
             if (!message.toolCalls().isEmpty()) {
                 var calls = frame.putArray("tool_calls");

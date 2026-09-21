@@ -26,7 +26,8 @@ public class AgentRuntimeConfiguration {
     @Bean
     public AgentRuntimePolicy agentRuntimePolicy(AgentRuntimeProperties properties) {
         return new AgentRuntimePolicy(properties.model(),properties.maxModelCalls(),properties.maxToolCalls(),properties.maxProtocolCorrections(),
-                properties.maxFinalDraftCorrections(),properties.maxOutputTokens(),properties.temperature());
+                properties.maxFinalDraftCorrections(),properties.maxOutputTokens(),properties.temperature(),
+                properties.thinking(),properties.summaryThinking());
     }
     @Bean
     public ObservationPolicy observationPolicy(AgentRuntimeProperties properties){

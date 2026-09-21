@@ -110,6 +110,7 @@ gitnova:
     base-url: ${LLM_BASE_URL:https://api.deepseek.com}
     model: ${LLM_MODEL:deepseek-v4-flash}
     thinking-mode: ${LLM_THINKING_MODE:disabled}
+    reasoning-effort: ${LLM_REASONING_EFFORT:high} # enabled 时生效：low/high/max；兼容 minimal/medium/xhigh/ultra
     timeout: ${LLM_TIMEOUT_SECONDS:60} # 整次请求的总时限，单位秒，必须 > 0
     read-timeout: ${LLM_READ_TIMEOUT_SECONDS:${gitnova.llm.timeout}} # 单次等待响应数据的时限，默认跟随总时限
 
@@ -155,6 +156,13 @@ gitnova:
       max-final-draft-corrections: 1
       max-output-tokens: ${AGENT_MAX_OUTPUT_TOKENS:4096}
       temperature: 0.0
+      # 随 Task 保存，后续修改环境变量不会改变已有 Run 的思考配置。
+      thinking:
+        mode: ${gitnova.llm.thinking-mode}
+        effort: ${gitnova.llm.reasoning-effort}
+      summary-thinking:
+        mode: ${SUMMARY_LLM_THINKING_MODE:disabled}
+        effort: ${SUMMARY_LLM_REASONING_EFFORT:high}
       # Explicit model-matched capacity; no guessed provider window or duplicate output reserve.
       context:
         summary-enabled: ${AGENT_CONTEXT_SUMMARY_ENABLED:true}

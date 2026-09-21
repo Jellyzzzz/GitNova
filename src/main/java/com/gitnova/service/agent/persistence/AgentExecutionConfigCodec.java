@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.service.agent.context.ObservationPolicy;
 import com.gitnova.service.agent.context.ContextBudget;
+import com.gitnova.service.agent.model.ModelThinking;
 import com.gitnova.service.agent.runtime.AgentCapability;
 import com.gitnova.service.agent.runtime.AgentExecutionConfig;
 import com.gitnova.service.agent.runtime.AgentRuntimePolicy;
@@ -22,7 +23,7 @@ import java.util.Set;
 /** Stable wire-format codec for the complete Frozen Execution Contract. */
 @Component
 public final class AgentExecutionConfigCodec {
-    private static final int SCHEMA_VERSION = 4;
+    private static final int SCHEMA_VERSION = 6;
 
     private final CanonicalJsonCodec canonicalJson;
     private final ObjectMapper objectMapper;
@@ -51,7 +52,7 @@ public final class AgentExecutionConfigCodec {
         if (controlled && config.contextBudget() == null) {
             throw invalid("Independent context controls require an explicit context budget");
         }
-        int version = controlled ? SCHEMA_VERSION : config.contextBudget() != null ? 3
+        int version = config.policy().summaryThinking() != null ? SCHEMA_VERSION : config.policy().thinking() != null ? 5 : controlled ? 4 : config.contextBudget() != null ? 3
                 : config.observationPolicy() == null ? 1 : 2;
         root.put("schemaVersion", version);
         encodePolicy(root.putObject("policy"), config.policy());
@@ -79,11 +80,11 @@ public final class AgentExecutionConfigCodec {
             ObjectNode observationNode = root.putObject("observationPolicy");
             observationNode.put("maxInlineTokens", observation.maxInlineTokens());
             observationNode.put("maxPreviewTokens", observation.maxPreviewTokens());
-            if (controlled) observationNode.put("externalizationEnabled", observation.externalizationEnabled());
+            if (version >= 4) observationNode.put("externalizationEnabled", observation.externalizationEnabled());
         }
         if (config.contextBudget() != null) {
             ObjectNode budgetNode = objectMapper.valueToTree(config.contextBudget());
-            if (!controlled) budgetNode.remove("summaryEnabled");
+            if (version < 4) budgetNode.remove("summaryEnabled");
             root.set("contextBudget", budgetNode);
         }
         return canonicalJson.encode(root);
@@ -105,7 +106,7 @@ public final class AgentExecutionConfigCodec {
             }
 
             AgentRuntimePolicy policy = decodePolicy(
-                    requireObject(root.get("policy"), "policy")
+                    requireObject(root.get("policy"), "policy"), schemaVersion
             );
             Set<AgentCapability> capabilities = decodeCapabilities(
                     requireArray(root.get("capabilities"), "capabilities")
@@ -118,9 +119,9 @@ public final class AgentExecutionConfigCodec {
                     "contextPolicyVersion"
             );
             ObservationPolicy observationPolicy = null;
-            if (schemaVersion >= 2) {
+            if (schemaVersion >= 2 && (schemaVersion < 5 || root.has("observationPolicy"))) {
                 ObjectNode observationNode = requireObject(root.get("observationPolicy"), "observationPolicy");
-                if (schemaVersion == 4 && !observationNode.path("externalizationEnabled").isBoolean()) {
+                if (schemaVersion >= 4 && !observationNode.path("externalizationEnabled").isBoolean()) {
                     throw invalid("externalizationEnabled must be an explicit boolean");
                 }
                 if (schemaVersion < 4 && observationNode.has("externalizationEnabled")) {
@@ -134,9 +135,9 @@ public final class AgentExecutionConfigCodec {
                 throw invalid("observationPolicy requires execution config schemaVersion 2");
             }
             ContextBudget contextBudget = null;
-            if (schemaVersion >= 3) {
+            if (schemaVersion >= 3 && (schemaVersion < 5 || root.has("contextBudget"))) {
                 ObjectNode node = requireObject(root.get("contextBudget"), "contextBudget");
-                if (schemaVersion == 4 && !node.path("summaryEnabled").isBoolean()) {
+                if (schemaVersion >= 4 && !node.path("summaryEnabled").isBoolean()) {
                     throw invalid("summaryEnabled must be an explicit boolean");
                 }
                 if (schemaVersion < 4 && node.has("summaryEnabled")) {
@@ -193,9 +194,42 @@ public final class AgentExecutionConfigCodec {
         } else {
             node.put("temperature", policy.temperature());
         }
+        if (policy.thinking() != null) {
+            node.set("thinking", objectMapper.valueToTree(policy.thinking()));
+        }
+        if (policy.summaryThinking() != null) {
+            node.set("summaryThinking", objectMapper.valueToTree(policy.summaryThinking()));
+        }
     }
 
-    private AgentRuntimePolicy decodePolicy(ObjectNode node) {
+    private AgentRuntimePolicy decodePolicy(ObjectNode node, int schemaVersion) {
+        ModelThinking thinking = null;
+        if (schemaVersion >= 5) {
+            ObjectNode control = requireObject(node.get("thinking"), "policy.thinking");
+            JsonNode effort = requirePresent(control, "effort");
+            if (!effort.isNull() && !effort.isTextual()) throw invalid("thinking effort must be text or null");
+            String mode = requireText(control, "mode");
+            thinking = new ModelThinking(mode, effort.isNull() ? null : effort.textValue());
+            // Frozen JSON is canonical, unlike user configuration where compatibility aliases are accepted.
+            if (!mode.equals(thinking.mode()) || !Objects.equals(effort.isNull() ? null : effort.textValue(), thinking.effort())) {
+                throw invalid("thinking controls must use canonical mode and effort");
+            }
+        } else if (node.has("thinking")) {
+            throw invalid("thinking requires execution config schemaVersion 5");
+        }
+        ModelThinking summaryThinking = null;
+        if (schemaVersion >= 6) {
+            ObjectNode control = requireObject(node.get("summaryThinking"), "policy.summaryThinking");
+            JsonNode effort = requirePresent(control, "effort");
+            if (!effort.isNull() && !effort.isTextual()) throw invalid("summary thinking effort must be text or null");
+            String mode = requireText(control, "mode");
+            summaryThinking = new ModelThinking(mode, effort.isNull() ? null : effort.textValue());
+            if (!mode.equals(summaryThinking.mode()) || !Objects.equals(effort.isNull() ? null : effort.textValue(), summaryThinking.effort())) {
+                throw invalid("summary thinking controls must use canonical mode and effort");
+            }
+        } else if (node.has("summaryThinking")) {
+            throw invalid("summaryThinking requires execution config schemaVersion 6");
+        }
         return new AgentRuntimePolicy(
                 requireText(node, "model"),
                 requireInt(node, "maxModelCalls"),
@@ -203,7 +237,9 @@ public final class AgentExecutionConfigCodec {
                 requireInt(node, "maxProtocolCorrections"),
                 requireInt(node, "maxFinalDraftCorrections"),
                 requireNullableInt(node, "maxOutputTokens"),
-                requireNullableDouble(node, "temperature")
+                requireNullableDouble(node, "temperature"),
+                thinking,
+                summaryThinking
         );
     }
 

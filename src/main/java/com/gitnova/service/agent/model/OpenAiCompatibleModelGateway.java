@@ -24,7 +24,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 
 @Component
@@ -34,7 +33,7 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
     private final OkHttpClient httpClient;
     private final HttpUrl endpoint;
     private final String apiKey;
-    private final ProviderThinking thinking;
+    private final ModelThinking defaultThinking;
     private static final int MAX_ERROR_BODY_BYTES=8192;
     private static final int MAX_ERROR_MESSAGE_CHARS=300;
     @Autowired
@@ -44,7 +43,8 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
             @Value("${gitnova.llm.base-url:https://api.deepseek.com}") String baseUrl,
             @Value("${gitnova.llm.timeout:60}") long timeoutSeconds,
             @Value("${gitnova.llm.read-timeout:${gitnova.llm.timeout:60}}") long readTimeoutSeconds,
-            @Value("${gitnova.llm.thinking-mode:}") String thinkingMode
+            @Value("${gitnova.llm.thinking-mode:}") String thinkingMode,
+            @Value("${gitnova.llm.reasoning-effort:high}") String reasoningEffort
     ) {
         // OkHttp treats zero as unlimited; the application must keep both deadlines bounded.
         if (timeoutSeconds <= 0 || readTimeoutSeconds <= 0) {
@@ -57,7 +57,12 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
                 .build();
         this.apiKey = apiKey;
         this.endpoint = toChatCompletionsEndpoint(baseUrl);
-        this.thinking = parseThinkingMode(thinkingMode);
+        this.defaultThinking = parseThinking(thinkingMode, reasoningEffort);
+    }
+
+    public OpenAiCompatibleModelGateway(ObjectMapper objectMapper, String apiKey, String baseUrl,
+                                        long timeoutSeconds, long readTimeoutSeconds, String thinkingMode) {
+        this(objectMapper, apiKey, baseUrl, timeoutSeconds, readTimeoutSeconds, thinkingMode, null);
     }
 
     public OpenAiCompatibleModelGateway(ObjectMapper objectMapper, String apiKey, String baseUrl,
@@ -84,7 +89,7 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
         this.httpClient = Objects.requireNonNull(httpClient);
         this.apiKey = apiKey;
         this.endpoint = Objects.requireNonNull(endpoint);
-        this.thinking = parseThinkingMode(thinkingMode);
+        this.defaultThinking = parseThinking(thinkingMode, null);
     }
 
     @Override
@@ -172,14 +177,16 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
 
     private ProviderRequest toProviderRequest(ModelRequest request)
             throws JsonProcessingException {
-
+        // Runtime supplies the frozen controls; standalone callers may use the configured default.
+        ModelThinking thinking = request.thinking() == null ? defaultThinking : request.thinking();
         return new ProviderRequest(
                 request.model(),
                 toProviderMessages(request.messages()),
                 toProviderTools(request.tools()),
                 request.maxOutputTokens(),
-                request.temperature(),
-                thinking,
+                thinking != null && thinking.enabled() ? null : request.temperature(),
+                thinking == null ? null : new ProviderThinking(thinking.mode()),
+                thinking == null ? null : thinking.effort(),
                 false
         );
     }
@@ -203,6 +210,7 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
                     message.role().name().toLowerCase(),
                     message.content(),
                     null,
+                    null,
                     null
             );
 
@@ -210,14 +218,16 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
                     "tool",
                     message.content(),
                     null,
-                    message.toolCallId()
+                    message.toolCallId(),
+                    null
             );
 
             case ASSISTANT -> new ProviderMessage(
                     "assistant",
                     message.content(),
                     toProviderToolCalls(message.toolCalls()),
-                    null
+                    null,
+                    message.reasoningContent()
             );
         };
     }
@@ -281,6 +291,13 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
         // 4. 读取 message.content
         JsonNode contentNode=choice.path("message").path("content");
         String text=contentNode.isTextual()?contentNode.asText():null;
+        // Protocol continuation data: preserve exactly, including whitespace and empty strings.
+        JsonNode reasoningNode = choice.path("message").path("reasoning_content");
+        if (!reasoningNode.isMissingNode() && !reasoningNode.isNull() && !reasoningNode.isTextual()) {
+            throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,
+                    "reasoning_content must be a string or null", false, null);
+        }
+        String reasoningContent = reasoningNode.isTextual() ? reasoningNode.textValue() : null;
         // 5. Interpret termination before parsing potentially unfinished tool arguments.
         ModelFinishReason finishReason=mapFinishReason(choice.path("finish_reason").asText(null));
         List<ToolCall> toolCalls = finishReason == ModelFinishReason.LENGTH || finishReason == ModelFinishReason.CONTENT_FILTER
@@ -299,7 +316,7 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
         }
         // 8. 构造 ModelResponse
         try {
-            return new ModelResponse(responseId, text, toolCalls, usage, finishReason);
+            return new ModelResponse(responseId, text, toolCalls, usage, finishReason, reasoningContent);
         }catch(IllegalArgumentException e){
             throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,"Response violates model invariants",false,e);
         }
@@ -466,20 +483,20 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
         }
     }
 
-    private static ProviderThinking parseThinkingMode(String thinkingMode) {
+    private static ModelThinking parseThinking(String thinkingMode, String reasoningEffort) {
         if (thinkingMode == null || thinkingMode.isBlank()) {
             return null;
         }
-        String normalized = thinkingMode.strip().toLowerCase(Locale.ROOT);
-        if (!normalized.equals("enabled") && !normalized.equals("disabled")) {
+        try {
+            return new ModelThinking(thinkingMode, reasoningEffort);
+        } catch (IllegalArgumentException failure) {
             throw new ModelGatewayException(
                     ModelGatewayErrorCode.CONFIGURATION_ERROR,
-                    "Model provider thinking mode must be enabled or disabled",
+                    failure.getMessage(),
                     false,
-                    null
+                    failure
             );
         }
-        return new ProviderThinking(normalized);
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -490,6 +507,7 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
             @JsonProperty("max_tokens") Integer maxTokens,
             Double temperature,
             ProviderThinking thinking,
+            @JsonProperty("reasoning_effort") String reasoningEffort,
             boolean stream
     ) {}
 
@@ -500,7 +518,8 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
             String role,
             @JsonInclude(JsonInclude.Include.ALWAYS) String content,
             @JsonProperty("tool_calls") List<ProviderToolCall> toolCalls,
-            @JsonProperty("tool_call_id") String toolCallId
+            @JsonProperty("tool_call_id") String toolCallId,
+            @JsonProperty("reasoning_content") String reasoningContent
     ) {}
 
     private record ProviderTool(

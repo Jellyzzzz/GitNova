@@ -3,6 +3,7 @@ package com.gitnova.service.agent.persistence;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.service.agent.context.ObservationPolicy;
+import com.gitnova.service.agent.model.ModelThinking;
 import com.gitnova.service.agent.runtime.AgentCapability;
 import com.gitnova.service.agent.runtime.AgentExecutionConfig;
 import com.gitnova.service.agent.runtime.AgentRuntimePolicy;
@@ -223,6 +224,66 @@ class AgentExecutionConfigCodecTest {
         assertEquals(new ObservationPolicy(100, 50), codec.decode(root.toString()).observationPolicy());
         root.put("schemaVersion", 1);
         assertThrows(IllegalArgumentException.class, () -> codec.decode(root.toString()));
+    }
+
+    @Test
+    void thinkingControlsAreCanonicalFrozenAndRoundTripWithOrWithoutContextBudgets() throws Exception {
+        var old = standardConfig();
+        for (var thinking : List.of(ModelThinking.disabled(), new ModelThinking("enabled", "ultra"))) {
+            var policy = new AgentRuntimePolicy("test-model", 20, 50, 2, 3, 8192, 0.2, thinking);
+            for (boolean budgets : List.of(false, true)) {
+                var config = new AgentExecutionConfig(policy, old.capabilities(), old.toolSet(), "context-v1",
+                        budgets ? new ObservationPolicy(4096, 1024, false) : null,
+                        budgets ? new com.gitnova.service.agent.context.ContextBudget(128000, 2000, .8, .9, 4, true) : null);
+                var encoded = codec.encode(config);
+                var json = objectMapper.readTree(encoded.json());
+                assertEquals(5, json.path("schemaVersion").asInt());
+                assertEquals(thinking.mode(), json.path("policy").path("thinking").path("mode").asText());
+                assertEquals(config, codec.decode(encoded.json()));
+                assertEquals(encoded, codec.encode(codec.decode(encoded.json())));
+                assertNotEquals(codec.encode(old).digest(), encoded.digest());
+            }
+        }
+        var encodedOld = codec.encode(old);
+        assertNull(codec.decode(encodedOld.json()).policy().thinking());
+        assertEquals(encodedOld, codec.encode(codec.decode(encodedOld.json())));
+    }
+
+    @Test
+    void freezesSeparateMainAndSummaryThinkingAndPreservesOlderDigests() throws Exception {
+        var old = standardConfig();
+        var policy = new AgentRuntimePolicy("test-model", 40, 80, 2, 3, 32768, 0.0,
+                new ModelThinking("enabled", "max"), new ModelThinking("enabled", "xhigh"));
+        var config = new AgentExecutionConfig(policy, old.capabilities(), old.toolSet(), "context-v1");
+        var encoded = codec.encode(config);
+        var json = (ObjectNode) objectMapper.readTree(encoded.json());
+        assertEquals(6, json.path("schemaVersion").asInt());
+        assertEquals("high", json.at("/policy/summaryThinking/effort").asText());
+        assertEquals(config, codec.decode(encoded.json()));
+        assertEquals(encoded, codec.encode(codec.decode(encoded.json())));
+        json.put("schemaVersion", 5);
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(json.toString()));
+        json.withObject("/policy").remove("summaryThinking");
+        assertNull(codec.decode(json.toString()).policy().summaryThinking());
+        var legacy = codec.encode(codec.decode(json.toString()));
+        assertEquals(5, objectMapper.readTree(legacy.json()).path("schemaVersion").asInt());
+        assertEquals(legacy, codec.encode(codec.decode(legacy.json())));
+        json.put("schemaVersion", 6);
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(json.toString()));
+    }
+
+    @Test
+    void frozenThinkingCannotBeMissingOrHiddenInAnOlderSchema() throws Exception {
+        var json = (ObjectNode) objectMapper.readTree(codec.encode(standardConfig()).json());
+        json.put("schemaVersion", 5);
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(json.toString()));
+        var thinking = json.withObject("/policy").putObject("thinking").put("mode", "enabled").put("effort", "high");
+        assertEquals(new ModelThinking("enabled", "high"), codec.decode(json.toString()).policy().thinking());
+        thinking.put("effort", "medium"); // Accepted in configuration, not in already-frozen canonical JSON.
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(json.toString()));
+        thinking.put("effort", "high");
+        json.put("schemaVersion", 1);
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(json.toString()));
     }
 
     private AgentExecutionConfig standardConfig() {

@@ -56,11 +56,17 @@ public class ContextSummarizer {
     private String model;
     private Integer summaryMaxOutputTokens;
     private final String requestId;
+    private final ModelThinking thinking;
     public ContextSummarizer(ModelGateway modelGateway, String model, Integer summaryMaxOutputTokens, String requestId){
+        this(modelGateway, model, summaryMaxOutputTokens, requestId, ModelThinking.disabled());
+    }
+    public ContextSummarizer(ModelGateway modelGateway, String model, Integer summaryMaxOutputTokens,
+                             String requestId, ModelThinking thinking){
         this.modelGateway=modelGateway;
         this.model=model;
         this.summaryMaxOutputTokens=summaryMaxOutputTokens;
         this.requestId = requestId;
+        this.thinking = Objects.requireNonNull(thinking, "summary thinking must not be null");
     }
     public SummaryOutput summarize(SummaryInput input){
         Objects.requireNonNull(input,"input must not be null");
@@ -208,7 +214,8 @@ public class ContextSummarizer {
         out.append('\n');
     }
     private ModelRequest buildSummaryRequest(String requestId,String source){
-        return new ModelRequest(model,List.of(new ModelMessage(ModelRole.SYSTEM,SUMMARY_INSTRUCTIONS,List.of(),null),new ModelMessage(ModelRole.USER,source,List.of(),null)),List.of(),summaryMaxOutputTokens,null,requestId);
+        // Summarization has its own bounded output; do not inherit the coding model's thinking setting.
+        return new ModelRequest(model,List.of(new ModelMessage(ModelRole.SYSTEM,SUMMARY_INSTRUCTIONS,List.of(),null),new ModelMessage(ModelRole.USER,source,List.of(),null)),List.of(),summaryMaxOutputTokens,null,requestId,thinking);
     }
     public record SummaryInput(String sessionId,String taskText,ContextSummary previousSummary, List<InteractionGroup>groupToCompact,
                                List<SessionContextService.TaskMessage> userMessages,

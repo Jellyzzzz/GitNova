@@ -113,13 +113,13 @@ public final class ContextAssembler {
         List<ModelMessage> candidate = snapshot.modelMessages(request.messages().get(0), output.summary(),
                 scope.taskId(), context.taskText());
         var candidateRequest = new ModelRequest(request.model(), candidate, request.tools(), request.maxOutputTokens(),
-                request.temperature(), request.requestId());
+                request.temperature(), request.requestId(), request.thinking());
         var after = usage.measure(candidateRequest);
         var afterBudget = budget.assess(after.estimatedInputTokens(), after.fixedTokens(), request.maxOutputTokens());
         // Compare like for like: provider usage and a local estimate can have different biases.
         var originalProjection = snapshot.modelMessages(request.messages().get(0), snapshot.summary(), scope.taskId(), context.taskText());
         long beforeLocal = usage.estimateInput(new ModelRequest(request.model(), originalProjection, request.tools(),
-                request.maxOutputTokens(), request.temperature(), request.requestId()));
+                request.maxOutputTokens(), request.temperature(), request.requestId(), request.thinking()));
         long afterLocal = usage.estimateInput(candidateRequest);
         boolean smaller = afterLocal < beforeLocal;
         committed.accept(service.recordSummaryResult(scope, attemptId, output,
@@ -139,7 +139,7 @@ public final class ContextAssembler {
         throughSessionSequence = latest.throughSessionSequence();
         var visible = latest.modelMessages(request.messages().get(0), latest.summary(), scope.taskId(), context.taskText());
         var finalMeasurement = usage.measure(new ModelRequest(request.model(), visible, request.tools(),
-                request.maxOutputTokens(), request.temperature(), request.requestId()));
+                request.maxOutputTokens(), request.temperature(), request.requestId(), request.thinking()));
         var finalBudget = budget.assess(finalMeasurement.estimatedInputTokens(), finalMeasurement.fixedTokens(), request.maxOutputTokens());
         if (finalBudget.useRatio() >= budget.compactTriggerRatio()) {
             throw new PreparationException("New Session context requires stronger compaction");

@@ -18,6 +18,7 @@ import com.gitnova.service.agent.model.ModelGateway;
 import com.gitnova.service.agent.model.ModelGatewayException;
 import com.gitnova.service.agent.model.ModelMessage;
 import com.gitnova.service.agent.model.ModelRequest;
+import com.gitnova.service.agent.model.ModelThinking;
 import com.gitnova.service.agent.model.ModelResponse;
 import com.gitnova.service.agent.model.ModelUsage;
 import com.gitnova.service.agent.prompt.AssembledPrompt;
@@ -280,7 +281,8 @@ public final class AgentRuntime {
                     return modelGateway.complete(request);
                 };
                 state.contextAssembler = new ContextAssembler(sessionContexts,
-                        new ContextSummarizer(summaryGateway, policy.model(), policy.maxOutputTokens(), scope.runId() + ":summary"),
+                        new ContextSummarizer(summaryGateway, policy.model(), policy.maxOutputTokens(), scope.runId() + ":summary",
+                                policy.summaryThinking() == null ? ModelThinking.disabled() : policy.summaryThinking()),
                         scope, executionControl, state::committed, snapshot.control());
             } catch (IllegalStateException | IllegalArgumentException exception) {
                 logger.error("Session context preparation failed: runId={}, failureType={}",
@@ -466,7 +468,9 @@ public final class AgentRuntime {
                 toolDefinitions,
                 policy.maxOutputTokens(),
                 policy.temperature(),
-                requestId
+                requestId,
+                // Legacy Runs predate the switch; never silently enable them using a new server default.
+                policy.thinking() == null ? ModelThinking.disabled() : policy.thinking()
         );
     }
 

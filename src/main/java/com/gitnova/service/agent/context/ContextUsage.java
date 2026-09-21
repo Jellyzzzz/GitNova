@@ -6,6 +6,7 @@ import com.gitnova.service.agent.model.ModelUsage;
 import com.gitnova.service.agent.persistence.CanonicalJsonCodec;
 
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.Objects;
 
 /** Per-execution cache of a Session's durable usage anchor, not a shared Spring singleton. */
@@ -27,12 +28,15 @@ public final class ContextUsage {
         if (system.size() != 1 || request.messages().get(0).role() != ModelRole.SYSTEM) {
             throw new IllegalArgumentException("Context requires exactly one leading SYSTEM message");
         }
-        String currentFixedDigest = codec.encodeValue(Map.of(
-                "model", request.model(), "system", system, "tools", request.tools())).digest();
+        var fixed = new LinkedHashMap<String, Object>(Map.of(
+                "model", request.model(), "system", system, "tools", request.tools()));
+        // Switching thinking/effort changes the provider's context regime; discard the old usage anchor.
+        if (request.thinking() != null) fixed.put("thinking", request.thinking());
+        String currentFixedDigest = codec.encodeValue(fixed).digest();
         if (!currentFixedDigest.equals(fixedDigest)) {
             fixedDigest = currentFixedDigest;
             fixedTokens = estimator.estimateRequest(new ModelRequest(request.model(), system, request.tools(),
-                    request.maxOutputTokens(), request.temperature(), request.requestId())).total().tokens();
+                    request.maxOutputTokens(), request.temperature(), request.requestId(), request.thinking())).total().tokens();
         }
 
         long inputTokens;
@@ -47,7 +51,7 @@ public final class ContextUsage {
             var added = request.messages().subList(anchor.measurement().messageCount(), request.messages().size());
             // Count only retained new messages, not completion_tokens (which may include hidden reasoning).
             long delta = added.isEmpty() ? 0 : estimator.estimateRequest(new ModelRequest(request.model(), added,
-                    java.util.List.of(), request.maxOutputTokens(), request.temperature(), request.requestId()))
+                    java.util.List.of(), request.maxOutputTokens(), request.temperature(), request.requestId(), request.thinking()))
                     .total().tokens();
             inputTokens = Math.addExact(anchor.inputTokens(), delta);
             source = "PROVIDER_USAGE_PLUS_DELTA";

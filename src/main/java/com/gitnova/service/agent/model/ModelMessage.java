@@ -1,6 +1,7 @@
 package com.gitnova.service.agent.model;
 
 import com.gitnova.dto.ToolCall;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.List;
 import java.util.Objects;
@@ -15,11 +16,19 @@ public record ModelMessage(
         ModelRole role,
         String content,
         List<ToolCall> toolCalls,
-        String toolCallId
+        String toolCallId,
+        @JsonInclude(JsonInclude.Include.NON_NULL) String reasoningContent
 ) {
+    public ModelMessage(ModelRole role, String content, List<ToolCall> toolCalls, String toolCallId) {
+        this(role, content, toolCalls, toolCallId, null);
+    }
+
     public ModelMessage {
         Objects.requireNonNull(role, "role must not be null");
         toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);
+        if (role != ModelRole.ASSISTANT && reasoningContent != null) {
+            throw new IllegalArgumentException("Only ASSISTANT messages may contain reasoningContent");
+        }
 
         switch (role) {
             case SYSTEM, USER -> {

@@ -18,6 +18,7 @@ import com.gitnova.service.agent.model.ModelRequest;
 import com.gitnova.service.agent.model.ModelResponse;
 import com.gitnova.service.agent.model.ModelRole;
 import com.gitnova.service.agent.model.ModelUsage;
+import com.gitnova.service.agent.model.ModelThinking;
 import com.gitnova.service.agent.prompt.PromptAssembler;
 import com.gitnova.service.agent.prompt.PromptSection;
 import com.gitnova.service.agent.tool.AgentTool;
@@ -36,6 +37,7 @@ import com.gitnova.service.agent.workspace.WorkspaceMutationCommand;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
@@ -46,6 +48,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -234,6 +237,34 @@ class AgentRuntimeTest {
         assertEquals(0, result.toolCallCount());
         assertEquals(0, tool.invocationCount);
         assertEquals(List.of(usage), result.modelUsages());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void runtimeUsesFrozenThinkingAndPreservesReasoningThroughToolObservation(boolean enabled) {
+        var read = new RecordingTool(definition("readContext"), ToolResult.success(objectMapper.createObjectNode()));
+        String reasoning = "  inspect then finish\n  ";
+        var gateway = new FakeModelGateway()
+                .enqueueResponse(new ModelResponse("read", null,
+                        List.of(call("read-1", "readContext", objectMapper.createObjectNode())), ModelUsage.unknown(),
+                        ModelFinishReason.TOOL_CALLS, reasoning))
+                .enqueueResponse(toolResponse("finished", call("finish-1", FinishTaskTool.NAME,
+                        finishArguments(0, List.of(), null)), ModelUsage.unknown()));
+        var tools = List.<AgentTool>of(read, new FinishTaskTool(objectMapper));
+        var runtime = runtime(gateway, new InspectingWorkspace(0, List.of()), tools);
+        var thinking = enabled ? new ModelThinking("enabled", "ultra") : ModelThinking.disabled();
+        executionConfig = AgentTestExecutionConfigs.forTools(tools,
+                new AgentRuntimePolicy("fake-model", 6, 8, 1, 1, 8192, 0.0, thinking));
+
+        var result = runtime.run(context("Inspect and report"));
+
+        assertEquals(AgentRunStatus.COMPLETED, result.status());
+        assertEquals(2, gateway.receivedRequests().size());
+        for (var request : gateway.receivedRequests()) assertEquals(thinking, request.thinking());
+        var next = gateway.receivedRequests().get(1);
+        assertEquals(reasoning, next.messages().get(2).reasoningContent());
+        assertEquals("read-1", next.messages().get(3).toolCallId());
+        assertNull(result.completionOutcome().validation()); // Reasoning is never validation evidence.
     }
 
     private AgentRuntime runtime(

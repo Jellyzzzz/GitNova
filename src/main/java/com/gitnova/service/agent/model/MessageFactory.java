@@ -40,7 +40,8 @@ public final class MessageFactory {
     /** Preserves the normalized assistant text and tool calls for the next model request. */
     public ModelMessage assistant(ModelResponse response) {
         Objects.requireNonNull(response, "response must not be null");
-        return new ModelMessage(ModelRole.ASSISTANT, response.text(), response.toolCalls(), null);
+        return new ModelMessage(ModelRole.ASSISTANT, response.text(), response.toolCalls(), null,
+                response.reasoningContent());
     }
 
     /** Serializes the complete structured tool result as one observation. */

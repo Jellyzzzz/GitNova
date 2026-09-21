@@ -64,6 +64,29 @@ class ContextUsageTest {
         assertEquals("LOCAL_ESTIMATE", usage.measure(new ModelRequest("model", initial, List.of(tool), 100, 0.0, "r2")).source());
     }
 
+    @Test
+    void thinkingCountsAsRetainedInputAndChangingEffortInvalidatesTheUsageAnchor() {
+        var usage = new ContextUsage(estimator, codec, null);
+        var high = new ModelThinking("enabled", "high");
+        var first = new ModelRequest("model", initial, List.of(), 8192, null, "first", high);
+        usage.accept(usage.measure(first), new ModelUsage(1000, 9000, 10000));
+        var assistant = new ModelMessage(ModelRole.ASSISTANT, "Observed result", List.of(), null,
+                "long reasoning ".repeat(500));
+        var appended = List.of(initial.get(0), initial.get(1), assistant);
+        var next = new ModelRequest("model", appended, List.of(), 8192, null, "second", high);
+        var estimate = usage.measure(next);
+        long delta = estimator.estimateRequest(new ModelRequest("model", List.of(assistant), List.of(),
+                8192, null, "delta", high)).total().tokens();
+        assertEquals(1000 + delta, estimate.estimatedInputTokens());
+        assertEquals("PROVIDER_USAGE_PLUS_DELTA", estimate.source());
+        var withoutReasoning = new ModelMessage(ModelRole.ASSISTANT, "Observed result", List.of(), null);
+        assertTrue(delta > estimator.estimateRequest(request("model", List.of(withoutReasoning))).total().tokens());
+        assertEquals("LOCAL_ESTIMATE", usage.measure(new ModelRequest("model", appended, List.of(),
+                8192, null, "third", new ModelThinking("enabled", "max"))).source());
+        assertEquals("LOCAL_ESTIMATE", usage.measure(new ModelRequest("model", appended, List.of(),
+                8192, null, "off", ModelThinking.disabled())).source());
+    }
+
     private ModelRequest request(String model, List<ModelMessage> messages) {
         return new ModelRequest(model, messages, List.of(), 100, 0.0, "request");
     }

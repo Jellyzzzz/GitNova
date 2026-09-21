@@ -222,6 +222,36 @@ class SessionContextServiceTest {
         verifyNoInteractions(appender);
     }
 
+    @Test
+    void thinkingSurvivesJournalProjectionAcrossTasksAndSummaryKeepsRecentReasoningExact() {
+        user("task-a", "Inspect");
+        var call = new ToolCall("c1", "readFile", mapper.createObjectNode());
+        var reasoning = "  original reasoning\n中文\r\n  ";
+        add("MODEL_RESPONSE", "task-a", "run-a", new ModelResponsePayload("m1", "r1", null,
+                List.of(call), ModelUsage.unknown(), ModelFinishReason.TOOL_CALLS, reasoning)).setSchemaVersion(2);
+        add("TOOL_RESULT", "task-a", "run-a", new ToolResultPayload("m1", "c1", "readFile",
+                ToolResult.success(mapper.createObjectNode().put("text", "file"))));
+        user("task-b", "Continue");
+        add("MODEL_RESPONSE", "task-b", "run-b", new ModelResponsePayload("m2", "r2", "Will continue",
+                List.of(), ModelUsage.unknown(), ModelFinishReason.STOP, "text-only reasoning")).setSchemaVersion(2);
+
+        var snapshot = service.load("session");
+        var system = new ModelMessage(ModelRole.SYSTEM, "Policy", List.of(), null);
+        var full = snapshot.modelMessages(system, null, "task-b", "Continue");
+        assertEquals(reasoning, full.get(2).reasoningContent());
+        assertEquals("c1", full.get(3).toolCallId());
+        assertEquals("text-only reasoning", full.get(5).reasoningContent());
+        var compacted = snapshot.modelMessages(system,
+                new ContextSummary("summary", "session", null, 3, "Inspected file"), "task-b", "Continue");
+        assertEquals("text-only reasoning", compacted.get(3).reasoningContent());
+        assertEquals(5, history.size()); // Compaction did not rewrite the original thinking Step.
+
+        var invalid = mapper.valueToTree(new ModelResponsePayload("m2", "r2", "Will continue",
+                List.of(), ModelUsage.unknown(), ModelFinishReason.STOP));
+        history.get(4).setPayloadJson(invalid.toString());
+        assertThrows(IllegalStateException.class, () -> service.load("session"));
+    }
+
     private ModelResponsePayload response(String id, String name) {
         return new ModelResponsePayload("model-1", "response", "", List.of(new ToolCall(id, name, mapper.createObjectNode())),
                 ModelUsage.unknown(), ModelFinishReason.TOOL_CALLS);

@@ -19,6 +19,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.boot.context.properties.bind.Binder;
+import com.gitnova.service.agent.runtime.AgentRuntimeProperties;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -97,6 +99,18 @@ class OpenAiCompatibleModelGatewayTest {
             assertEquals(30000, client.readTimeoutMillis());
             assertEquals("8192", environment.getProperty("gitnova.agent.runtime.max-output-tokens"));
         });
+        assertEquals(ModelThinking.disabled(), Binder.get(environment)
+                .bind("gitnova.agent.runtime", AgentRuntimeProperties.class).get().thinking());
+        environment.withProperty("LLM_THINKING_MODE", "enabled").withProperty("LLM_REASONING_EFFORT", "ultra");
+        assertEquals(new ModelThinking("enabled", "max"), Binder.get(environment)
+                .bind("gitnova.agent.runtime", AgentRuntimeProperties.class).get().thinking());
+        assertEquals(ModelThinking.disabled(), Binder.get(environment)
+                .bind("gitnova.agent.runtime", AgentRuntimeProperties.class).get().summaryThinking());
+        environment.withProperty("SUMMARY_LLM_THINKING_MODE", "enabled")
+                .withProperty("SUMMARY_LLM_REASONING_EFFORT", "xhigh");
+        assertEquals(new ModelThinking("enabled", "high"), Binder.get(environment)
+                .bind("gitnova.agent.runtime", AgentRuntimeProperties.class).get().summaryThinking());
+        runner.run(context -> assertNull(context.getStartupFailure()));
     }
 
     @ParameterizedTest
@@ -203,6 +217,104 @@ class OpenAiCompatibleModelGatewayTest {
         RecordedRequest recorded = server.takeRequest();
         JsonNode root = objectMapper.readTree(recorded.getBody().readUtf8());
         assertEquals("disabled", root.path("thinking").path("type").asText());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"minimal,low", "low,low", "medium,high", "high,high", "xhigh,high", "max,max", "ultra,max"})
+    void shouldSendFrozenThinkingAtTopLevelAndOmitIgnoredTemperature(String requested, String mapped) throws Exception {
+        server.enqueue(successfulTextResponse("thinking", "Ready"));
+        gateway.complete(new ModelRequest("deepseek-flash", simpleRequest().messages(), List.of(),
+                8192, 0.3, "thinking-test", new ModelThinking("enabled", requested)));
+
+        var body = objectMapper.readTree(server.takeRequest().getBody().readUtf8());
+        assertEquals("enabled", body.path("thinking").path("type").asText());
+        assertEquals(mapped, body.path("reasoning_effort").asText());
+        assertFalse(body.has("extra_body"));
+        assertFalse(body.has("temperature"));
+        assertEquals(8192, body.path("max_tokens").asInt());
+    }
+
+    @Test
+    void requestCanDisableConfiguredThinkingWithoutMutatingTheGateway() throws Exception {
+        gateway = new OpenAiCompatibleModelGateway(objectMapper, "test-api-key", server.url("/").toString(),
+                3, 3, "enabled", "ultra");
+        server.enqueue(successfulTextResponse("off", "Ready"));
+        server.enqueue(successfulTextResponse("default", "Ready"));
+        gateway.complete(new ModelRequest("model", simpleRequest().messages(), List.of(), 8192, 0.3,
+                "off", ModelThinking.disabled()));
+        var disabled = objectMapper.readTree(server.takeRequest().getBody().readUtf8());
+        assertEquals("disabled", disabled.path("thinking").path("type").asText());
+        assertFalse(disabled.has("reasoning_effort"));
+        assertEquals(0.3, disabled.path("temperature").asDouble());
+
+        gateway.complete(simpleRequest());
+        var configured = objectMapper.readTree(server.takeRequest().getBody().readUtf8());
+        assertEquals("enabled", configured.path("thinking").path("type").asText());
+        assertEquals("max", configured.path("reasoning_effort").asText());
+    }
+
+    @Test
+    void shouldRoundTripReasoningForToolCallsAndTextOnlyAssistantTurns() throws Exception {
+        String reasoning = "  inspect original\n中文 \\\" quoted\r\n  ";
+        var provider = objectMapper.createObjectNode().put("id", "thinking-tool");
+        var message = provider.putArray("choices").addObject().put("finish_reason", "tool_calls")
+                .putObject("message").put("role", "assistant").putNull("content")
+                .put("reasoning_content", reasoning);
+        message.putArray("tool_calls").addObject().put("id", "call-1").put("type", "function")
+                .putObject("function").put("name", "getDiff").put("arguments", "{}");
+        server.enqueue(new MockResponse().setBody(provider.toString()));
+        server.enqueue(successfulTextResponse("next", "Done"));
+        var initial = new ModelRequest("model", simpleRequest().messages(), requestWithEveryMessageRole().tools(),
+                8192, null, "first", new ModelThinking("enabled", "high"));
+        var response = gateway.complete(initial);
+        assertEquals(reasoning, response.reasoningContent());
+        assertNull(response.text());
+        var factory = new MessageFactory(objectMapper);
+        var history = new java.util.ArrayList<>(initial.messages());
+        history.add(factory.assistant(response));
+        history.add(new ModelMessage(ModelRole.TOOL, "diff", List.of(), "call-1"));
+        history.add(factory.assistant(new ModelResponse("text-turn", "I will continue", List.of(),
+                ModelUsage.unknown(), ModelFinishReason.STOP, "  text turn reasoning  ")));
+        history.add(new ModelMessage(ModelRole.USER, "Next task", List.of(), null));
+        gateway.complete(new ModelRequest("model", history, initial.tools(), 8192, null, "second", initial.thinking()));
+
+        server.takeRequest();
+        var sent = objectMapper.readTree(server.takeRequest().getBody().readUtf8()).path("messages");
+        assertEquals(reasoning, sent.get(1).path("reasoning_content").textValue());
+        assertTrue(sent.get(1).path("content").isNull());
+        assertEquals("call-1", sent.get(2).path("tool_call_id").asText());
+        assertEquals("  text turn reasoning  ", sent.get(3).path("reasoning_content").textValue());
+        assertFalse(sent.get(0).has("reasoning_content"));
+        assertFalse(sent.get(2).has("reasoning_content"));
+        assertFalse(sent.get(4).has("reasoning_content"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"42", "{}", "[]", "true"})
+    void shouldRejectNonTextReasoningInsteadOfCoercingIt(String invalid) {
+        server.enqueue(new MockResponse().setBody("""
+                {"id":"bad","choices":[{"finish_reason":"stop","message":
+                {"content":"Done","reasoning_content":%s}}]}
+                """.formatted(invalid)));
+        var failure = assertThrows(ModelGatewayException.class, () -> gateway.complete(simpleRequest()));
+        assertEquals(ModelGatewayErrorCode.INVALID_RESPONSE, failure.errorCode());
+        assertEquals(200, failure.providerStatusCode());
+    }
+
+    @Test
+    void thinkingOnlyLengthResponseMustNotInventTextOrExecuteUnfinishedTools() {
+        server.enqueue(new MockResponse().setBody("""
+                {"id":"length","choices":[{"finish_reason":"length","message":
+                {"content":null,"reasoning_content":"unfinished reasoning","tool_calls":[
+                  {"id":"bad","function":{"name":"edit","arguments":"{unfinished"}}
+                ]}}],"usage":{"prompt_tokens":100,"completion_tokens":8192,"total_tokens":8292}}
+                """));
+        var response = gateway.complete(simpleRequest());
+        assertEquals(ModelFinishReason.LENGTH, response.finishReason());
+        assertEquals("unfinished reasoning", response.reasoningContent());
+        assertNull(response.text());
+        assertTrue(response.toolCalls().isEmpty());
+        assertEquals(8192, response.usage().outputTokens());
     }
 
     @Test

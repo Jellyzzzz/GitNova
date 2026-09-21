@@ -95,7 +95,7 @@ public class SessionContextService {
                 if (!Set.of("USER_MESSAGE_RECEIVED", "MODEL_CALL_STARTED", "MODEL_RESPONSE", "TOOL_RESULT",
                         "HARNESS_FEEDBACK", "TOOL_OBSERVATION_PROJECTED").contains(type)) continue;
                 int version = Objects.requireNonNull(step.getSchemaVersion());
-                if (version != 1 && !(type.equals("MODEL_CALL_STARTED") && version == 2)) {
+                if (version != 1 && !(Set.of("MODEL_CALL_STARTED", "MODEL_RESPONSE").contains(type) && version == 2)) {
                     throw new IllegalStateException("Unsupported context Step schema: " + type + "/" + version);
                 }
                 JsonNode payload = mapper.readTree(step.getPayloadJson());
@@ -121,6 +121,9 @@ public class SessionContextService {
                                 mapper.treeToValue(payload.get("contextInput"), ContextUsage.Measurement.class));
                     }
                     case "MODEL_RESPONSE" -> {
+                        if (version == 2 && !payload.path("reasoningContent").isTextual()) {
+                            throw new IllegalStateException("Thinking response requires its original reasoningContent");
+                        }
                         ModelResponsePayload response = mapper.treeToValue(payload, ModelResponsePayload.class);
                         // Empty interrupted responses remain durable facts, but are not valid assistant messages.
                         if (!response.toolCalls().isEmpty() || (response.text() != null && !response.text().isBlank())) {
@@ -358,7 +361,8 @@ public class SessionContextService {
             modelCallId = response.modelCallId();
             id = step.getEventId();
             first = last = step.getSessionSequence();
-            body.add(new ModelMessage(ModelRole.ASSISTANT, response.text(), response.toolCalls(), null));
+            body.add(new ModelMessage(ModelRole.ASSISTANT, response.text(), response.toolCalls(), null,
+                    response.reasoningContent()));
             for (ToolCall call : response.toolCalls()) {
                 if (pending.putIfAbsent(call.id(), call) != null) throw new IllegalStateException("Duplicate Tool Call");
             }

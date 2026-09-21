@@ -115,7 +115,7 @@ public class DefaultRunJournal implements RunJournal {
                 scope.taskId(),
                 scope.runId(),
                 AgentStepType.MODEL_RESPONSE,
-                1,
+                payload.reasoningContent() == null ? 1 : 2,
                 persistedPayload,
                 causationEventId,
                 scope.runId(),

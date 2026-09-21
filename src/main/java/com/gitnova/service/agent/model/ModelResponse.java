@@ -13,8 +13,14 @@ public record ModelResponse(
         String text,
         List<ToolCall> toolCalls,
         ModelUsage usage,
-        ModelFinishReason finishReason
+        ModelFinishReason finishReason,
+        String reasoningContent
 ) {
+    public ModelResponse(String responseId, String text, List<ToolCall> toolCalls,
+                         ModelUsage usage, ModelFinishReason finishReason) {
+        this(responseId, text, toolCalls, usage, finishReason, null);
+    }
+
     public ModelResponse {
         requireNonBlank(responseId, "responseId");
         toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);

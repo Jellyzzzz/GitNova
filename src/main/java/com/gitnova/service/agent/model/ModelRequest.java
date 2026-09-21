@@ -1,6 +1,7 @@
 package com.gitnova.service.agent.model;
 
 import com.gitnova.dto.ToolDefinition;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.List;
 import java.util.Objects;
@@ -14,8 +15,14 @@ public record ModelRequest(
         List<ToolDefinition> tools,
         Integer maxOutputTokens,
         Double temperature,
-        String requestId
+        String requestId,
+        @JsonInclude(JsonInclude.Include.NON_NULL) ModelThinking thinking
 ) {
+    public ModelRequest(String model, List<ModelMessage> messages, List<ToolDefinition> tools,
+                        Integer maxOutputTokens, Double temperature, String requestId) {
+        this(model, messages, tools, maxOutputTokens, temperature, requestId, null);
+    }
+
     public ModelRequest {
         requireNonBlank(model, "model");
         requireNonBlank(requestId, "requestId");

@@ -51,6 +51,32 @@ class ContextSummarizerTest {
         assertTrue(instructions.contains("历史 generation 和测试结果不代表当前 Workspace 状态"));
         assertTrue(request.messages().get(1).content().contains(previous.content()));
         assertTrue(request.tools().isEmpty());
+        assertEquals(ModelThinking.disabled(), request.thinking());
+    }
+
+    @Test
+    void summarySourceDoesNotPromotePrivateReasoningToObservedFacts() {
+        var message = new ModelMessage(ModelRole.ASSISTANT, "Observed test result", List.of(), null,
+                "UNVERIFIED_INTERNAL_REASONING");
+        var thinkingGroup = new InteractionGroup("thinking", List.of(message), "task-1", 11, 17);
+        summarizer.summarize(new SummaryInput("session-1", "Fix the test", previous, List.of(thinkingGroup)));
+        var request = gateway.receivedRequests().get(0);
+        assertTrue(request.messages().get(1).content().contains("Observed test result"));
+        assertFalse(request.messages().get(1).content().contains("UNVERIFIED_INTERNAL_REASONING"));
+        assertEquals(ModelThinking.disabled(), request.thinking());
+    }
+
+    @Test
+    void usesIndependentSummaryThinkingWithoutLeakingReasoningIntoSummary() {
+        var thinkingGateway = new FakeModelGateway().enqueueResponse(new ModelResponse(
+                "summary", "Grounded checkpoint", List.of(), usage, ModelFinishReason.STOP, "Private reasoning"));
+        var configured = new ContextSummarizer(thinkingGateway, "test-model", 32768, "summary",
+                new ModelThinking("enabled", "xhigh"));
+        var output = configured.summarize(new SummaryInput("session-1", "Fix the test", previous, List.of(group)));
+        assertEquals(new ModelThinking("enabled", "high"), thinkingGateway.receivedRequests().get(0).thinking());
+        assertEquals(32768, thinkingGateway.receivedRequests().get(0).maxOutputTokens());
+        assertEquals("Grounded checkpoint", output.summary().content());
+        assertEquals(usage, output.usage());
     }
 
     @Test

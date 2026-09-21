@@ -8,6 +8,9 @@ import com.gitnova.service.agent.completion.CompletionDecision;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.AgentStepType;
 import com.gitnova.service.agent.tool.ToolResult;
+import com.gitnova.service.agent.model.ModelFinishReason;
+import com.gitnova.service.agent.model.ModelResponse;
+import com.gitnova.service.agent.model.ModelUsage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -44,6 +47,21 @@ class DefaultRunJournalTest {
         );
         stepMapper = mock(AgentStepMapper.class);
         journal = new DefaultRunJournal(appender, new ObjectMapper(), stepMapper);
+    }
+
+    @Test
+    void thinkingResponseUsesVersionedPayloadAndPreservesTheExactOriginal() {
+        String reasoning = "  original\nreasoning\r\n  ";
+        var response = new ModelResponse("response", "Ready", java.util.List.of(),
+                ModelUsage.unknown(), ModelFinishReason.STOP, reasoning);
+        journal.appendModelResponse(SCOPE, ModelResponsePayload.from("model-1", response));
+
+        var command = capturedCommand();
+        assertEquals(AgentStepType.MODEL_RESPONSE, command.stepType());
+        assertEquals(2, command.schemaVersion());
+        assertEquals(reasoning, command.persistedPayload().path("reasoningContent").textValue());
+        assertEquals("run:run-1:model-call:model-1:started", command.causationEventId());
+        assertAuthority();
     }
 
     @Test

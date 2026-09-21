@@ -84,6 +84,27 @@ class ModelMessageTest {
         );
     }
 
+    @Test
+    void reasoningBelongsOnlyToAssistantAndCannotReplaceItsTextOrToolCall() {
+        for (var role : List.of(ModelRole.SYSTEM, ModelRole.USER, ModelRole.TOOL)) {
+            assertThrows(IllegalArgumentException.class, () -> new ModelMessage(role, "content", List.of(),
+                    role == ModelRole.TOOL ? "call-1" : null, "reasoning"));
+        }
+        assertThrows(IllegalArgumentException.class,
+                () -> new ModelMessage(ModelRole.ASSISTANT, null, List.of(), null, "reasoning only"));
+        var message = new ModelMessage(ModelRole.ASSISTANT, null, List.of(toolCall()), null, "  exact\n  ");
+        assertEquals("  exact\n  ", message.reasoningContent());
+    }
+
+    @Test
+    void oldMessageJsonStaysReadableWithoutSynthesizingReasoning() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        String json = "{\"role\":\"ASSISTANT\",\"content\":\"Done\",\"toolCalls\":[],\"toolCallId\":null}";
+        var message = mapper.readValue(json, ModelMessage.class);
+        assertEquals(new ModelMessage(ModelRole.ASSISTANT, "Done", List.of(), null), message);
+        assertFalse(mapper.valueToTree(message).has("reasoningContent"));
+    }
+
     private ToolCall toolCall() {
         return new ToolCall(
                 "call-1",
