@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.charset.CharacterCodingException;
@@ -113,6 +114,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
         try {
             long generationBefore = state.generation();
             boolean changed = refreshStateFromDisk(state);
+            registry.persistState(state, null);
             return new WorkspaceGateway.WorkspaceRefresh(
                     generationBefore,
                     state.generation(),
@@ -550,6 +552,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                 );
             }
             refreshStateFromDisk(state);
+            registry.persistState(state, executionPermit);
             long generationBefore = state.generation();
             if (request.expectedGeneration() != generationBefore) {
                 return new WorkspaceGateway.CommandResult(
@@ -675,7 +678,11 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
         } finally {
             try {
                 if (mutationLock != null) {
-                    mutationLock.close();
+                    try {
+                        if (mutationLock.accepted()) registry.persistState(state, executionPermit);
+                    } finally {
+                        mutationLock.close();
+                    }
                 }
             } finally {
                 writeLock.unlock();
@@ -710,6 +717,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                 );
             }
             refreshStateFromDisk(state);
+            registry.persistState(state, executionPermit);
             long generationBefore = state.generation();
 
             // stale command: no filesystem operation may occur.
@@ -786,7 +794,11 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
         } finally {
             try {
                 if (mutationLock != null) {
-                    mutationLock.close();
+                    try {
+                        if (mutationLock.accepted()) registry.persistState(state, executionPermit);
+                    } finally {
+                        mutationLock.close();
+                    }
                 }
             } finally {
                 writeLock.unlock();
@@ -1248,6 +1260,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             case CREATE -> createFile(workspaceRoot, target, operation);
             case UPDATE -> updateFile(workspaceRoot, target, operation);
             case DELETE -> deleteFile(workspaceRoot, target, operation);
+            case EDIT -> editFile(workspaceRoot, target, operation);
         };
     }
 
@@ -1346,6 +1359,88 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                 beforeSha256,
                 null
         );
+    }
+    private PatchOperationResult editFile(Path workspaceRoot, Path target, PatchOperation operation)
+            throws OperationFailure {
+        byte[] before = readExistingRegularFile(workspaceRoot, target);
+        String beforeSha256 = sha256(before);
+        TextFile document = TextFile.parse(before, beforeSha256);
+        String original = String.join("\n", document.lines());
+        if (document.endsWithLineSeparator()) original += "\n";
+        boolean hasBom = original.startsWith("\uFEFF");
+        if (hasBom) original = original.substring(1);
+        if (original.indexOf('\0') >= 0) {
+            throw failure("FILE_NOT_UTF8_TEXT", "edit supports UTF-8 text files without NUL characters only", beforeSha256, null);
+        }
+
+        String updated;
+        try {
+            updated = applyExactEdits(original, operation.edits());
+        } catch (OperationFailure exception) {
+            throw failure(exception.errorCode(), exception.getMessage(), beforeSha256, exception);
+        }
+        // Preserve the file's BOM and newline style, but allow edits to change its final newline.
+        String rendered = (hasBom ? "\uFEFF" : "") + updated.replace("\n", document.lineSeparator());
+        byte[] after;
+        try {
+            ByteBuffer encoded = StandardCharsets.UTF_8.newEncoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .encode(CharBuffer.wrap(rendered));
+            if (encoded.remaining() > MAX_DIFF_FILE_BYTES) {
+                throw failure("FILE_TOO_LARGE", "Edited file exceeds the Workspace file byte limit", beforeSha256, null);
+            }
+            after = new byte[encoded.remaining()];
+            encoded.get(after);
+        } catch (CharacterCodingException exception) {
+            throw failure("INVALID_EDIT_TEXT", "Replacement contains invalid Unicode text", beforeSha256, exception);
+        }
+        writeAtomically(target, after, false, beforeSha256);
+        return PatchOperationResult.applied(operation, beforeSha256, sha256(after));
+    }
+
+    static String applyExactEdits(String original, List<PatchOperation.TextEdit> edits)
+            throws OperationFailure {
+        Objects.requireNonNull(original, "original must not be null");
+        if (edits == null || edits.isEmpty() || edits.size() > PatchOperation.MAX_EDITS) {
+            throw failure("INVALID_EDIT_COUNT", "edits must contain between 1 and " + PatchOperation.MAX_EDITS + " replacements", null, null);
+        }
+        record Replacement(int editIndex, int start, int end, String newContent) {}
+        List<Replacement> replacements = new ArrayList<>();
+        for (int index = 0; index < edits.size(); index++) {
+            PatchOperation.TextEdit edit = Objects.requireNonNull(edits.get(index), "edit must not be null");
+            String oldText = edit.oldText().replace("\r\n", "\n");
+            String newText = edit.newText().replace("\r\n", "\n");
+            if (oldText.indexOf('\r') >= 0 || newText.indexOf('\r') >= 0) {
+                throw failure("INVALID_EDIT_TEXT", "edits[" + index + "] must use LF or CRLF line endings", null, null);
+            }
+            int start = original.indexOf(oldText);
+            if (start < 0) {
+                throw failure("EDIT_TEXT_NOT_FOUND", "edits[" + index + "].oldText was not found; read the current file and copy the exact text", null, null);
+            }
+            if (original.indexOf(oldText, start + 1) >= 0) {
+                throw failure("EDIT_TEXT_AMBIGUOUS", "edits[" + index + "].oldText matches more than once; include more surrounding text", null, null);
+            }
+            replacements.add(new Replacement(index, start, start + oldText.length(), newText));
+        }
+        replacements.sort(Comparator.comparingInt(Replacement::start));
+        for (int index = 1; index < replacements.size(); index++) {
+            Replacement previous = replacements.get(index - 1);
+            Replacement current = replacements.get(index);
+            if (previous.end() > current.start()) {
+                throw failure("EDIT_OVERLAP", "edits[" + previous.editIndex() + "] overlaps edits[" + current.editIndex() + "]; merge them into one replacement", null, null);
+            }
+        }
+        StringBuilder result = new StringBuilder(original);
+        for (int index = replacements.size() - 1; index >= 0; index--) {
+            Replacement replacement = replacements.get(index);
+            result.replace(replacement.start(), replacement.end(), replacement.newContent());
+        }
+        String updated = result.toString();
+        if (updated.equals(original)) {
+            throw failure("EDIT_HAS_NO_EFFECT", "The edits produce no change; no file was written", null, null);
+        }
+        return updated;
     }
 
     private Path resolveSafeTarget(
@@ -1849,7 +1944,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             } catch (CharacterCodingException exception) {
                 throw failure(
                         "FILE_NOT_UTF8_TEXT",
-                        "UPDATE supports UTF-8 text files only",
+                        "Workspace edits support UTF-8 text files only",
                         beforeSha256,
                         exception
                 );
@@ -1862,7 +1957,7 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
                     || (hasCrLf && withoutCrLf.indexOf('\n') >= 0)) {
                 throw failure(
                         "MIXED_LINE_ENDINGS",
-                        "UPDATE does not support mixed line endings",
+                        "Workspace edits do not support mixed line endings",
                         beforeSha256,
                         null
                 );
@@ -1894,5 +1989,6 @@ public final class LocalWorkspaceGateway implements WorkspaceGateway {
             }
             return result;
         }
+
     }
 }

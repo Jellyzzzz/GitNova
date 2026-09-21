@@ -138,15 +138,15 @@ public record PatchOperationResult(
                     );
                 }
             }
-            case UPDATE -> {
+            case UPDATE, EDIT -> {
                 if (beforeSha256 == null || afterSha256 == null) {
                     throw new IllegalArgumentException(
-                            "Applied UPDATE requires beforeSha256 and afterSha256"
+                            "Applied " + type + " requires beforeSha256 and afterSha256"
                     );
                 }
                 if (beforeSha256.equals(afterSha256)) {
                     throw new IllegalArgumentException(
-                            "Applied UPDATE must change the file digest"
+                            "Applied " + type + " must change the file digest"
                     );
                 }
             }

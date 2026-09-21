@@ -2,6 +2,7 @@ package com.gitnova.service.agent.workspace;
 
 import com.gitnova.gitobject.GitObjectReader;
 import com.gitnova.mapper.agent.AgentWorkspaceMapper;
+import com.gitnova.service.session.AgentSessionStore;
 import com.gitnova.storage.config.WorkspaceStorageProperties;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
@@ -22,9 +23,10 @@ public class LocalWorkspaceConfiguration {
     @Bean
     public LocalWorkspaceRegistry localWorkspaceRegistry(
             AgentWorkspaceMapper workspaceMapper,
-            WorkspaceStorageProperties storageProperties
+            WorkspaceStorageProperties storageProperties,
+            AgentSessionStore sessionStore
     ) {
-        return new LocalWorkspaceRegistry(workspaceMapper, storageProperties);
+        return new LocalWorkspaceRegistry(workspaceMapper, storageProperties, sessionStore);
     }
 
     @Bean

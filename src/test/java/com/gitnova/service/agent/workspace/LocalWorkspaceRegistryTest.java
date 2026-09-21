@@ -2,6 +2,7 @@ package com.gitnova.service.agent.workspace;
 
 import com.gitnova.entity.agent.AgentWorkspaceEntity;
 import com.gitnova.mapper.agent.AgentWorkspaceMapper;
+import com.gitnova.service.session.AgentSessionStore;
 import com.gitnova.storage.RepoKey;
 import com.gitnova.storage.config.WorkspaceStorageProperties;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
 
 @ExtendWith(MockitoExtension.class)
 class LocalWorkspaceRegistryTest {
@@ -48,7 +50,8 @@ class LocalWorkspaceRegistryTest {
 
         LocalWorkspaceRegistry registry = new LocalWorkspaceRegistry(
                 workspaceMapper,
-                new WorkspaceStorageProperties(tempDir)
+                new WorkspaceStorageProperties(tempDir),
+                mock(AgentSessionStore.class)
         );
         LocalWorkspaceRegistry.LocalWorkspaceState first = registry.require(workspaceId);
         LocalWorkspaceRegistry.LocalWorkspaceState second = registry.require(workspaceId);

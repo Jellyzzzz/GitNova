@@ -4,6 +4,7 @@ package com.gitnova.service.agent.persistence;
 public enum AgentStepType {
     SESSION_CREATED,
     WORKSPACE_MATERIALIZED,
+    WORKSPACE_STATE_OBSERVED,
     WORKSPACE_PROVISIONING_FAILED,
     USER_MESSAGE_RECEIVED,
     TASK_CREATED,

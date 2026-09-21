@@ -82,6 +82,27 @@ public interface AgentWorkspaceMapper
 
     @Update("""
             UPDATE agent_workspace
+            SET generation = #{generation},
+                content_fingerprint = #{fingerprint},
+                version = version + 1,
+                updated_at = UTC_TIMESTAMP(6)
+            WHERE workspace_id = #{workspaceId}
+              AND status = 'READY'
+              AND workspace_epoch = #{epoch}
+              AND generation = #{expectedGeneration}
+              AND content_fingerprint <=> #{expectedFingerprint}
+            """)
+    int updateObservedState(
+            @Param("workspaceId") String workspaceId,
+            @Param("epoch") long epoch,
+            @Param("expectedGeneration") long expectedGeneration,
+            @Param("expectedFingerprint") String expectedFingerprint,
+            @Param("generation") long generation,
+            @Param("fingerprint") String fingerprint
+    );
+
+    @Update("""
+            UPDATE agent_workspace
             SET writer_run_id = #{runId},
                 last_accepted_fencing_token = #{nextFencingToken},
                 version = version + 1,

@@ -1,5 +1,7 @@
 package com.gitnova.service.session;
 
+import com.gitnova.service.agent.workspace.WorkspaceExecutionPermit;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -30,6 +32,35 @@ public interface AgentSessionStore {
      * corresponding failure Step in the same transaction.
      */
     AgentSession failProvisioning(ProvisioningFailure failure);
+
+    /** Commits generation/fingerprint and its Session Step together, before publishing an observation. */
+    void recordWorkspaceState(WorkspaceStateChange change);
+
+    record WorkspaceStateChange(
+            String sessionId, String workspaceId, long epoch,
+            long generationBefore, String fingerprintBefore,
+            long generationAfter, String fingerprintAfter,
+            WorkspaceExecutionPermit executionPermit
+    ) {
+        public WorkspaceStateChange {
+            requireNonBlank(sessionId, "sessionId");
+            requireNonBlank(workspaceId, "workspaceId");
+            if (epoch < 0 || generationBefore < 0 || generationAfter < generationBefore) {
+                throw new IllegalArgumentException("Workspace coordinates must not regress");
+            }
+            if ((fingerprintBefore != null && !fingerprintBefore.matches("[0-9a-f]{64}"))
+                    || (fingerprintAfter != null && !fingerprintAfter.matches("[0-9a-f]{64}"))) {
+                throw new IllegalArgumentException("Workspace fingerprint must be SHA-256 or unknown");
+            }
+            if (generationAfter == generationBefore && fingerprintBefore != null
+                    && !Objects.equals(fingerprintBefore, fingerprintAfter)) {
+                throw new IllegalArgumentException("A changed known tree must advance generation");
+            }
+            if (executionPermit != null && !workspaceId.equals(executionPermit.workspaceId().toString())) {
+                throw new IllegalArgumentException("Execution permit belongs to another Workspace");
+            }
+        }
+    }
 
     Optional<AgentSession> findById(String sessionId);
 

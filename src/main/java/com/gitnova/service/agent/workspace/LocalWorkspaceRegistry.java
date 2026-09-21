@@ -2,6 +2,8 @@ package com.gitnova.service.agent.workspace;
 
 import com.gitnova.entity.agent.AgentWorkspaceEntity;
 import com.gitnova.mapper.agent.AgentWorkspaceMapper;
+import com.gitnova.service.session.AgentSessionStore;
+import com.gitnova.service.agent.execution.AgentExecutionPersistenceException;
 import com.gitnova.storage.RepoKey;
 import com.gitnova.storage.config.WorkspaceStorageProperties;
 
@@ -22,6 +24,8 @@ public final class LocalWorkspaceRegistry {
         private Long latestSuccessfulValidationGeneration;
         private String writerRunId;
         private long lastAcceptedFencingToken;
+        // Last committed DB coordinates; never advance these before the transaction returns.
+        private AgentWorkspaceEntity persistedState;
 
         private LocalWorkspaceState(
                 WorkspaceId workspaceId,
@@ -47,10 +51,7 @@ public final class LocalWorkspaceRegistry {
                 throw new IllegalArgumentException("generation must not be negative");
             }
             this.generation = generation;
-            this.contentFingerprint = Objects.requireNonNull(
-                    contentFingerprint,
-                    "contentFingerprint must not be null"
-            );
+            this.contentFingerprint = contentFingerprint;
             this.latestSuccessfulValidationGeneration = null;
             if (lastAcceptedFencingToken < 0) {
                 throw new IllegalArgumentException(
@@ -182,16 +183,19 @@ public final class LocalWorkspaceRegistry {
     private final ConcurrentHashMap<WorkspaceId, LocalWorkspaceState> states;
     private final AgentWorkspaceMapper workspaceMapper;
     private final Path workspaceBase;
+    private final AgentSessionStore sessionStore;
 
     public LocalWorkspaceRegistry() {
         this.states = new ConcurrentHashMap<>();
         this.workspaceMapper = null;
         this.workspaceBase = null;
+        this.sessionStore = null;
     }
 
     public LocalWorkspaceRegistry(
             AgentWorkspaceMapper workspaceMapper,
-            WorkspaceStorageProperties storageProperties
+            WorkspaceStorageProperties storageProperties,
+            AgentSessionStore sessionStore
     ) {
         this.states = new ConcurrentHashMap<>();
         this.workspaceMapper = Objects.requireNonNull(
@@ -200,10 +204,20 @@ public final class LocalWorkspaceRegistry {
         );
         Objects.requireNonNull(storageProperties, "storageProperties must not be null");
         this.workspaceBase = storageProperties.basePath().toAbsolutePath().normalize();
+        this.sessionStore = Objects.requireNonNull(sessionStore, "sessionStore must not be null");
     }
 
     public void register(WorkspaceHandle handle) {
         Objects.requireNonNull(handle, "handle must not be null");
+        if (workspaceMapper != null) {
+            // Activation has committed already. Do not reset a durable Workspace from an old handle.
+            LocalWorkspaceState state = require(handle.workspaceId());
+            if (!state.repoKey().equals(handle.repoKey()) || !state.source().equals(handle.source())
+                    || !state.root().equals(handle.root().toAbsolutePath().normalize())) {
+                throw new IllegalStateException("Workspace handle does not match persisted identity");
+            }
+            return;
+        }
         String contentFingerprint = WorkspaceTreeFingerprint.capture(handle.root());
         LocalWorkspaceState state = new LocalWorkspaceState(
                 handle.workspaceId(),
@@ -261,17 +275,39 @@ public final class LocalWorkspaceRegistry {
                 SnapshotScope.of(workspace.getBaseRevision()),
                 root,
                 Objects.requireNonNull(workspace.getGeneration(), "generation must be persisted"),
-                Objects.requireNonNull(
-                        workspace.getContentFingerprint(),
-                        "contentFingerprint must be persisted"
-                ),
+                workspace.getContentFingerprint(),
                 workspace.getWriterRunId(),
                 Objects.requireNonNull(
                         workspace.getLastAcceptedFencingToken(),
                         "lastAcceptedFencingToken must be persisted"
                 )
         );
+        loaded.persistedState = workspace;
         LocalWorkspaceState concurrent = states.putIfAbsent(workspaceId, loaded);
         return concurrent == null ? loaded : concurrent;
+    }
+
+    /** Called under the Workspace write lock, and under the provider lock for mutations. */
+    void persistState(LocalWorkspaceState state, WorkspaceExecutionPermit permit) {
+        if (sessionStore == null) return; // Explicit non-durable gateway used by isolated tests.
+        AgentWorkspaceEntity committed = Objects.requireNonNull(state.persistedState);
+        if (committed.getGeneration() == state.generation()
+                && Objects.equals(committed.getContentFingerprint(), state.contentFingerprint())) return;
+        try {
+            sessionStore.recordWorkspaceState(new AgentSessionStore.WorkspaceStateChange(
+                    committed.getSessionId(), state.workspaceId().toString(), committed.getWorkspaceEpoch(),
+                    committed.getGeneration(), committed.getContentFingerprint(),
+                    state.generation(), state.contentFingerprint(), permit));
+        } catch (AgentExecutionPersistenceException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            // Disk effects may already exist. Never report a durable success or roll back files here.
+            var failure = new AgentExecutionPersistenceException(AgentExecutionPersistenceException.Code.PERSISTENCE_FAILURE,
+                    "Could not persist observed Workspace state");
+            failure.initCause(exception);
+            throw failure;
+        }
+        committed.setGeneration(state.generation());
+        committed.setContentFingerprint(state.contentFingerprint());
     }
 }

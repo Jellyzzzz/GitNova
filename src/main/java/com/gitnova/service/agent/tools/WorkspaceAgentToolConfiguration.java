@@ -51,6 +51,11 @@ public class WorkspaceAgentToolConfiguration {
     }
 
     @Bean
+    public EditFileTool editFileTool(WorkspaceGateway workspaceGateway, ObjectMapper objectMapper) {
+        return new EditFileTool(workspaceGateway, objectMapper);
+    }
+
+    @Bean
     @ConditionalOnProperty(
             prefix = "gitnova.workspace.docker",
             name = "enabled",

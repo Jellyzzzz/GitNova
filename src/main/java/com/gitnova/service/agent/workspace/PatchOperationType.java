@@ -4,5 +4,6 @@ package com.gitnova.service.agent.workspace;
 public enum PatchOperationType {
     CREATE,
     UPDATE,
-    DELETE
+    DELETE,
+    EDIT
 }

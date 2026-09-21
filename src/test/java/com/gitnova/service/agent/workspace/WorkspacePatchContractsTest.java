@@ -68,7 +68,8 @@ class WorkspacePatchContractsTest {
                         PatchOperationType.CREATE,
                         "src/A.java",
                         "unexpected patch",
-                        "class A {}"
+                        "class A {}",
+                        null
                 )
         );
 
@@ -84,7 +85,8 @@ class WorkspacePatchContractsTest {
                         PatchOperationType.DELETE,
                         "src/A.java",
                         null,
-                        "unexpected content"
+                        "unexpected content",
+                        null
                 )
         );
     }
@@ -272,5 +274,30 @@ class WorkspacePatchContractsTest {
                         PatchOperation.delete(2, "src/C.java")
                 )
         );
+    }
+
+    @Test
+    void shouldValidateAndDefensivelyCopyExactEdits() {
+        var edits = new ArrayList<>(List.of(new PatchOperation.TextEdit("old", "")));
+        PatchOperation edit = PatchOperation.edit(0, "file.txt", edits);
+        edits.clear();
+        assertEquals(1, edit.edits().size());
+        assertThrows(UnsupportedOperationException.class, () -> edit.edits().clear());
+        assertThrows(IllegalArgumentException.class, () -> new PatchOperation.TextEdit("", "x"));
+        assertThrows(IllegalArgumentException.class, () -> new PatchOperation.TextEdit("x", null));
+        assertThrows(IllegalArgumentException.class, () -> new PatchOperation.TextEdit("x", "\0"));
+        assertThrows(IllegalArgumentException.class, () -> PatchOperation.edit(0, "file.txt", List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new PatchOperation(0, PatchOperationType.EDIT, "file.txt", "patch", null, edit.edits()));
+        assertThrows(IllegalArgumentException.class, () -> new PatchOperation(0, PatchOperationType.UPDATE, "file.txt", "patch", null, edit.edits()));
+        assertThrows(IllegalArgumentException.class, () -> PatchOperationResult.applied(edit, SHA_A, SHA_A));
+        assertThrows(IllegalArgumentException.class, () -> PatchOperationResult.applied(edit, null, SHA_B));
+    }
+
+    @Test
+    void shouldBoundCombinedEditInputInBytes() {
+        String text = "x".repeat(PatchOperation.MAX_EDIT_TEXT_BYTES);
+        var pair = new PatchOperation.TextEdit(text, text);
+        assertEquals(2, PatchOperation.edit(0, "file.txt", List.of(pair, pair)).edits().size());
+        assertThrows(IllegalArgumentException.class, () -> PatchOperation.edit(0, "file.txt", List.of(pair, pair, pair)));
     }
 }

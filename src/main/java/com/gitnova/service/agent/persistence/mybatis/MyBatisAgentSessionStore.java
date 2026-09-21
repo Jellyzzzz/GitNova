@@ -8,6 +8,7 @@ import com.gitnova.mapper.agent.AgentSessionMapper;
 import com.gitnova.mapper.agent.AgentWorkspaceMapper;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.AgentStepType;
+import com.gitnova.service.agent.execution.AgentExecutionPersistenceException;
 import com.gitnova.service.agent.workspace.SnapshotScope;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 import com.gitnova.service.session.AgentSession;
@@ -16,6 +17,7 @@ import com.gitnova.service.session.CreateSessionCommand;
 import com.gitnova.storage.RepoKey;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -211,6 +213,52 @@ public class MyBatisAgentSessionStore implements AgentSessionStore {
         return session == null
                 ? Optional.empty()
                 : Optional.of(toDomain(session, requireWorkspace(sessionId)));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordWorkspaceState(WorkspaceStateChange change) {
+        Objects.requireNonNull(change, "change must not be null");
+        // Same Session -> Workspace lock order as creation/activation. No filesystem work in this transaction.
+        AgentSessionEntity session = requireLockedSession(change.sessionId());
+        AgentWorkspaceEntity workspace = requireLockedWorkspace(session.getSessionId());
+        if (!"ACTIVE".equals(session.getStatus()) || !"READY".equals(workspace.getStatus())
+                || !change.workspaceId().equals(workspace.getWorkspaceId())
+                || !Objects.equals(change.epoch(), workspace.getWorkspaceEpoch())) {
+            throw new AgentExecutionPersistenceException(AgentExecutionPersistenceException.Code.STATE_CONFLICT,
+                    "Workspace identity or lifecycle changed before state persistence");
+        }
+        var permit = change.executionPermit();
+        if (permit != null && (!permit.runId().equals(workspace.getWriterRunId())
+                || permit.fencingToken() != workspace.getLastAcceptedFencingToken())) {
+            throw new AgentExecutionPersistenceException(AgentExecutionPersistenceException.Code.LEASE_LOST,
+                    "Workspace writer was superseded before state persistence");
+        }
+        // A committed response may have been lost. Return without appending a second logical event.
+        if (workspace.getGeneration() == change.generationAfter()
+                && Objects.equals(workspace.getContentFingerprint(), change.fingerprintAfter())) return;
+        if (workspaceMapper.updateObservedState(change.workspaceId(), change.epoch(),
+                change.generationBefore(), change.fingerprintBefore(),
+                change.generationAfter(), change.fingerprintAfter()) != 1) {
+            throw new AgentExecutionPersistenceException(AgentExecutionPersistenceException.Code.STATE_CONFLICT,
+                    "Persisted Workspace state changed; stale state cannot overwrite it");
+        }
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("workspaceId", change.workspaceId());
+        payload.put("generationBefore", change.generationBefore());
+        payload.put("generationAfter", change.generationAfter());
+        payload.put("fingerprintBefore", change.fingerprintBefore());
+        payload.put("fingerprintAfter", change.fingerprintAfter());
+        payload.put("stateVerified", change.fingerprintAfter() != null);
+        if (permit != null) {
+            payload.put("observedByRunId", permit.runId());
+            payload.put("fencingToken", permit.fencingToken());
+        }
+        String eventId = "workspace:" + change.workspaceId() + ":state:" + change.epoch()
+                + ":" + change.generationAfter() + ":"
+                + Objects.requireNonNullElse(change.fingerprintAfter(), "unverified");
+        eventAppender.append(AgentEventAppender.AppendCommand.sessionEvent(eventId, change.sessionId(),
+                AgentStepType.WORKSPACE_STATE_OBSERVED, payload, change.epoch(), change.generationAfter()));
     }
 
     @Override

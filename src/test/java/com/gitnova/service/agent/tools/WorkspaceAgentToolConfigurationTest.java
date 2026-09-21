@@ -3,6 +3,7 @@ package com.gitnova.service.agent.tools;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gitnova.gitobject.GitObjectReader;
 import com.gitnova.mapper.agent.AgentWorkspaceMapper;
+import com.gitnova.service.session.AgentSessionStore;
 import com.gitnova.service.agent.workspace.LocalWorkspaceConfiguration;
 import com.gitnova.service.agent.workspace.PatchBatchResult;
 import com.gitnova.service.agent.workspace.WorkspaceGateway;
@@ -39,6 +40,7 @@ class WorkspaceAgentToolConfigurationTest {
                     assertThat(context).hasSingleBean(SearchTextTool.class);
                     assertThat(context).hasSingleBean(GetWorkspaceDiffTool.class);
                     assertThat(context).hasSingleBean(ApplyPatchTool.class);
+                    assertThat(context).hasSingleBean(EditFileTool.class);
                     assertThat(context).hasSingleBean(RunCommandTool.class);
                 });
     }
@@ -49,6 +51,7 @@ class WorkspaceAgentToolConfigurationTest {
                 .withPropertyValues("gitnova.workspace.docker.enabled=true")
                 .withBean(ObjectMapper.class, ObjectMapper::new)
                 .withBean(AgentWorkspaceMapper.class, () -> mock(AgentWorkspaceMapper.class))
+                .withBean(AgentSessionStore.class, () -> mock(AgentSessionStore.class))
                 .withBean(GitObjectReader.class, () -> mock(GitObjectReader.class))
                 .withBean(
                         WorkspaceStorageProperties.class,
@@ -91,6 +94,7 @@ class WorkspaceAgentToolConfigurationTest {
                 .withUserConfiguration(WorkspaceAgentToolConfiguration.class)
                 .run(context -> {
                     assertThat(context).hasSingleBean(ApplyPatchTool.class);
+                    assertThat(context).hasSingleBean(EditFileTool.class);
                     assertThat(context).doesNotHaveBean(RunCommandTool.class);
                 });
     }

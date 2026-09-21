@@ -158,7 +158,11 @@ public final class ApplyPatchTool implements AgentTool {
                 command
         );
         JsonNode payload = objectMapper.valueToTree(batch);
+        return toToolResult(batch, payload);
+    }
 
+    // Both model-facing editors use the same state-bearing mutation result contract.
+    static ToolResult toToolResult(PatchBatchResult batch, JsonNode payload) {
         return switch (batch.status()) {
             case SUCCESS -> ToolResult.success(payload);
             case PARTIAL_SUCCESS -> ToolResult.partialSuccess(
@@ -255,27 +259,27 @@ public final class ApplyPatchTool implements AgentTool {
                 );
             }
 
-            PatchOperation parsed;
-            switch (type) {
+            PatchOperation parsed = switch (type) {
                 case CREATE -> {
                     rejectPresent(operationNode, "patch", type, index);
                     String content = requiredText(operationNode, "content", index, true);
                     totalTextBytes = addTextBytes(totalTextBytes, content, index);
-                    parsed = PatchOperation.create(index, filePath, content);
+                    yield PatchOperation.create(index, filePath, content);
                 }
                 case UPDATE -> {
                     rejectPresent(operationNode, "content", type, index);
                     String patch = requiredText(operationNode, "patch", index, false);
                     totalTextBytes = addTextBytes(totalTextBytes, patch, index);
-                    parsed = PatchOperation.update(index, filePath, patch);
+                    yield PatchOperation.update(index, filePath, patch);
                 }
                 case DELETE -> {
                     rejectPresent(operationNode, "patch", type, index);
                     rejectPresent(operationNode, "content", type, index);
-                    parsed = PatchOperation.delete(index, filePath);
+                    yield PatchOperation.delete(index, filePath);
                 }
-                default -> throw new IllegalStateException("Unhandled patch operation type");
-            }
+                case EDIT -> throw invalid("INVALID_PATCH_OPERATION_TYPE",
+                        "applyPatch supports CREATE, UPDATE, DELETE only; use the edit tool for exact text replacements");
+            };
             operations.add(parsed);
         }
 
@@ -285,7 +289,7 @@ public final class ApplyPatchTool implements AgentTool {
         );
     }
 
-    private ToolResult mapFailedBatch(PatchBatchResult batch, JsonNode payload) {
+    private static ToolResult mapFailedBatch(PatchBatchResult batch, JsonNode payload) {
         PatchOperationResult failure = batch.operationResults()
                 .stream()
                 .filter(result -> result.status() == PatchOperationStatus.FAILED)
@@ -298,7 +302,7 @@ public final class ApplyPatchTool implements AgentTool {
             case "INVALID_WORKSPACE_PATH", "UNSAFE_WORKSPACE_PATH", "RESERVED_WORKSPACE_PATH" ->
                     ToolStatus.PERMISSION_DENIED;
             case "FILE_NOT_FOUND" -> ToolStatus.NOT_FOUND;
-            case "INVALID_UNIFIED_DIFF", "FILE_NOT_UTF8_TEXT", "MIXED_LINE_ENDINGS",
+            case "INVALID_UNIFIED_DIFF", "FILE_NOT_UTF8_TEXT", "MIXED_LINE_ENDINGS", "INVALID_EDIT_TEXT", "INVALID_EDIT_COUNT",
                     "UNSUPPORTED_FILE_TYPE", "FILE_TOO_LARGE" -> ToolStatus.INVALID_ARGUMENT;
             case "FILESYSTEM_FAILURE", "ATOMIC_WRITE_UNAVAILABLE", "WORKSPACE_UNAVAILABLE" ->
                     ToolStatus.INTERNAL_ERROR;

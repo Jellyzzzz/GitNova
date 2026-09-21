@@ -26,6 +26,23 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ToolRegistryTest {
 
+    @Test
+    void persistenceFailureMustEscapeInsteadOfInvitingAModelRetry() {
+        var tool = org.mockito.Mockito.mock(com.gitnova.service.agent.tool.AgentTool.class);
+        var arguments = JsonNodeFactory.instance.objectNode().put("message", "hello");
+        org.mockito.Mockito.when(tool.definition()).thenReturn(new com.gitnova.dto.ToolDefinition(
+                "writeTool", "test", schemaRequiringString("message")));
+        org.mockito.Mockito.when(tool.requiredCapabilities()).thenReturn(Set.of());
+        var execution = AgentTestContexts.toolExecution(createRunContext(), 0, "write-call");
+        var failure = new com.gitnova.service.agent.execution.AgentExecutionPersistenceException(
+                com.gitnova.service.agent.execution.AgentExecutionPersistenceException.Code.PERSISTENCE_FAILURE,
+                "state was not committed");
+        org.mockito.Mockito.when(tool.execute(execution, arguments)).thenThrow(failure);
+        var registry = new ToolRegistry(List.of(tool));
+        assertSame(failure, assertThrows(com.gitnova.service.agent.execution.AgentExecutionPersistenceException.class,
+                () -> registry.execute(execution, "writeTool", arguments)));
+    }
+
     private AgentRunContext createRunContext() {
         return new AgentRunContext(
                 "context-1",

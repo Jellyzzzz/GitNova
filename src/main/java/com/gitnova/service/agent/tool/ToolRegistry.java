@@ -3,6 +3,7 @@ package com.gitnova.service.agent.tool;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.gitnova.dto.ToolDefinition;
 import com.gitnova.service.agent.runtime.AgentCapabilityPolicy;
+import com.gitnova.service.agent.execution.AgentExecutionPersistenceException;
 import com.gitnova.service.agent.tool.schema.ToolSchemaValidator;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
@@ -109,6 +110,10 @@ public class ToolRegistry {
                 return ToolResult.error(ToolStatus.INTERNAL_ERROR,"NULL_TOOL_RESULT","Tool returned no result",false);
             }
             return result;
+        }catch (AgentExecutionPersistenceException exception) {
+            // A disk effect may exist without a committed observation. Stop the Run;
+            // do not turn a durable-state failure into a model-correctable tool error.
+            throw exception;
         }catch (Exception e){
             logger.error(
                     "Tool execution failed: runId={}, turn={}, toolCallId={}, toolName={}",
