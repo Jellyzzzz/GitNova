@@ -87,41 +87,19 @@ public final class CompletionInspector {
             );
         }
 
-        if (diff.files().isEmpty()) {
-            return CompletionDecision.accepted(
-                    new AgentCompletionOutcome(
-                            CompletionDisposition.NO_CHANGES,
-                            draft,
-                            diff,
-                            null
-                    )
-            );
-        }
+        // This is an optional observed command result, not a task-completion oracle.
+        // All command outcomes (including failures) remain in TOOL_RESULT history.
+        // The model's free-text claims remain unverified; do not infer their truth from argv.
         ValidationEvidence validation = state.latestSuccessfulValidation().orElse(null);
-        if (validation == null) {
-            return correctable(
-                    "Workspace changes require a successful validation"
-            );
-        }
-
-        if (validation.generation()
-                != currentGeneration) {
-            return correctable(
-                    "The latest validation belongs to a stale generation"
-            );
-        }
-
-        boolean validationClaimed = draft.claimedValidations().stream()
-                .anyMatch(claim -> claim.argv().equals(validation.argv()));
-        if (!validationClaimed) {
-            return correctable(
-                    "claimedValidations must include the latest successful validation command"
-            );
+        if (validation != null && validation.generation() != currentGeneration) {
+            validation = null;
         }
 
         return CompletionDecision.accepted(
                 new AgentCompletionOutcome(
-                        CompletionDisposition.CHANGES_READY,
+                        diff.files().isEmpty()
+                                ? CompletionDisposition.NO_CHANGES
+                                : CompletionDisposition.CHANGES_READY,
                         draft,
                         diff,
                         validation

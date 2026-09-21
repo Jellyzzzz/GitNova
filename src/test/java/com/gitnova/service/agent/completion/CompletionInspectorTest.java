@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CompletionInspectorTest {
@@ -64,7 +65,7 @@ class CompletionInspectorTest {
     }
 
     @Test
-    void shouldRequireFreshHarnessValidationForCanonicalChanges() {
+    void shouldAcceptChangesWithoutValidationAndNotPromoteStaleEvidence() {
         CompletionDecision missing = inspector(
                 new InspectingGateway(7, diff(7, List.of(CHANGED_FILE)))
         ).inspect(
@@ -72,8 +73,9 @@ class CompletionInspectorTest {
                 RunStateView.empty(),
                 finishResult(draft(7, List.of(CHANGED_FILE), List.of()))
         );
-        assertTrue(missing.correctable());
-        assertTrue(missing.feedback().get(0).contains("successful validation"));
+        assertTrue(missing.accepted());
+        assertFalse(missing.correctable());
+        assertNull(missing.outcome().validation());
 
         ValidationEvidence stale = validation(6);
         CompletionDecision staleDecision = inspector(
@@ -87,8 +89,10 @@ class CompletionInspectorTest {
                         List.of(new ValidationClaim(stale.argv(), "passed"))
                 ))
         );
-        assertTrue(staleDecision.correctable());
-        assertTrue(staleDecision.feedback().get(0).contains("stale generation"));
+        assertTrue(staleDecision.accepted());
+        assertNull(staleDecision.outcome().validation());
+        // Historical prose is retained as a claim, never promoted to current evidence.
+        assertEquals("passed", staleDecision.outcome().draft().claimedValidations().get(0).result());
     }
 
     @Test
@@ -118,7 +122,7 @@ class CompletionInspectorTest {
     }
 
     @Test
-    void shouldCorrectAgentFileOutsideCanonicalDiffOrValidationClaimMismatch() {
+    void shouldCorrectAgentFileOutsideCanonicalDiff() {
         ValidationEvidence validation = validation(7);
         CompletionDecision fileMismatch = inspector(
                 new InspectingGateway(7, diff(7, List.of(CHANGED_FILE)))
@@ -129,8 +133,12 @@ class CompletionInspectorTest {
         );
         assertTrue(fileMismatch.correctable());
         assertTrue(fileMismatch.feedback().get(0).contains("agentModifiedFiles"));
+    }
 
-        CompletionDecision validationMismatch = inspector(
+    @Test
+    void shouldNotTreatModelClaimsOrCommandOrderAsCompletionAuthority() {
+        ValidationEvidence validation = validation(7);
+        CompletionDecision decision = inspector(
                 new InspectingGateway(7, diff(7, List.of(CHANGED_FILE)))
         ).inspect(
                 context(),
@@ -141,8 +149,44 @@ class CompletionInspectorTest {
                         List.of(new ValidationClaim(List.of("mvn", "verify"), "passed"))
                 ))
         );
-        assertTrue(validationMismatch.correctable());
-        assertTrue(validationMismatch.feedback().get(0).contains("claimedValidations"));
+        assertTrue(decision.accepted());
+        // The actual command is mvn test, regardless of the model's mvn verify claim.
+        // Accepting the report does not certify its free-text assertion.
+        assertEquals(List.of("mvn", "test"), decision.outcome().validation().argv());
+        assertEquals(List.of("mvn", "verify"),
+                decision.outcome().draft().claimedValidations().get(0).argv());
+    }
+
+    @Test
+    void shouldRetainObservedCommandForReadOnlyInvestigation() {
+        ValidationEvidence validation = validation(4);
+        CompletionDecision decision = inspector(
+                new InspectingGateway(4, diff(4, List.of()))
+        ).inspect(context(), new RunStateView(Optional.of(validation)),
+                finishResult(draft(4, List.of(), List.of())));
+
+        assertTrue(decision.accepted());
+        assertEquals(CompletionDisposition.NO_CHANGES, decision.outcome().disposition());
+        assertEquals(validation, decision.outcome().validation());
+    }
+
+    @Test
+    void shouldSerializeOptionalEvidenceWithoutChangingOutcomeShape() throws Exception {
+        AgentCompletionOutcome withoutValidation = new AgentCompletionOutcome(
+                CompletionDisposition.CHANGES_READY,
+                draft(7, List.of(CHANGED_FILE), List.of()),
+                diff(7, List.of(CHANGED_FILE)), null);
+        AgentCompletionOutcome withValidation = new AgentCompletionOutcome(
+                CompletionDisposition.CHANGES_READY,
+                withoutValidation.draft(), withoutValidation.canonicalDiff(), validation(7));
+
+        for (AgentCompletionOutcome outcome : List.of(withoutValidation, withValidation)) {
+            assertEquals(outcome, objectMapper.readValue(
+                    objectMapper.writeValueAsString(outcome), AgentCompletionOutcome.class));
+        }
+        assertThrows(IllegalArgumentException.class, () -> new AgentCompletionOutcome(
+                CompletionDisposition.CHANGES_READY,
+                withoutValidation.draft(), withoutValidation.canonicalDiff(), validation(6)));
     }
 
     @Test

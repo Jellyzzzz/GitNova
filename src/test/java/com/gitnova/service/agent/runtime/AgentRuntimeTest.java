@@ -27,6 +27,7 @@ import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
 import com.gitnova.service.agent.tools.FinishTaskTool;
+import com.gitnova.service.agent.tools.RunCommandTool;
 import com.gitnova.service.agent.workspace.PatchBatchResult;
 import com.gitnova.service.agent.workspace.SnapshotScope;
 import com.gitnova.service.agent.workspace.WorkspaceBinding;
@@ -44,6 +45,8 @@ import ch.qos.logback.core.read.ListAppender;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -51,6 +54,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 
 class AgentRuntimeTest {
 
@@ -158,6 +164,78 @@ class AgentRuntimeTest {
                 result.completionOutcome().validation().argv()
         );
         assertEquals(1, result.completionOutcome().validation().generation());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void shouldPreserveFailedCommandFeedbackWithoutForcingAnotherValidation(boolean sameCheckFails)
+            throws Exception {
+        // Reproduce the live sequence: three passing checks, then an all-suite failure.
+        // Also cover the same check later failing: never present the old pass as latest evidence.
+        WorkspaceGateway workspace = spy(new InspectingWorkspace(1, List.of(CHANGED_FILE)));
+        AtomicInteger executions = new AtomicInteger();
+        doAnswer(invocation -> {
+            int exitCode = executions.incrementAndGet() == 4 ? 1 : 0;
+            return new WorkspaceGateway.CommandResult(
+                    WorkspaceGateway.CommandStatus.COMPLETED, 1, 1, 1, exitCode, 45,
+                    exitCode == 0 ? "PASS" : "FAIL: unresolved cases", "", false, false, null, null);
+        }).when(workspace).runCommand(any(), any(), any());
+        List<ToolCall> calls = new ArrayList<>();
+        List<String> suites = List.of("pricing", "contract", "inventory", sameCheckFails ? "pricing" : "all");
+        ObjectNode finish = finishArguments(1, List.of(CHANGED_FILE), null);
+        finish.put("summary", sameCheckFails
+                ? "Pricing was changed, but the last pricing check failed; the fix is incomplete."
+                : "Pricing changes are ready; the full suite still has unresolved cases.");
+        ((com.fasterxml.jackson.databind.node.ArrayNode) finish.path("risks"))
+                .add("The last check failed; this report does not claim all tests passed.");
+        ((com.fasterxml.jackson.databind.node.ArrayNode) finish.path("followUps"))
+                .add("Investigate the remaining failures using the recorded output.");
+        for (int index = 0; index < suites.size(); index++) {
+            ObjectNode args = objectMapper.createObjectNode();
+            args.put("expectedGeneration", 1);
+            args.putArray("argv").add("sh").add("run-tests.sh").add(suites.get(index));
+            args.put("workingDirectory", ".");
+            args.put("timeoutSeconds", 30);
+            args.put("purpose", "Inspect validation results");
+            calls.add(call("check-" + index, "runCommand", args));
+            var claim = ((com.fasterxml.jackson.databind.node.ArrayNode) finish.path("claimedValidations"))
+                    .addObject();
+            claim.set("argv", args.path("argv").deepCopy());
+            claim.put("result", index == 3 ? "exitCode=1; unresolved failures" : "exitCode=0 at this execution");
+        }
+        FakeModelGateway gateway = new FakeModelGateway()
+                .enqueueResponse(new ModelResponse("checks", null, calls, ModelUsage.unknown(), ModelFinishReason.TOOL_CALLS))
+                .enqueueResponse(toolResponse("report", call("finish", FinishTaskTool.NAME, finish), ModelUsage.unknown()));
+        AgentRuntime runtime = runtime(gateway, workspace,
+                List.of(new RunCommandTool(workspace, objectMapper), new FinishTaskTool(objectMapper)));
+
+        AgentRunResult result = runtime.run(context("Work on pricing; report failures and remaining work honestly"));
+
+        assertEquals(AgentRunStatus.COMPLETED, result.status());
+        assertEquals(AgentTerminationReason.FINISH_SUCCEEDED, result.terminationReason());
+        assertEquals(2, result.modelCallCount());
+        assertEquals(5, result.toolCallCount());
+        assertEquals(4, executions.get());
+        assertNull(result.completionOutcome().validation());
+        assertEquals(4, result.completionOutcome().draft().claimedValidations().size());
+        assertEquals(1, result.completionOutcome().draft().followUps().size());
+        assertEquals(List.of(CHANGED_FILE), result.completionOutcome().canonicalDiff().files().stream()
+                .map(WorkspaceGateway.DiffFile::filePath).toList());
+
+        // Failure is already available to the next model decision, not erased by terminal inspection.
+        List<ModelMessage> observations = gateway.receivedRequests().get(1).messages().stream()
+                .filter(message -> message.role() == ModelRole.TOOL).toList();
+        assertEquals(4, observations.size());
+        for (int index = 0; index < observations.size(); index++) {
+            assertEquals("check-" + index, observations.get(index).toolCallId());
+            JsonNode resultJson = objectMapper.readTree(observations.get(index).content());
+            assertEquals("SUCCESS", resultJson.path("status").asText());
+            assertEquals(index == 3 ? 1 : 0, resultJson.path("payload").path("exitCode").asInt());
+        }
+        assertTrue(observations.get(3).content().contains("FAIL: unresolved cases"));
+        assertFalse(gateway.receivedRequests().get(1).messages().stream()
+                .anyMatch(message -> message.content() != null
+                        && message.content().contains("completion draft was rejected")));
     }
 
     @Test
