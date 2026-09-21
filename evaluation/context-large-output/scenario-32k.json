@@ -1,0 +1,43 @@
+{
+  "scenario": "context-large-output-pricing-32k",
+  "scope": "One repair Task per fresh Session and Workspace; no inherited user history",
+  "model": "deepseek-v4-flash",
+  "thinkingMode": "disabled",
+  "temperature": 0,
+  "experiment": {
+    "contextWindowTokens": 32000,
+    "safetyMarginTokens": 1024,
+    "summaryTriggerRatio": 0.8,
+    "compactTriggerRatio": 0.9,
+    "keepRecentGroups": 2,
+    "maxOutputTokens": 2048,
+    "maxModelCalls": 14,
+    "maxToolCalls": 35,
+    "maxInlineTokens": 4096,
+    "maxPreviewTokens": 1024
+  },
+  "arms": {
+    "A": {"externalization": false, "summarization": false},
+    "B": {"externalization": true, "summarization": false},
+    "C": {"externalization": false, "summarization": true},
+    "D": {"externalization": true, "summarization": true}
+  },
+  "publicRepository": "repository",
+  "taskPrompt": "TASK.md",
+  "heldOutOracle": "oracle",
+  "editableFiles": [
+    "src/main/java/pricing/DiscountPolicy.java",
+    "src/main/java/pricing/ShippingPolicy.java"
+  ],
+  "testCommand": "sh run-tests.sh",
+  "expectedBaselineFailures": 7,
+  "publicCases": 160,
+  "hiddenCases": 2125,
+  "notes": [
+    "Only contextWindowTokens and summaryTriggerRatio differ from the original 18k experiment.",
+    "Trigger ratios apply to the dynamic budget after subtracting fixed prompts/tools, output reserve and safety margin.",
+    "Set server flags for each arm and verify the frozen execution config after HTTP submission.",
+    "Keep readArtifact and identical tool definitions in all arms; do not force summarization.",
+    "Record zero summary calls as zero, preserve failures, and include summary usage in total tokens."
+  ]
+}

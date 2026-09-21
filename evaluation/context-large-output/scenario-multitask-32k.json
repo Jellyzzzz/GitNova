@@ -1,0 +1,39 @@
+{
+  "scenario": "context-multitask-pricing-32k",
+  "scope": "Four fresh Sessions, three sequential Tasks per Session; no restart or reset within a Session",
+  "model": "deepseek-v4-flash",
+  "thinkingMode": "disabled",
+  "temperature": 0,
+  "experiment": {
+    "callTimeoutSeconds": 60,
+    "readTimeoutSeconds": 60,
+    "contextWindowTokens": 32000,
+    "safetyMarginTokens": 1024,
+    "summaryTriggerRatio": 0.8,
+    "compactTriggerRatio": 0.9,
+    "keepRecentGroups": 2,
+    "maxOutputTokens": 4096,
+    "maxModelCalls": 14,
+    "maxToolCalls": 35,
+    "maxInlineTokens": 4096,
+    "maxPreviewTokens": 1024
+  },
+  "arms": {
+    "A": {"externalization": false, "summarization": false},
+    "B": {"externalization": true, "summarization": false},
+    "C": {"externalization": false, "summarization": true},
+    "D": {"externalization": true, "summarization": true}
+  },
+  "tasks": [
+    {"name": "repair", "file": "TASK.md", "editableFiles": ["src/main/java/pricing/DiscountPolicy.java", "src/main/java/pricing/ShippingPolicy.java"]},
+    {"name": "regression", "file": "followups/multi-02-regression.md", "editableFiles": ["src/test/java/pricing/EdgeRegression.java", "run-tests.sh"]},
+    {"name": "delivery-review", "file": "followups/multi-03-delivery-review.md", "editableFiles": []}
+  ],
+  "notes": [
+    "Next run uses 4096 output tokens; archived 20260920 results used 2048 and are unchanged.",
+    "A failed predecessor remains failed; subsequent requests are new Tasks, never a replay or a reset.",
+    "All task messages acknowledge actual preceding state, not assumed success.",
+    "Usage is counted per Run and includes summary calls; missing usage is explicitly unknown.",
+    "No forced summary, hand-corrected summary or hidden oracle is sent to the model."
+  ]
+}

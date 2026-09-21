@@ -1,0 +1,55 @@
+{
+  "scenario": "context-large-output-pricing",
+  "scope": "One repair Task per fresh Session and Workspace; no inherited user history",
+  "model": "deepseek-v4-flash",
+  "thinkingMode": "disabled",
+  "temperature": 0,
+  "experiment": {
+    "contextWindowTokens": 18000,
+    "safetyMarginTokens": 1024,
+    "summaryTriggerRatio": 0.6,
+    "compactTriggerRatio": 0.9,
+    "keepRecentGroups": 2,
+    "maxOutputTokens": 2048,
+    "maxModelCalls": 14,
+    "maxToolCalls": 35,
+    "maxInlineTokens": 4096,
+    "maxPreviewTokens": 1024
+  },
+  "arms": {
+    "A": {
+      "externalization": false,
+      "summarization": false
+    },
+    "B": {
+      "externalization": true,
+      "summarization": false
+    },
+    "C": {
+      "externalization": false,
+      "summarization": true
+    },
+    "D": {
+      "externalization": true,
+      "summarization": true
+    }
+  },
+  "publicRepository": "repository",
+  "taskPrompt": "TASK.md",
+  "heldOutOracle": "oracle",
+  "editableFiles": [
+    "src/main/java/pricing/DiscountPolicy.java",
+    "src/main/java/pricing/ShippingPolicy.java"
+  ],
+  "testCommand": "sh run-tests.sh",
+  "expectedBaselineFailures": 7,
+  "publicCases": 160,
+  "hiddenCases": 2125,
+  "notes": [
+    "The 18000 limit is an experimental budget, not the provider's advertised capacity.",
+    "Arm switches are an evaluation specification, not currently wired runtime settings.",
+    "Keep readArtifact and the same tool definitions in all arms.",
+    "Do not force summary invocation; record trigger count, including zero.",
+    "Provider usage, response model identity, latency, summary costs, and independent pass rate must be measured separately."
+  ]
+}
