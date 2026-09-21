@@ -102,6 +102,20 @@ class ContextPreparationTest {
         verifyNoInteractions(steps);
     }
 
+    @Test
+    void disablingSummaryRetainsSessionHistoryAndStillEnforcesInputLimit() {
+        var disabled = new ContextBudget(1200, 0, .8, .9, 1, false);
+        originalTokens = 1100; // Above both triggers, but fits the input limit.
+        assertSame(request.messages(), assembler.assemble(request, disabled, usage, context));
+        assertTrue(request.messages().toString().contains("Old detailed investigation"));
+        assertFalse(assembler.attemptedSummary());
+        verifyNoInteractions(model, appender);
+        originalTokens = 1101;
+        assertThrows(ContextAssembler.PreparationException.class,
+                () -> assembler.assemble(request, disabled, usage, context));
+        verifyNoInteractions(model, appender);
+    }
+
     @ParameterizedTest
     @ValueSource(longs = {900, 1000, 1101}) // exactly a, exactly b, and above the input limit: summary first
     void thresholdsSummarizeOnceAndPreserveSystemTaskAndStandaloneFeedback(long inputTokens) {
@@ -158,6 +172,29 @@ class ContextPreparationTest {
         assertEquals(request.messages(), nextRun.assemble(nextRequest(), budget, usage, context));
         verify(model, times(1)).complete(any());
         assertNull(latest("CONTEXT_SUMMARY_CREATED"));
+    }
+
+    @Test
+    void summaryGatewayFailureKeepsRawHistoryAndBoundsRetriesAcrossRuns() {
+        doThrow(new ModelGatewayException(ModelGatewayErrorCode.PROVIDER_UNAVAILABLE,
+                "Temporary provider failure", true, null)).when(model).complete(any());
+
+        assertEquals(request.messages(), assembler.assemble(request, budget, usage, context));
+        assertTrue(latest("CONTEXT_SUMMARY_RESULT").getPayloadJson().contains("FAILED_ModelGatewayException"));
+        var restored = assembler(service.load("session").control());
+        assertEquals(request.messages(), restored.assemble(nextRequest(), budget, usage, context));
+        verify(model, times(1)).complete(any());
+
+        originalTokens = 1000; // The urgent threshold permits one further attempt, then stops.
+        assertThrows(ContextAssembler.PreparationException.class,
+                () -> restored.assemble(nextRequest(), budget, usage, context));
+        var afterFailure = assembler(service.load("session").control());
+        assertThrows(ContextAssembler.PreparationException.class,
+                () -> afterFailure.assemble(nextRequest(), budget, usage, context));
+        verify(model, times(2)).complete(any());
+        assertNull(latest("CONTEXT_SUMMARY_CREATED"));
+        assertTrue(service.load("session").modelMessages(system, null, "current", "Add tests").toString()
+                .contains("Old detailed investigation"));
     }
 
     @Test

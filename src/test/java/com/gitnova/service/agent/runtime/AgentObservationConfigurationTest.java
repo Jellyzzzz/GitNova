@@ -120,6 +120,12 @@ class AgentObservationConfigurationTest {
 
         var properties = Binder.get(environment).bind("gitnova.agent.runtime", AgentRuntimeProperties.class).get();
         assertEquals(new ContextBudget(64000, 3000, 0.7, 0.95, 6), properties.context());
+        environment.withProperty("gitnova.agent.runtime.context.summary-enabled", "false")
+                .withProperty("gitnova.agent.runtime.observation.externalization-enabled", "false");
+        var disabled = Binder.get(environment).bind("gitnova.agent.runtime", AgentRuntimeProperties.class).get();
+        assertFalse(disabled.context().summaryEnabled());
+        assertFalse(disabled.observation().externalizationEnabled());
+        assertEquals(2048, disabled.observation().maxInlineTokens());
     }
 
     @Test

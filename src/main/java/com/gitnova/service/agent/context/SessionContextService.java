@@ -122,7 +122,12 @@ public class SessionContextService {
                     }
                     case "MODEL_RESPONSE" -> {
                         ModelResponsePayload response = mapper.treeToValue(payload, ModelResponsePayload.class);
-                        group = new Group(step, response);
+                        // Empty interrupted responses remain durable facts, but are not valid assistant messages.
+                        if (!response.toolCalls().isEmpty() || (response.text() != null && !response.text().isBlank())) {
+                            group = new Group(step, response);
+                        } else if (response.finishReason() == ModelFinishReason.STOP || response.finishReason() == ModelFinishReason.TOOL_CALLS) {
+                            throw new IllegalStateException("Completed model response must have usable content");
+                        }
                         var input = modelInputs.get(step.getRunId() + ":" + response.modelCallId());
                         // Only this main-model response may establish a usage anchor. Never sum across calls.
                         anchor = input == null || response.usage().inputTokens() == null ? null

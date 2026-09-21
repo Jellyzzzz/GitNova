@@ -28,9 +28,9 @@ public final class ModelGatewayException extends RuntimeException {
      * Creates a classified failure without exposing a raw provider response body.
      *
      * @param errorCode stable, provider-neutral category used by AgentRuntime
-     * @param message sanitized diagnostic safe for logs and the context trace
+     * @param message diagnostic for restricted inspection; may contain untrusted provider text, not for ordinary logs
      * @param retryable whether retrying the exact same request later may succeed
-     * @param providerStatusCode provider HTTP status; null for transport/parser failures
+     * @param providerStatusCode provider HTTP status when headers were received, including a malformed HTTP 200 body
      * @param providerErrorCode optional provider machine code such as {@code rate_limit_error}
      * @param providerRequestId optional provider correlation id from a response header/body
      * @param retryAfter optional provider backoff hint; Runtime owns the actual retry policy

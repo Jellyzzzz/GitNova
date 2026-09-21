@@ -43,6 +43,13 @@ class ToolObservationPreviewTest {
     }
 
     @Test
+    void disabledExternalizationKeepsLargeResultsInlineWithoutChangingThresholds() {
+        var result = ToolResult.success(mapper.createObjectNode().put("stdout", "log line\n".repeat(5000)));
+        assertTrue(renderer.exceedsInlineBudget(result, new ObservationPolicy(4096, 1024)));
+        assertFalse(renderer.exceedsInlineBudget(result, new ObservationPolicy(4096, 1024, false)));
+    }
+
+    @Test
     void shouldIncludeArtifactAndPreviewMetadataInPreviewBudget() {
         var result = ToolResult.success(mapper.createObjectNode().put("stdout", "log line\n".repeat(5000)));
         var preview = renderer.preview("runCommand", result, ref, 400);

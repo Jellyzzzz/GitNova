@@ -1,10 +1,17 @@
 package com.gitnova.service.agent.context;
 
 import org.springframework.boot.context.properties.bind.ConstructorBinding;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /** Immutable budget configuration; request measurements are never stored here. */
 public record ContextBudget(long contextWindowTokens, long safetyMarginTokens,
-                            double summaryTriggerRatio, double compactTriggerRatio, int keepRecentGroups) {
+                            double summaryTriggerRatio, double compactTriggerRatio, int keepRecentGroups,
+                            @DefaultValue("true") boolean summaryEnabled) {
+    public ContextBudget(long contextWindowTokens, long safetyMarginTokens,
+                         double summaryTriggerRatio, double compactTriggerRatio, int keepRecentGroups) {
+        this(contextWindowTokens, safetyMarginTokens, summaryTriggerRatio, compactTriggerRatio, keepRecentGroups, true);
+    }
+
     public ContextBudget(long contextWindowTokens, long safetyMarginTokens) {
         this(contextWindowTokens, safetyMarginTokens, 0.8, 0.9, 4);
     }

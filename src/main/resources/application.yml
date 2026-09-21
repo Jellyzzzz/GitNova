@@ -110,7 +110,8 @@ gitnova:
     base-url: ${LLM_BASE_URL:https://api.deepseek.com}
     model: ${LLM_MODEL:deepseek-v4-flash}
     thinking-mode: ${LLM_THINKING_MODE:disabled}
-    timeout: 60                   # 秒，LLM响应可能较慢
+    timeout: ${LLM_TIMEOUT_SECONDS:60} # 整次请求的总时限，单位秒，必须 > 0
+    read-timeout: ${LLM_READ_TIMEOUT_SECONDS:${gitnova.llm.timeout}} # 单次等待响应数据的时限，默认跟随总时限
 
   # 存储策略（Phase 1 接口，Phase 2 起用）
   storage:
@@ -152,10 +153,11 @@ gitnova:
       max-tool-calls: 50
       max-protocol-corrections: 1
       max-final-draft-corrections: 1
-      max-output-tokens: 4096
+      max-output-tokens: ${AGENT_MAX_OUTPUT_TOKENS:4096}
       temperature: 0.0
       # Explicit model-matched capacity; no guessed provider window or duplicate output reserve.
       context:
+        summary-enabled: ${AGENT_CONTEXT_SUMMARY_ENABLED:true}
         context-window-tokens: ${AGENT_CONTEXT_WINDOW_TOKENS}
         safety-margin-tokens: ${AGENT_CONTEXT_SAFETY_MARGIN_TOKENS}
         # Initial experiment settings, not measured optima.
@@ -163,5 +165,6 @@ gitnova:
         compact-trigger-ratio: ${AGENT_CONTEXT_COMPACT_TRIGGER_RATIO:0.9}
         keep-recent-groups: ${AGENT_CONTEXT_KEEP_RECENT_GROUPS:4}
       observation:
+          externalization-enabled: ${AGENT_OBSERVATION_EXTERNALIZATION_ENABLED:true}
           max-inline-tokens: ${AGENT_OBSERVATION_MAX_INLINE_TOKENS:4096}
           max-preview-tokens: ${AGENT_OBSERVATION_MAX_PREVIEW_TOKENS:1024}

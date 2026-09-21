@@ -357,6 +357,11 @@ public final class AgentRuntime {
             try {
                 response = modelGateway.complete(request);
             } catch (ModelGatewayException exception) {
+                // Do not log exception messages, bodies, credentials or untrusted provider headers.
+                logger.warn("Model gateway failed: runId={}, requestId={}, errorCode={}, httpStatus={}, retryable={}, retryAfter={}, causeType={}",
+                        context.context().runId(), request.requestId(), exception.errorCode(), exception.providerStatusCode(),
+                        exception.retryable(), exception.retryAfter(),
+                        exception.getCause() == null ? "none" : exception.getCause().getClass().getSimpleName());
                 return terminate(state, AgentTerminationReason.MODEL_GATEWAY_FAILURE);
             }
             executionControl.requireLease();
@@ -366,7 +371,10 @@ public final class AgentRuntime {
             }
             state.modelUsages.add(response.usage());
             if (state.contextUsage != null) state.contextUsage.accept(measuredInput, response.usage());
-            state.messages.add(messageFactory.assistant(response));
+            // Interrupted generation may have no usable content. Keep its journal/usage, not an empty chat message.
+            if (response.hasToolCalls() || (response.text() != null && !response.text().isBlank())) {
+                state.messages.add(messageFactory.assistant(response));
+            }
 
             Optional<AgentRunResult> outcome = switch (response.finishReason()) {
                 case TOOL_CALLS -> handleToolCalls(

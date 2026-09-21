@@ -93,6 +93,20 @@ class AgentRuntimeJournalTest {
                 payload.decision().outcome().draft().summary().equals("Observed repository state")));
     }
 
+    @Test
+    void interruptedEmptyResponseIsStillJournaledBeforeTermination() {
+        var usage = new ModelUsage(20000, 2048, 22048);
+        doReturn(new ModelResponse("interrupted", null, List.of(), usage, ModelFinishReason.LENGTH)).when(model).complete(any());
+
+        var result = run();
+
+        assertEquals(AgentTerminationReason.MODEL_OUTPUT_LENGTH, result.terminationReason());
+        assertEquals(List.of("started", "response"), actions);
+        verify(journal).appendModelResponse(eq(scope), argThat(payload -> payload.finishReason() == ModelFinishReason.LENGTH
+                && payload.toolCalls().isEmpty() && payload.usage().equals(usage)));
+        verify(tools, never()).execute(any(), anyString(), any());
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"started", "response", "result", "decision"})
     void stopsImmediatelyWhenJournalCannotCommit(String boundary) {

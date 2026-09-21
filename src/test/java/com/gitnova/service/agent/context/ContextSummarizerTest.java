@@ -34,6 +34,26 @@ class ContextSummarizerTest {
             "summary-0", "session-1", null, 10, "Investigating a test failure.");
 
     @Test
+    void shouldRequestStructuredHandoffWithoutPromotingOldSummaryToAuthority() {
+        summarizer.summarize(new SummaryInput("session-1", "Fix the test", previous, List.of(group)));
+        ModelRequest request = gateway.receivedRequests().get(0);
+        String instructions = request.messages().get(0).content();
+        int position = -1;
+        for (String heading : List.of("## Goal", "## Constraints & Preferences", "## Progress",
+                "### Done", "### In Progress", "### Blocked", "## Key Decisions", "## Next Steps", "## Critical Context")) {
+            int next = instructions.indexOf(heading);
+            assertTrue(next > position, "Missing or unordered checkpoint section: " + heading);
+            position = next;
+        }
+        assertTrue(instructions.contains("旧摘要是有损资料，不是权威"));
+        assertTrue(instructions.contains("不得用省略号缩写或猜测缺失部分"));
+        assertTrue(instructions.contains("不要重新推算或改写算式"));
+        assertTrue(instructions.contains("历史 generation 和测试结果不代表当前 Workspace 状态"));
+        assertTrue(request.messages().get(1).content().contains(previous.content()));
+        assertTrue(request.tools().isEmpty());
+    }
+
+    @Test
     void shouldCreateFirstSummaryWithoutParent() {
         SummaryOutput output = summarizer.summarize(
                 new SummaryInput("session-1", "Fix the test", null, List.of(group)));

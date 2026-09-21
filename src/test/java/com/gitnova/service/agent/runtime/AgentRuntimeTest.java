@@ -34,10 +34,17 @@ import com.gitnova.service.agent.workspace.WorkspaceGateway;
 import com.gitnova.service.agent.workspace.WorkspaceId;
 import com.gitnova.service.agent.workspace.WorkspaceMutationCommand;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -182,6 +189,51 @@ class AgentRuntimeTest {
         assertEquals(1, result.toolCallCount());
         assertEquals(1, readTool.invocationCount);
         assertEquals(2, modelGateway.receivedRequests().size());
+    }
+
+    @Test
+    void shouldLogGatewayCategoryWithoutLoggingProviderSecretsOrBodies() {
+        var failure = new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,
+                "secret-in-provider-message", false, 200, "secret-in-provider-code", "secret-in-provider-header",
+                null, new IllegalArgumentException("secret-in-parser-cause"));
+        var gateway = new FakeModelGateway().enqueueFailure(failure);
+        var runtime = runtime(gateway, new InspectingWorkspace(0, List.of()), List.of(new FinishTaskTool(objectMapper)));
+        Logger logger = (Logger) LoggerFactory.getLogger(AgentRuntime.class);
+        var logs = new ListAppender<ILoggingEvent>();
+        logs.start();
+        logger.addAppender(logs);
+        try {
+            var result = runtime.run(context("Read the current Workspace"));
+            assertEquals(AgentTerminationReason.MODEL_GATEWAY_FAILURE, result.terminationReason());
+            var entry = logs.list.stream().filter(log -> log.getFormattedMessage().startsWith("Model gateway failed:")).findFirst().orElseThrow();
+            assertTrue(entry.getFormattedMessage().contains("errorCode=INVALID_RESPONSE"));
+            assertTrue(entry.getFormattedMessage().contains("httpStatus=200"));
+            assertTrue(entry.getFormattedMessage().contains("retryable=false"));
+            assertTrue(entry.getFormattedMessage().contains("requestId=" + gateway.receivedRequests().get(0).requestId()));
+            assertFalse(entry.getFormattedMessage().contains("secret-in-"));
+            assertTrue(entry.getThrowableProxy() == null); // A parser stack trace can embed the raw response.
+        } finally {
+            logger.detachAppender(logs);
+            logs.stop();
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ModelFinishReason.class, names = {"LENGTH", "CONTENT_FILTER"})
+    void shouldStopOnInterruptedGenerationWithoutInvokingTools(ModelFinishReason reason) {
+        var usage = new ModelUsage(20000, 2048, 22048);
+        var gateway = new FakeModelGateway().enqueueResponse(new ModelResponse("interrupted", null, List.of(), usage, reason));
+        var tool = new RecordingTool(definition("readContext"), ToolResult.success(objectMapper.createObjectNode()));
+        var runtime = runtime(gateway, new InspectingWorkspace(0, List.of()), List.of(tool, new FinishTaskTool(objectMapper)));
+
+        var result = runtime.run(context("Inspect the Workspace"));
+
+        assertEquals(reason == ModelFinishReason.LENGTH ? AgentTerminationReason.MODEL_OUTPUT_LENGTH
+                : AgentTerminationReason.MODEL_CONTENT_FILTERED, result.terminationReason());
+        assertEquals(1, result.modelCallCount());
+        assertEquals(0, result.toolCallCount());
+        assertEquals(0, tool.invocationCount);
+        assertEquals(List.of(usage), result.modelUsages());
     }
 
     private AgentRuntime runtime(

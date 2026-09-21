@@ -8,6 +8,8 @@ import com.gitnova.service.agent.journal.RunJournalScope;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.runtime.AgentExecutionContext;
 import com.gitnova.service.agent.context.SessionContextService.SummaryControl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Objects;
@@ -15,6 +17,7 @@ import java.util.function.Consumer;
 
 /** One Run's context preparation. Durable control belongs to the Session, not to this instance. */
 public final class ContextAssembler {
+    private static final Logger logger = LoggerFactory.getLogger(ContextAssembler.class);
     private final SessionContextService service;
     private final ContextSummarizer summarizer;
     private final RunJournalScope scope;
@@ -44,6 +47,13 @@ public final class ContextAssembler {
         if (request.maxOutputTokens() == null) throw new PreparationException("Output reserve is required");
         var measured = usage.measure(request);
         var assessment = budget.assess(measured.estimatedInputTokens(), measured.fixedTokens(), request.maxOutputTokens());
+        // Disabling summarization does not disable Session history, measurement or the hard input limit.
+        if (!budget.summaryEnabled()) {
+            if (measured.estimatedInputTokens() > assessment.inputLimit()) {
+                throw new PreparationException("Context exceeds input limit with summarization disabled");
+            }
+            return request.messages();
+        }
         double ratio = assessment.useRatio();
 
         // A changed frozen policy/system/tool set establishes a new accounting regime.
@@ -88,6 +98,10 @@ public final class ContextAssembler {
             executionControl.requireLease();
             output = summarizer.summarize(snapshot.summaryInput(context.taskText(), selection.groupsToCompact()));
         } catch (ModelGatewayException | IllegalArgumentException | IllegalStateException failure) {
+            if (failure instanceof ModelGatewayException gatewayFailure) {
+                logger.warn("Summary gateway failed: runId={}, attemptId={}, errorCode={}, httpStatus={}, retryable={}",
+                        scope.runId(), attemptId, gatewayFailure.errorCode(), gatewayFailure.providerStatusCode(), gatewayFailure.retryable());
+            }
             executionControl.requireLease();
             committed.accept(service.recordSummaryResult(scope, attemptId, null,
                     "FAILED_" + failure.getClass().getSimpleName(), measured.estimatedInputTokens(), null));

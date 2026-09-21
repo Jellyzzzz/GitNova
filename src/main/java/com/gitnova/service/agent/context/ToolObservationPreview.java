@@ -53,7 +53,7 @@ public final class ToolObservationPreview {
     /** Equality fits inline. Tool eligibility and Artifact availability are separate checks. */
     public boolean exceedsInlineBudget(ToolResult result, ObservationPolicy policy) {
         Objects.requireNonNull(policy, "policy");
-        return estimateTokens(result) > policy.maxInlineTokens();
+        return policy.externalizationEnabled() && estimateTokens(result) > policy.maxInlineTokens();
     }
 
     public ObjectNode preview(String toolName, ToolResult result, ArtifactRef artifact, int maxPreviewTokens) {

@@ -138,6 +138,33 @@ class AgentExecutionConfigCodecTest {
     }
 
     @Test
+    void fourContextPoliciesRoundTripWithoutChangingLegacyEnabledContract() throws Exception {
+        var old = standardConfig();
+        var digests = new java.util.HashSet<String>();
+        for (boolean externalization : List.of(false, true)) {
+            for (boolean summary : List.of(false, true)) {
+                var config = new AgentExecutionConfig(old.policy(), old.capabilities(), old.toolSet(),
+                        old.contextPolicyVersion(), new ObservationPolicy(4096, 1024, externalization),
+                        new com.gitnova.service.agent.context.ContextBudget(18000, 1024, .6, .9, 2, summary));
+                var encoded = codec.encode(config);
+                digests.add(encoded.digest());
+                assertEquals(config, codec.decode(encoded.json()));
+                assertEquals(encoded, codec.encode(codec.decode(encoded.json())));
+                var json = (ObjectNode) objectMapper.readTree(encoded.json());
+                assertEquals(externalization && summary ? 3 : 4, json.path("schemaVersion").asInt());
+                if (externalization && summary) {
+                    assertFalse(json.path("contextBudget").has("summaryEnabled"));
+                    assertFalse(json.path("observationPolicy").has("externalizationEnabled"));
+                } else {
+                    json.withObject("/contextBudget").remove("summaryEnabled");
+                    assertThrows(IllegalArgumentException.class, () -> codec.decode(json.toString()));
+                }
+            }
+        }
+        assertEquals(4, digests.size());
+    }
+
+    @Test
     void observationBudgetIsFrozenAndChangesTheDigest() throws Exception {
         AgentExecutionConfig old = standardConfig();
         AgentExecutionConfig configured = new AgentExecutionConfig(old.policy(), old.capabilities(),

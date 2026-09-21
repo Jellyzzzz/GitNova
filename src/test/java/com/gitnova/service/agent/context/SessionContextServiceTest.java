@@ -14,6 +14,8 @@ import com.gitnova.service.agent.prompt.AssembledPrompt;
 import com.gitnova.service.agent.tool.ToolResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 
 import java.util.ArrayList;
@@ -121,6 +123,31 @@ class SessionContextServiceTest {
         assertEquals(300, service.load("session").usageAnchor().inputTokens());
         history.get(1).setSchemaVersion(99);
         assertThrows(IllegalStateException.class, () -> service.load("session"));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ModelFinishReason.class, names = {"LENGTH", "CONTENT_FILTER"})
+    void emptyInterruptedResponseDoesNotPoisonTheNextTaskContext(ModelFinishReason reason) {
+        user("task-a", "Investigate the error");
+        var request = new ModelRequest("model", List.of(new ModelMessage(ModelRole.SYSTEM, "System", List.of(), null),
+                new ModelMessage(ModelRole.USER, "Investigate the error", List.of(), null)),
+                List.of(), 100, null, "model-1");
+        var measured = new ContextUsage(new TokenEstimator(), new CanonicalJsonCodec(mapper), null).measure(request);
+        var started = mapper.createObjectNode().put("modelCallId", "model-1");
+        started.set("contextInput", mapper.valueToTree(measured));
+        add("MODEL_CALL_STARTED", "task-a", "run-a", started).setSchemaVersion(2);
+        add("MODEL_RESPONSE", "task-a", "run-a", new ModelResponsePayload("model-1", "interrupted", null, List.of(),
+                new ModelUsage(300, 100, 400), reason));
+        user("task-b", "Continue the investigation");
+
+        var snapshot = service.load("session");
+        var messages = snapshot.modelMessages(new AssembledPrompt("policy", "System"), "task-b", "Continue the investigation");
+
+        assertEquals(List.of(ModelRole.SYSTEM, ModelRole.USER, ModelRole.USER), messages.stream().map(ModelMessage::role).toList());
+        assertEquals(4, history.size()); // No Step was deleted or overwritten.
+        assertEquals(4, snapshot.throughSessionSequence());
+        assertEquals(300, snapshot.usageAnchor().inputTokens());
+        assertTrue(snapshot.groups().isEmpty());
     }
 
     @Test

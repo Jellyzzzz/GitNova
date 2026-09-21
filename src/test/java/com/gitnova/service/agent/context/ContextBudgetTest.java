@@ -40,6 +40,20 @@ class ContextBudgetTest {
     }
 
     @Test
+    void shouldReduceInputCapacityWhenDoublingTheOutputReserve() {
+        var configured = new ContextBudget(32000, 1024, 0.8, 0.9, 2);
+        var before = configured.assess(21895, 1956, 2048);
+        var after = configured.assess(21895, 1956, 4096);
+
+        assertEquals(28928, before.inputLimit());
+        assertEquals(26880, after.inputLimit());
+        assertEquals(24924, after.dynamicBudget());
+        assertEquals(2048, before.dynamicBudget() - after.dynamicBudget());
+        assertTrue(after.useRatio() < configured.summaryTriggerRatio());
+        assertTrue(configured.assess(21896, 1956, 4096).useRatio() >= configured.summaryTriggerRatio());
+    }
+
+    @Test
     void shouldAllowZeroSafetyMarginAndZeroFixedTokens() {
         assertEquals(new ContextBudget.Assessment(80, 80, 40, 0.5),
                 new ContextBudget(100, 0).assess(40, 0, 20));

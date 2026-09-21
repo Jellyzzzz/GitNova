@@ -22,7 +22,7 @@ import java.util.Set;
 /** Stable wire-format codec for the complete Frozen Execution Contract. */
 @Component
 public final class AgentExecutionConfigCodec {
-    private static final int SCHEMA_VERSION = 3;
+    private static final int SCHEMA_VERSION = 4;
 
     private final CanonicalJsonCodec canonicalJson;
     private final ObjectMapper objectMapper;
@@ -46,8 +46,14 @@ public final class AgentExecutionConfigCodec {
 
         ObjectNode root = canonicalJson.objectNode();
         // Preserve old contracts byte-for-byte, including their digest. Never inject live defaults.
-        root.put("schemaVersion", config.contextBudget() != null ? SCHEMA_VERSION
-                : config.observationPolicy() == null ? 1 : 2);
+        boolean controlled = (config.contextBudget() != null && !config.contextBudget().summaryEnabled())
+                || (config.observationPolicy() != null && !config.observationPolicy().externalizationEnabled());
+        if (controlled && config.contextBudget() == null) {
+            throw invalid("Independent context controls require an explicit context budget");
+        }
+        int version = controlled ? SCHEMA_VERSION : config.contextBudget() != null ? 3
+                : config.observationPolicy() == null ? 1 : 2;
+        root.put("schemaVersion", version);
         encodePolicy(root.putObject("policy"), config.policy());
 
         ArrayNode capabilities = root.putArray("capabilities");
@@ -73,8 +79,13 @@ public final class AgentExecutionConfigCodec {
             ObjectNode observationNode = root.putObject("observationPolicy");
             observationNode.put("maxInlineTokens", observation.maxInlineTokens());
             observationNode.put("maxPreviewTokens", observation.maxPreviewTokens());
+            if (controlled) observationNode.put("externalizationEnabled", observation.externalizationEnabled());
         }
-        if (config.contextBudget() != null) root.set("contextBudget", objectMapper.valueToTree(config.contextBudget()));
+        if (config.contextBudget() != null) {
+            ObjectNode budgetNode = objectMapper.valueToTree(config.contextBudget());
+            if (!controlled) budgetNode.remove("summaryEnabled");
+            root.set("contextBudget", budgetNode);
+        }
         return canonicalJson.encode(root);
     }
 
@@ -109,15 +120,28 @@ public final class AgentExecutionConfigCodec {
             ObservationPolicy observationPolicy = null;
             if (schemaVersion >= 2) {
                 ObjectNode observationNode = requireObject(root.get("observationPolicy"), "observationPolicy");
+                if (schemaVersion == 4 && !observationNode.path("externalizationEnabled").isBoolean()) {
+                    throw invalid("externalizationEnabled must be an explicit boolean");
+                }
+                if (schemaVersion < 4 && observationNode.has("externalizationEnabled")) {
+                    throw invalid("externalizationEnabled requires execution config schemaVersion 4");
+                }
                 observationPolicy = new ObservationPolicy(
                         requireInt(observationNode, "maxInlineTokens"),
-                        requireInt(observationNode, "maxPreviewTokens"));
+                        requireInt(observationNode, "maxPreviewTokens"),
+                        schemaVersion < 4 || observationNode.get("externalizationEnabled").booleanValue());
             } else if (root.has("observationPolicy")) {
                 throw invalid("observationPolicy requires execution config schemaVersion 2");
             }
             ContextBudget contextBudget = null;
-            if (schemaVersion == 3) {
+            if (schemaVersion >= 3) {
                 ObjectNode node = requireObject(root.get("contextBudget"), "contextBudget");
+                if (schemaVersion == 4 && !node.path("summaryEnabled").isBoolean()) {
+                    throw invalid("summaryEnabled must be an explicit boolean");
+                }
+                if (schemaVersion < 4 && node.has("summaryEnabled")) {
+                    throw invalid("summaryEnabled requires execution config schemaVersion 4");
+                }
                 for (String field : List.of("contextWindowTokens", "safetyMarginTokens")) {
                     JsonNode value = requirePresent(node, field);
                     if (!value.isIntegralNumber() || !value.canConvertToLong()) throw invalid(field + " must be a long");
@@ -129,7 +153,8 @@ public final class AgentExecutionConfigCodec {
                         node.get("safetyMarginTokens").longValue(),
                         node.get("summaryTriggerRatio").doubleValue(),
                         node.get("compactTriggerRatio").doubleValue(),
-                        requireInt(node, "keepRecentGroups"));
+                        requireInt(node, "keepRecentGroups"),
+                        schemaVersion < 4 || node.get("summaryEnabled").booleanValue());
             } else if (root.has("contextBudget")) {
                 throw invalid("contextBudget requires execution config schemaVersion 3");
             }

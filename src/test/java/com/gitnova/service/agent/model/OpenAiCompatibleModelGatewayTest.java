@@ -14,10 +14,19 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.mock.env.MockEnvironment;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -47,6 +56,90 @@ class OpenAiCompatibleModelGatewayTest {
     @AfterEach
     void tearDown() throws IOException {
         server.shutdown();
+    }
+
+    @Test
+    void shouldBindExplicitTimeoutsFromApplicationConfiguration() throws IOException {
+        var environment = new MockEnvironment();
+        environment.getPropertySources().addLast(new YamlPropertySourceLoader()
+                .load("application", new ClassPathResource("application.yml")).get(0));
+        var runner = new ApplicationContextRunner()
+                .withInitializer(context -> context.setEnvironment(environment))
+                .withBean(ObjectMapper.class, () -> objectMapper)
+                .withUserConfiguration(OpenAiCompatibleModelGateway.class);
+
+        runner.run(context -> {
+            assertNull(context.getStartupFailure());
+            var client = (OkHttpClient) ReflectionTestUtils.getField(
+                    context.getBean(OpenAiCompatibleModelGateway.class), "httpClient");
+            assertEquals(60000, client.callTimeoutMillis());
+            assertEquals(60000, client.readTimeoutMillis());
+            assertEquals("4096", environment.getProperty("gitnova.agent.runtime.max-output-tokens"));
+        });
+
+        // Existing total-timeout configuration must also change the default read deadline.
+        environment.withProperty("LLM_TIMEOUT_SECONDS", "75");
+        runner.run(context -> {
+            assertNull(context.getStartupFailure());
+            var client = (OkHttpClient) ReflectionTestUtils.getField(
+                    context.getBean(OpenAiCompatibleModelGateway.class), "httpClient");
+            assertEquals(75000, client.callTimeoutMillis());
+            assertEquals(75000, client.readTimeoutMillis());
+        });
+
+        environment.withProperty("LLM_READ_TIMEOUT_SECONDS", "30")
+                .withProperty("AGENT_MAX_OUTPUT_TOKENS", "8192");
+        runner.run(context -> {
+            assertNull(context.getStartupFailure());
+            var client = (OkHttpClient) ReflectionTestUtils.getField(
+                    context.getBean(OpenAiCompatibleModelGateway.class), "httpClient");
+            assertEquals(75000, client.callTimeoutMillis());
+            assertEquals(30000, client.readTimeoutMillis());
+            assertEquals("8192", environment.getProperty("gitnova.agent.runtime.max-output-tokens"));
+        });
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0, 60", "60, 0", "-1, 60", "60, -1"})
+    void shouldRejectUnboundedOrNegativeTimeouts(long callSeconds, long readSeconds) {
+        assertThrows(IllegalArgumentException.class, () -> new OpenAiCompatibleModelGateway(
+                objectMapper, "test-api-key", server.url("/").toString(), callSeconds, readSeconds, "disabled"));
+    }
+
+    @Test
+    void shouldUseConfiguredReadTimeoutForSlowResponsesAndSendLargerOutputLimit() throws Exception {
+        gateway = new OpenAiCompatibleModelGateway(
+                objectMapper, "test-api-key", server.url("/").toString(), 3, 2, "disabled");
+        var client = (OkHttpClient) ReflectionTestUtils.getField(gateway, "httpClient");
+        assertEquals(3000, client.callTimeoutMillis());
+        assertEquals(2000, client.readTimeoutMillis());
+        server.enqueue(successfulTextResponse("slow-success", "Ready.")
+                .setBodyDelay(1100, TimeUnit.MILLISECONDS));
+        var request = new ModelRequest("review-model", simpleRequest().messages(), List.of(),
+                4096, null, "larger-output");
+
+        var response = gateway.complete(request);
+
+        assertEquals(ModelFinishReason.STOP, response.finishReason());
+        assertEquals("Ready.", response.text());
+        assertEquals(4096, objectMapper.readTree(server.takeRequest().getBody().readUtf8()).path("max_tokens").asInt());
+    }
+
+    @Test
+    void shouldKeepTotalDeadlineEvenWhenReadTimeoutIsLonger() {
+        gateway = new OpenAiCompatibleModelGateway(
+                objectMapper, "test-api-key", server.url("/").toString(), 1, 3, "disabled");
+        server.enqueue(successfulTextResponse("slow-total", "Ready.")
+                .addHeader("x-request-id", "trace-total-timeout")
+                .setBodyDelay(1400, TimeUnit.MILLISECONDS));
+
+        var failure = assertThrows(ModelGatewayException.class, () -> gateway.complete(simpleRequest()));
+
+        assertEquals(ModelGatewayErrorCode.TIMEOUT, failure.errorCode());
+        assertTrue(failure.retryable());
+        assertEquals(200, failure.providerStatusCode());
+        assertEquals("trace-total-timeout", failure.providerRequestId());
+        assertEquals(1, server.getRequestCount());
     }
 
     @Test
@@ -272,6 +365,142 @@ class OpenAiCompatibleModelGatewayTest {
         );
 
         assertEquals(ModelGatewayErrorCode.INVALID_RESPONSE, exception.errorCode());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"length", "content_filter"})
+    void shouldPreserveInterruptedFinishReasonWithoutParsingPartialToolArguments(String reason) {
+        server.enqueue(new MockResponse().setBody("""
+                {"id":"interrupted","choices":[{
+                  "finish_reason":"%s",
+                  "message":{"content":null,"tool_calls":[{
+                    "id":"partial-call","function":{"name":"applyPatch","arguments":"{"}
+                  }]}
+                }],"usage":{"prompt_tokens":20000,"completion_tokens":2048,"total_tokens":22048}}
+                """.formatted(reason)));
+
+        ModelResponse response = gateway.complete(simpleRequest());
+
+        assertEquals(reason.equals("length") ? ModelFinishReason.LENGTH : ModelFinishReason.CONTENT_FILTER,
+                response.finishReason());
+        assertTrue(response.toolCalls().isEmpty()); // A partial call must never reach execution.
+        assertEquals(new ModelUsage(20000, 2048, 22048), response.usage());
+    }
+
+    @Test
+    void shouldKeepStopWithToolCallsInvalidInsteadOfSilentlyDiscardingCalls() {
+        server.enqueue(new MockResponse().setBody("""
+                {"id":"contradictory","choices":[{"finish_reason":"stop","message":{
+                  "content":"Done","tool_calls":[{"id":"c","function":{"name":"readFile","arguments":"{}"}}]
+                }}]}
+                """));
+        ModelGatewayException failure = assertThrows(ModelGatewayException.class, () -> gateway.complete(simpleRequest()));
+        assertEquals(ModelGatewayErrorCode.INVALID_RESPONSE, failure.errorCode());
+        assertFalse(failure.retryable());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   ", "{", "{} {}", "{} trailing"})
+    void shouldRejectMalformedArgumentsWithoutLeakingAnUnclassifiedException(String arguments) throws Exception {
+        String body = """
+                {"id":"invalid-arguments","choices":[{"finish_reason":"tool_calls","message":{
+                  "tool_calls":[{"id":"c","function":{"name":"readFile","arguments":%s}}]
+                }}]}
+                """.formatted(objectMapper.writeValueAsString(arguments));
+        server.enqueue(new MockResponse().addHeader("x-ds-trace-id", "trace-arguments").setBody(body));
+
+        ModelGatewayException failure = assertThrows(ModelGatewayException.class, () -> gateway.complete(simpleRequest()));
+
+        assertEquals(ModelGatewayErrorCode.INVALID_RESPONSE, failure.errorCode());
+        assertEquals(200, failure.providerStatusCode());
+        assertEquals("trace-arguments", failure.providerRequestId());
+        assertFalse(failure.retryable());
+    }
+
+    @Test
+    void shouldRejectNonStringArguments() {
+        server.enqueue(new MockResponse().setBody("""
+                {"id":"non-string","choices":[{"finish_reason":"tool_calls","message":{
+                  "tool_calls":[{"id":"c","function":{"name":"readFile","arguments":123}}]
+                }}]}
+                """));
+        ModelGatewayException failure = assertThrows(ModelGatewayException.class, () -> gateway.complete(simpleRequest()));
+        assertEquals(ModelGatewayErrorCode.INVALID_RESPONSE, failure.errorCode());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"not-json", "null", "{} {}", ""})
+    void shouldRetainHttpMetadataWhenSuccessfulBodyIsInvalid(String body) {
+        server.enqueue(new MockResponse().addHeader("x-request-id", "trace-invalid-body").setBody(body));
+
+        ModelGatewayException failure = assertThrows(ModelGatewayException.class, () -> gateway.complete(simpleRequest()));
+
+        assertEquals(ModelGatewayErrorCode.INVALID_RESPONSE, failure.errorCode());
+        assertEquals(200, failure.providerStatusCode());
+        assertEquals("trace-invalid-body", failure.providerRequestId());
+        assertFalse(failure.retryable());
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {-1, 2147483648L, 4294967296L})
+    void shouldRejectInvalidUsageWithoutOverflowOrUnclassifiedException(long tokens) {
+        server.enqueue(new MockResponse().setBody("""
+                {"id":"bad-usage","choices":[{"finish_reason":"stop","message":{"content":"Done"}}],
+                 "usage":{"prompt_tokens":%d}}
+                """.formatted(tokens)));
+
+        ModelGatewayException failure = assertThrows(ModelGatewayException.class, () -> gateway.complete(simpleRequest()));
+
+        assertEquals(ModelGatewayErrorCode.INVALID_RESPONSE, failure.errorCode());
+        assertEquals(200, failure.providerStatusCode());
+    }
+
+    @Test
+    void shouldClassifyProviderResourceExhaustionBeforeParsingIncompleteTools() {
+        server.enqueue(new MockResponse().addHeader("x-request-id", "trace-resource").setBody("""
+                {"id":"resource-failure","choices":[{"finish_reason":"insufficient_system_resource", "message":{
+                  "tool_calls":[{"id":"c","function":{"name":"applyPatch","arguments":"{"}}]
+                }}]}
+                """));
+
+        ModelGatewayException failure = assertThrows(ModelGatewayException.class, () -> gateway.complete(simpleRequest()));
+
+        assertEquals(ModelGatewayErrorCode.PROVIDER_UNAVAILABLE, failure.errorCode());
+        assertTrue(failure.retryable());
+        assertEquals(200, failure.providerStatusCode());
+        assertEquals("trace-resource", failure.providerRequestId());
+        assertEquals("insufficient_system_resource", failure.providerErrorCode());
+        assertEquals(1, server.getRequestCount()); // Classification is not permission for an unbounded retry.
+    }
+
+    @Test
+    void shouldKeepHttpMetadataWhenResponseBodyTimesOutAfterHeaders() {
+        gateway = new OpenAiCompatibleModelGateway(objectMapper,
+                new OkHttpClient.Builder().readTimeout(Duration.ofMillis(100)).build(),
+                "test-api-key", server.url("/v1/chat/completions"));
+        server.enqueue(successfulTextResponse("slow", "Done").addHeader("x-request-id", "trace-slow-body")
+                .setBodyDelay(300, TimeUnit.MILLISECONDS));
+
+        ModelGatewayException failure = assertThrows(ModelGatewayException.class, () -> gateway.complete(simpleRequest()));
+
+        assertEquals(ModelGatewayErrorCode.TIMEOUT, failure.errorCode());
+        assertTrue(failure.retryable());
+        assertEquals(200, failure.providerStatusCode());
+        assertEquals("trace-slow-body", failure.providerRequestId());
+    }
+
+    @Test
+    void shouldKeepHttpRateLimitClassificationWhenProviderCodeIsBlank() {
+        server.enqueue(new MockResponse().setResponseCode(429).setBody("""
+                {"error":{"code":" ","message":"Too many requests"}}
+                """));
+
+        ModelGatewayException failure = assertThrows(ModelGatewayException.class, () -> gateway.complete(simpleRequest()));
+
+        assertEquals(ModelGatewayErrorCode.RATE_LIMITED, failure.errorCode());
+        assertEquals(429, failure.providerStatusCode());
+        assertNull(failure.providerErrorCode());
+        assertTrue(failure.retryable());
     }
 
     private ModelRequest requestWithEveryMessageRole() {
