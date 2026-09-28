@@ -26,6 +26,18 @@ public interface AgentStepMapper {
                                               @Param("throughSequence") long throughSequence,
                                               @Param("limit") int limit);
 
+    /** Raw results, including inline results already covered by a context summary. */
+    @Select("""
+            SELECT * FROM agent_step
+            WHERE session_id = #{sessionId} AND step_type = 'TOOL_RESULT'
+              AND session_sequence > #{afterSequence} AND session_sequence <= #{throughSequence}
+            ORDER BY session_sequence LIMIT #{limit}
+            """)
+    List<AgentStepEntity> selectToolResultHistory(@Param("sessionId") String sessionId,
+                                                 @Param("afterSequence") long afterSequence,
+                                                 @Param("throughSequence") long throughSequence,
+                                                 @Param("limit") int limit);
+
     @Select("""
             SELECT * FROM agent_step WHERE session_id = #{sessionId}
               AND step_type = 'CONTEXT_SUMMARY_CREATED' AND session_sequence <= #{throughSequence}

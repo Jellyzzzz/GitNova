@@ -33,6 +33,8 @@ import com.gitnova.storage.config.ArtifactStorageProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 import java.io.IOException;
@@ -319,6 +321,61 @@ class AgentRuntimeArtifactTest {
     }
 
     @Test
+    void inlineResultCanBeReadDirectlyFromItsCommittedSourceWithoutSearchingOrCreatingAnArtifact() throws Exception {
+        original = ToolResult.success(mapper.createObjectNode().put("exitCode", 1).put("generationAfter", 7)
+                .put("stdout", "FAIL original case\nSUMMARY failed=1\n").put("stderr", ""));
+        JsonNode rawResult = mapper.valueToTree(original);
+        var reader = new ArtifactTextReader(store, journal, mapper, new TokenEstimator());
+        registry = new ToolRegistry(List.of(command, finish, new ReadFileTool(mock(GitObjectReader.class), workspace, reader)));
+        context = context(new ObservationPolicy(1024, 800), registry);
+        runtime = new AgentRuntime(model, prompt, new MessageFactory(mapper), registry, workspace, inspector,
+                AgentTestExecutionConfigs.resolver(registry), journal, new CanonicalJsonCodec(mapper), store, preview);
+        when(journal.findToolResultBySource("session", 5)).thenAnswer(call -> {
+            assertFalse(results.isEmpty()); // A source is readable only after its original result committed.
+            return Optional.of(new RunJournal.HistoricalToolResult(5, "task", "run", null, 7L, results.get(0)));
+        });
+        doAnswer(call -> {
+            ModelRequest request = call.getArgument(0);
+            requests.add(request);
+            if (requests.size() == 1) return response("command", "runCommand");
+            if (requests.size() == 2) {
+                var observation = mapper.readTree(request.messages().get(3).content());
+                assertEquals(rawResult.path("payload"), observation.path("payload"));
+                assertEquals(5, observation.at("/source/sourceStepSequence").asLong());
+                assertFalse(observation.has("externalization"));
+                var resources = observation.path("source").path("resources");
+                return new ModelResponse("read", "", List.of(
+                        new ToolCall("read-log", "readFile", mapper.createObjectNode()
+                                .put("filePath", resources.path("stdout.txt").asText()).put("startLine", 1).put("endLine", 2)),
+                        new ToolCall("read-json", "readFile", mapper.createObjectNode()
+                                .put("filePath", resources.path("result.json").asText()).put("startLine", 1).put("endLine", 100))),
+                        ModelUsage.unknown(), ModelFinishReason.TOOL_CALLS);
+            }
+            return response("finish", "finishTask");
+        }).when(model).complete(any());
+
+        assertEquals(AgentRunStatus.COMPLETED, run().status());
+        var messages = requests.get(2).messages();
+        var log = mapper.readTree(messages.stream().filter(m -> "read-log".equals(m.toolCallId())).findFirst().orElseThrow().content());
+        assertEquals("SUCCESS", log.path("status").asText());
+        assertEquals("FAIL original case", log.at("/payload/lines/0/content").asText());
+        assertEquals("artifact://tool-results/5/stdout.txt", log.at("/payload/originRef").asText());
+        assertEquals(5, log.at("/payload/sourceStepSequence").asLong());
+        assertFalse(log.has("source")); // The read-back result keeps the original address, not its own new Step.
+        assertFalse(log.has("externalization"));
+        var json = mapper.readTree(messages.stream().filter(m -> "read-json".equals(m.toolCallId())).findFirst().orElseThrow().content());
+        assertEquals("SUCCESS", json.path("status").asText());
+        StringBuilder captured = new StringBuilder();
+        for (var line : json.path("payload").path("lines")) captured.append(line.path("content").asText()).append('\n');
+        assertEquals(rawResult, mapper.readTree(captured.toString()));
+        assertEquals(rawResult, mapper.valueToTree(results.get(0).result()));
+        verify(command, times(1)).execute(any(), any());
+        verify(journal, times(2)).findToolResultBySource("session", 5);
+        verify(journal, never()).appendToolObservation(any(), anyString(), anyString(), any());
+        verify(store, never()).saveToolResult(any(), any());
+    }
+
+    @Test
     void modelCanRequestStoredContentWithNewCallIdWithoutRecursiveExternalization() throws Exception {
         doAnswer(call -> {
             ModelRequest request = call.getArgument(0);
@@ -350,17 +407,21 @@ class AgentRuntimeArtifactTest {
 
     @Test
     void exactInlineBoundaryDoesNotCreateArtifact() throws Exception {
-        int tokens = Math.toIntExact(preview.estimateTokens(original));
+        var expected = new MessageFactory(mapper).tool(response("command", "runCommand").toolCalls().get(0),
+                original, "session", 5);
+        int tokens = Math.toIntExact(new TokenEstimator().estimateText(expected.content()).tokens());
         context = context(new ObservationPolicy(tokens, 512), registry);
         assertEquals(AgentRunStatus.COMPLETED, run().status());
-        assertEquals(mapper.valueToTree(original), mapper.readTree(requests.get(1).messages().get(3).content()));
+        assertEquals(expected, requests.get(1).messages().get(3));
         verify(store, never()).saveToolResult(any(), any());
         assertTrue(projections.isEmpty());
     }
 
     @Test
     void oneTokenOverInlineBoundaryTriggersExternalization() {
-        int tokens = Math.toIntExact(preview.estimateTokens(original));
+        var expected = new MessageFactory(mapper).tool(response("command", "runCommand").toolCalls().get(0),
+                original, "session", 5);
+        int tokens = Math.toIntExact(new TokenEstimator().estimateText(expected.content()).tokens());
         context = context(new ObservationPolicy(tokens - 1, 512), registry);
         assertEquals(AgentRunStatus.COMPLETED, run().status());
         assertEquals(1, projections.size());
@@ -393,7 +454,10 @@ class AgentRuntimeArtifactTest {
         context = context(null, registry);
         assertEquals(AgentRunStatus.COMPLETED, run().status());
         verify(store, never()).saveToolResult(any(), any());
-        assertEquals(mapper.valueToTree(original), mapper.readTree(requests.get(1).messages().get(3).content()));
+        var observation = mapper.readTree(requests.get(1).messages().get(3).content());
+        assertEquals(original.payload(), observation.path("payload"));
+        assertEquals(5, observation.at("/source/sourceStepSequence").asLong());
+        assertFalse(observation.has("externalization"));
     }
 
     @Test
@@ -452,8 +516,10 @@ class AgentRuntimeArtifactTest {
         assertEquals(original, results.get(0).result());
     }
 
-    @Test
-    void rawResultCommitFailureDoesNotEvenStartArtifactStorage() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void rawResultCommitFailureDoesNotPublishAnInlineSourceOrStartArtifactStorage(boolean smallResult) throws Exception {
+        if (smallResult) original = ToolResult.success(mapper.createObjectNode().put("stdout", "Small log"));
         doThrow(new IllegalStateException("simulated commit failure")).when(journal).appendToolResult(any(), any());
         assertThrows(IllegalStateException.class, this::run);
         verify(store, never()).saveToolResult(any(), any());

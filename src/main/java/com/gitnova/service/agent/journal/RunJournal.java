@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.storage.artifact.ArtifactRef;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface RunJournal {
@@ -34,6 +35,22 @@ public interface RunJournal {
 
     /** Only a committed result/projection pair in this Session authorizes the short resource path. */
     Optional<ArtifactRef> findArtifactBySource(String sessionId, long sourceSequence);
+
+    /** Capture once when starting a paged search; later appends belong to a new search. */
+    long latestSessionSequence(String sessionId);
+
+    /** Reads raw committed outcomes, never the lossy Session context projection. */
+    List<HistoricalToolResult> readToolResults(String sessionId, long afterSequence,
+                                              long throughSequence, int limit);
+
+    default Optional<HistoricalToolResult> findToolResultBySource(String sessionId, long sourceSequence) {
+        if (sourceSequence <= 0) throw new IllegalArgumentException("Source sequence must be positive");
+        return readToolResults(sessionId, sourceSequence - 1, sourceSequence, 1).stream().findFirst();
+    }
+
+    /** Provenance remains historical; reading it does not create current validation evidence. */
+    record HistoricalToolResult(long sourceSequence, String taskId, String runId,
+                                Long workspaceEpoch, Long workspaceGeneration, ToolResultPayload payload) {}
 
     AgentEventAppender.AppendResult appendHarnessFeedback(
             RunJournalScope scope,

@@ -30,10 +30,14 @@ class ToolObservationPreviewTest {
     @Test
     void shouldOnlyExceedInlineBudgetAboveTheThreshold() {
         var result = ToolResult.success(mapper.createObjectNode().put("stdout", "test output ".repeat(100)));
-        int estimate = Math.toIntExact(renderer.estimateTokens(result));
-        assertFalse(renderer.exceedsInlineBudget(result, new ObservationPolicy(estimate + 1, 1)));
-        assertFalse(renderer.exceedsInlineBudget(result, new ObservationPolicy(estimate, 1)));
-        assertTrue(renderer.exceedsInlineBudget(result, new ObservationPolicy(estimate - 1, 1)));
+        var message = new MessageFactory(mapper).tool(
+                new ToolCall("call", "runCommand", mapper.createObjectNode()), result, "session", 24);
+        int estimate = Math.toIntExact(tokenEstimator.estimateText(message.content()).tokens());
+        assertTrue(estimate > renderer.estimateTokens(result));
+        assertFalse(renderer.exceedsInlineBudget(message, new ObservationPolicy(estimate + 1, 1)));
+        assertFalse(renderer.exceedsInlineBudget(message, new ObservationPolicy(estimate, 1)));
+        assertTrue(renderer.exceedsInlineBudget(message, new ObservationPolicy(estimate - 1, 1)));
+        assertTrue(renderer.exceedsInlineBudget(message, new ObservationPolicy(Math.toIntExact(renderer.estimateTokens(result)), 1)));
     }
 
     @Test
@@ -45,8 +49,10 @@ class ToolObservationPreviewTest {
     @Test
     void disabledExternalizationKeepsLargeResultsInlineWithoutChangingThresholds() {
         var result = ToolResult.success(mapper.createObjectNode().put("stdout", "log line\n".repeat(5000)));
-        assertTrue(renderer.exceedsInlineBudget(result, new ObservationPolicy(4096, 1024)));
-        assertFalse(renderer.exceedsInlineBudget(result, new ObservationPolicy(4096, 1024, false)));
+        var message = new MessageFactory(mapper).tool(
+                new ToolCall("call", "runCommand", mapper.createObjectNode()), result, "session", 24);
+        assertTrue(renderer.exceedsInlineBudget(message, new ObservationPolicy(4096, 1024)));
+        assertFalse(renderer.exceedsInlineBudget(message, new ObservationPolicy(4096, 1024, false)));
     }
 
     @Test

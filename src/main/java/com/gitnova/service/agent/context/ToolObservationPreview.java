@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.model.MessageFactory;
+import com.gitnova.service.agent.model.ModelMessage;
 import com.gitnova.service.agent.tools.ArtifactTextReader;
 import com.gitnova.storage.artifact.ArtifactRef;
 import org.springframework.stereotype.Component;
@@ -60,10 +61,12 @@ public final class ToolObservationPreview {
         return estimateTokens(observation);
     }
 
-    /** Equality fits inline. Tool eligibility and Artifact availability are separate checks. */
-    public boolean exceedsInlineBudget(ToolResult result, ObservationPolicy policy) {
+    /** Count the prepared message, including source paths. Equality still fits inline. */
+    public boolean exceedsInlineBudget(ModelMessage observation, ObservationPolicy policy) {
+        Objects.requireNonNull(observation, "observation");
         Objects.requireNonNull(policy, "policy");
-        return policy.externalizationEnabled() && estimateTokens(result) > policy.maxInlineTokens();
+        return policy.externalizationEnabled()
+                && tokenEstimator.estimateText(observation.content()).tokens() > policy.maxInlineTokens();
     }
 
     public ObjectNode preview(String toolName, ToolResult result, ArtifactRef artifact, int maxPreviewTokens) {

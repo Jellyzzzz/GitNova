@@ -2,6 +2,7 @@ package com.gitnova.service.agent.journal;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.gitnova.entity.agent.AgentStepEntity;
 import com.gitnova.mapper.agent.AgentStepMapper;
 import com.gitnova.storage.artifact.ArtifactRef;
 import com.gitnova.service.agent.completion.CompletionDecision;
@@ -14,6 +15,8 @@ import com.gitnova.service.agent.model.ModelUsage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -62,6 +65,49 @@ class DefaultRunJournalTest {
         assertThrows(IllegalArgumentException.class, () -> journal.findArtifactBySource("session-1", 0));
         when(stepMapper.selectArtifactProjectionBySource("session-1", 26)).thenReturn("{\"observation\":{}}");
         assertThrows(IllegalStateException.class, () -> journal.findArtifactBySource("session-1", 26));
+    }
+
+    @Test
+    void inlineHistoryDecodesTheRawResultWithProvenanceAndWithoutAnArtifactProjection() throws Exception {
+        var mapper = new ObjectMapper();
+        var row = new AgentStepEntity();
+        row.setSessionId("session-1");
+        row.setSessionSequence(24L);
+        row.setTaskId("old-task");
+        row.setRunId("old-run");
+        row.setStepType("TOOL_RESULT");
+        row.setSchemaVersion(1);
+        row.setWorkspaceEpoch(2L);
+        row.setWorkspaceGeneration(4L);
+        row.setPayloadJson(mapper.writeValueAsString(new ToolResultPayload("model", "call", "runCommand",
+                ToolResult.success(mapper.createObjectNode().put("stdout", "original\n")))));
+        when(stepMapper.selectToolResultHistory("session-1", 23, 24, 1)).thenReturn(List.of(row));
+        var found = journal.findToolResultBySource("session-1", 24).orElseThrow();
+        assertEquals("old-task", found.taskId());
+        assertEquals(4L, found.workspaceGeneration());
+        assertEquals("original\n", found.payload().result().payload().path("stdout").asText());
+        assertTrue(journal.findToolResultBySource("other", 24).isEmpty());
+
+        row.setSchemaVersion(2);
+        assertThrows(IllegalStateException.class, () -> journal.findToolResultBySource("session-1", 24));
+        row.setSchemaVersion(1);
+        row.setSessionId("other");
+        assertThrows(IllegalStateException.class, () -> journal.findToolResultBySource("session-1", 24));
+        row.setSessionId("session-1");
+        row.setPayloadJson("{}");
+        assertThrows(IllegalStateException.class, () -> journal.findToolResultBySource("session-1", 24));
+    }
+
+    @Test
+    void historyLookupRequiresTrustedScopeOrderedRangeAndBoundedPageSize() {
+        assertThrows(IllegalArgumentException.class, () -> journal.latestSessionSequence(" "));
+        assertThrows(IllegalArgumentException.class, () -> journal.readToolResults("", 0, 10, 1));
+        assertThrows(IllegalArgumentException.class, () -> journal.readToolResults("session-1", -1, 10, 1));
+        assertThrows(IllegalArgumentException.class, () -> journal.readToolResults("session-1", 10, 9, 1));
+        assertThrows(IllegalArgumentException.class, () -> journal.readToolResults("session-1", 0, 10, 101));
+        assertThrows(IllegalArgumentException.class, () -> journal.findToolResultBySource("session-1", 0));
+        when(stepMapper.latestSessionSequence("session-1")).thenReturn(138L);
+        assertEquals(138, journal.latestSessionSequence("session-1"));
     }
 
     @Test

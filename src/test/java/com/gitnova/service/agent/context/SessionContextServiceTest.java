@@ -75,6 +75,35 @@ class SessionContextServiceTest {
     }
 
     @Test
+    void shouldRebuildTheSameInlineSourceFromCommittedHistoryAcrossTasks() throws Exception {
+        user("task-a", "Run the initial tests");
+        var response = response("call-1", "runCommand");
+        add("MODEL_RESPONSE", "task-a", "run-a", response);
+        var result = ToolResult.success(mapper.createObjectNode().put("stdout", "FAIL initial case\n")
+                .put("stderr", "").put("exitCode", 1).put("generationAfter", 0));
+        var raw = add("TOOL_RESULT", "task-a", "run-a", new ToolResultPayload("model-1", "call-1", "runCommand", result));
+        String persistedPayload = raw.getPayloadJson();
+        user("task-b", "Explain the initial failure");
+
+        var snapshot = service.load("session");
+        var messages = snapshot.modelMessages(new AssembledPrompt("p", "System"), "task-b", "Explain the initial failure");
+        var liveObservation = new MessageFactory(mapper).tool(response.toolCalls().get(0), result, "session", 3);
+        assertEquals(liveObservation, messages.get(3));
+        var observation = mapper.readTree(messages.get(3).content());
+        assertEquals(3, observation.at("/source/sourceStepSequence").asLong()); // Original result, not latest Step 4.
+        assertEquals("artifact://tool-results/3/stdout.txt", observation.at("/source/resources/stdout.txt").asText());
+        assertFalse(observation.has("externalization"));
+        assertTrue(snapshot.groups().get(0).closed());
+        assertEquals(liveObservation, snapshot.summaryInput("Explain", snapshot.groups())
+                .groupToCompact().get(0).messages().get(1));
+        assertEquals(messages, service.load("session").modelMessages(new AssembledPrompt("p", "System"),
+                "task-b", "Explain the initial failure"));
+        assertEquals(persistedPayload, raw.getPayloadJson());
+        assertEquals(4, history.size());
+        verifyNoInteractions(appender);
+    }
+
+    @Test
     void shouldRejectUnresolvedCallsAndOrphanOrDuplicateResults() {
         add("MODEL_RESPONSE", "task-a", "run-a", response("call-1", "applyPatch"));
         assertThrows(IllegalStateException.class, () -> service.load("session"));

@@ -14,9 +14,10 @@ import com.gitnova.service.agent.workspace.WorkspaceOperationException;
 
 import java.util.Objects;
 
+import static com.gitnova.service.agent.tools.ArtifactTextReader.SESSION_RESULTS_PATH;
 import static com.gitnova.service.agent.workspace.WorkspaceGateway.MAX_QUERY_CHARS;
 
-/** Performs literal text search across UTF-8 Workspace files. */
+/** Literal search in the current Workspace, a historical result, or the Session result collection. */
 public final class SearchTextTool implements AgentTool {
 
     private final WorkspaceGateway workspaceGateway;
@@ -42,14 +43,20 @@ public final class SearchTextTool implements AgentTool {
                 .put("type", "string")
                 .put("maxLength", MAX_QUERY_CHARS);
         properties.putObject("caseSensitive").put("type", "boolean");
-        properties.putObject("path").put("type", "string").put("maxLength", 4096);
+        properties.putObject("path").put("type", "string").put("maxLength", 4096)
+                .put("description", "Omit for Workspace search. Use artifact://tool-results/ to discover historical results in this Session, "
+                        + "or an issued artifact://tool-results/<step>/<view> to search one result.");
         properties.putObject("cursor").put("type", "string").put("maxLength", 256);
         schema.putArray("required").add("query").add("caseSensitive");
         schema.put("additionalProperties", false);
         return new ToolDefinition(
                 "searchText",
-                "Literal text search. Without path, searches the current Workspace. An issued artifact://tool-results/<step>/<view> "
-                        + "path searches captured historical evidence only. Follow nextRequest for more results. cursor is Artifact-only.",
+                "Literal text search. Without path, searches the current Workspace. path=artifact://tool-results/ searches this Session's "
+                        + "committed historical Tool Results, including small inline results no longer visible after summarization. "
+                        + "An issued artifact://tool-results/<step>/<view> searches one result. History matches include source Task/Step, "
+                        + "historical generation when known, and a readRequest for readFile. Read-back copies are excluded from collection search. "
+                        + "This reads captured evidence; it does not re-execute commands or validate the current Workspace. "
+                        + "Follow nextRequest while searchComplete=false, even if the current page has no matches. cursor is history-only.",
                 schema
         );
     }
@@ -66,12 +73,18 @@ public final class SearchTextTool implements AgentTool {
         }
         if (query.length() > MAX_QUERY_CHARS) return WorkspaceToolResults.invalid("SEARCH_QUERY_TOO_LARGE", "query is too long");
         if (arguments.has("path")) {
-            if (!arguments.path("path").isTextual() || !arguments.path("path").asText().startsWith("artifact:")) {
-                return WorkspaceToolResults.invalid("INVALID_SEARCH_PATH", "Omit path for Workspace search, or use an issued Artifact path");
+            JsonNode path = arguments.get("path");
+            if (!path.isTextual() || !path.asText().startsWith(SESSION_RESULTS_PATH)) {
+                return WorkspaceToolResults.invalid("INVALID_SEARCH_PATH",
+                        "Omit path for Workspace search, or use a historical Tool Result path");
             }
             if (artifactReader == null) return ToolResult.error(ToolStatus.INTERNAL_ERROR, "ARTIFACT_READER_UNAVAILABLE",
                     "Historical resource reading is not configured", false);
-            return artifactReader.search(execution, arguments.path("path").asText(), arguments);
+
+            if (SESSION_RESULTS_PATH.equals(path.asText())) {
+                return artifactReader.searchSession(execution, arguments);
+            }
+            return artifactReader.search(execution, path.asText(), arguments);
         }
         if (arguments.has("cursor")) return WorkspaceToolResults.invalid("INVALID_SEARCH_ARGUMENTS", "cursor requires an Artifact path");
         try {

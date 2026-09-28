@@ -147,7 +147,7 @@ public class SessionContextService {
                         }
                         AgentStepEntity projection = projections.get(step.getEventId());
                         if (projection == null) {
-                            group.body.add(messages.tool(call, result.result()));
+                            group.body.add(messages.tool(call, result.result(), sessionId, step.getSessionSequence()));
                         } else {
                             JsonNode projected = mapper.readTree(projection.getPayloadJson());
                             if (!call.id().equals(projected.path("toolCallId").asText())) {

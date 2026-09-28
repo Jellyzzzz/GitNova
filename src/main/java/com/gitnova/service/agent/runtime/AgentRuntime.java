@@ -822,18 +822,19 @@ public final class AgentRuntime {
             state.committed(committed);
             sourceSequence = committed.sessionSequence();
         }
+        ModelMessage inline = messageFactory.tool(call, result, context.sessionId(), sourceSequence);
         ObservationPolicy policy = context.executionConfig().observationPolicy();
         boolean artifactRead = "readFile".equals(call.name()) && call.arguments().path("filePath").asText().startsWith("artifact:")
                 || "searchText".equals(call.name()) && call.arguments().path("path").asText().startsWith("artifact:");
         if (policy == null || !observationPreview.supports(call.name()) || artifactRead) {
-            state.messages.add(messageFactory.tool(call, result));
+            state.messages.add(inline);
             return true;
         }
 
         JsonNode observation;
         try {
-            if (!observationPreview.exceedsInlineBudget(result, policy)) {
-                state.messages.add(messageFactory.tool(call, result));
+            if (!observationPreview.exceedsInlineBudget(inline, policy)) {
+                state.messages.add(inline);
                 return true;
             }
             ArtifactRef reference = artifactStore.saveToolResult(context, result);

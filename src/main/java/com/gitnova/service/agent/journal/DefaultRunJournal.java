@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -205,6 +207,42 @@ public class DefaultRunJournal implements RunJournal {
         } catch (IOException | IllegalArgumentException exception) {
             throw new IllegalStateException("Persisted Artifact reference is invalid", exception);
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long latestSessionSequence(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) throw new IllegalArgumentException("Session is required");
+        return stepMapper.latestSessionSequence(sessionId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<HistoricalToolResult> readToolResults(String sessionId, long afterSequence,
+                                                     long throughSequence, int limit) {
+        if (sessionId == null || sessionId.isBlank() || afterSequence < 0
+                || throughSequence < afterSequence || limit < 1 || limit > 100) {
+            throw new IllegalArgumentException("Invalid Session history range");
+        }
+        List<HistoricalToolResult> results = new ArrayList<>();
+        long previous = afterSequence;
+        for (var row : stepMapper.selectToolResultHistory(sessionId, afterSequence, throughSequence, limit)) {
+            if (!sessionId.equals(row.getSessionId()) || !"TOOL_RESULT".equals(row.getStepType())
+                    || !Integer.valueOf(1).equals(row.getSchemaVersion()) || row.getSessionSequence() == null
+                    || row.getSessionSequence() <= previous || row.getSessionSequence() > throughSequence) {
+                throw new IllegalStateException("Invalid committed Tool Result history or unsupported schema");
+            }
+            try {
+                ToolResultPayload payload = objectMapper.readValue(row.getPayloadJson(), ToolResultPayload.class);
+                if (payload == null) throw new IllegalStateException("Missing committed Tool Result");
+                results.add(new HistoricalToolResult(row.getSessionSequence(), row.getTaskId(), row.getRunId(),
+                        row.getWorkspaceEpoch(), row.getWorkspaceGeneration(), payload));
+                previous = row.getSessionSequence();
+            } catch (IOException | IllegalArgumentException exception) {
+                throw new IllegalStateException("Invalid committed Tool Result payload", exception);
+            }
+        }
+        return List.copyOf(results);
     }
 
     @Override
