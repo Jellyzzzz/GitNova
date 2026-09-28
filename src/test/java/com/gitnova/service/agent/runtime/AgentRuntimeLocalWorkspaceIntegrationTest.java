@@ -29,7 +29,6 @@ import com.gitnova.service.agent.prompt.RepositoryScopeSection;
 import com.gitnova.service.agent.prompt.RoleSection;
 import com.gitnova.service.agent.prompt.SecuritySection;
 import com.gitnova.service.agent.prompt.TaskSection;
-import com.gitnova.service.agent.prompt.ToolPolicySection;
 import com.gitnova.service.agent.tool.AgentTool;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolStatus;
@@ -736,7 +735,6 @@ class AgentRuntimeLocalWorkspaceIntegrationTest {
                 new TaskSection(),
                 new SecuritySection(),
                 new RepositoryScopeSection(),
-                new ToolPolicySection(),
                 new QualityPolicySection(),
                 new BudgetSection(),
                 new OutputContractSection()
