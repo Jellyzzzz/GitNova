@@ -1,0 +1,42 @@
+[
+  [
+    10,
+    "src/main/java/com/gitnova/controller/AgentSessionController.java",
+    "创建时按execution_backend调用新Lifecycle；旧会话detail走LegacyRead；鉴权从只读提升写入。"
+  ],
+  [
+    11,
+    "src/main/java/com/gitnova/controller/AgentTaskController.java",
+    "新Task公共API改走TaskApplicationService，保留answer.content外形并加入发布/结算状态。"
+  ],
+  [
+    11,
+    "src/main/java/com/gitnova/controller/AgentEventController.java",
+    "拟新增：公共SSE读取平台归档，不直接代理Worker的全部原始payload。"
+  ],
+  [
+    12,
+    "src/main/java/com/gitnova/controller/AgentModelProxyController.java",
+    "拟新增：独立会话token验证和固定上游；不是业务用户JWT的任意透传。"
+  ],
+  [
+    14,
+    "src/main/java/com/gitnova/service/TransferService.java",
+    "将权威HEAD发布提取到BranchPublicationService，保持原Push外部合同；加入受管agent分支写限制。"
+  ],
+  [
+    17,
+    "src/main/java/com/gitnova/event/CodeReviewListener.java",
+    "旧自动review不能随Runtime删除而留下坏调用：切到新Review任务适配或保留只读历史。自动review仍在用时必须完成新适配才能退役。"
+  ],
+  [
+    1,
+    "pom.xml",
+    "仅合并protocol/SDK/JGit/Commons Compress依赖；保留原server source与Java17编译目标。"
+  ],
+  [
+    17,
+    "src/main/resources/application.yml",
+    "按实际配置文件名称删除旧agent执行/Workspace键；别删其他业务MQ。新control键集中。"
+  ]
+]

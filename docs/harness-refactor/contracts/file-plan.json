@@ -1,0 +1,911 @@
+[
+  {
+    "step": 1,
+    "path": "agent-runtime/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/CommandType.java",
+    "name": "CommandType",
+    "signature": "字段与完整签名见 reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/CommandType.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "name": "TaskMode",
+    "step": 1,
+    "path": "agent-runtime/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/TaskMode.java",
+    "signature": "enum CODING, REVIEW, QA",
+    "logic": "保留旧Review/QA入口的明确能力配置；由平台选择，不是用户可任意提升的权限。",
+    "depends": "",
+    "tests": "按对应验收用例"
+  },
+  {
+    "step": 1,
+    "path": "agent-runtime/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/AgentCommand.java",
+    "name": "AgentCommand",
+    "signature": "字段与完整签名见 reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/AgentCommand.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 1,
+    "path": "agent-runtime/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/CommandReceipt.java",
+    "name": "CommandReceipt",
+    "signature": "字段与完整签名见 reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/CommandReceipt.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 1,
+    "path": "agent-runtime/agent-protocol/src/main/java/com/gitnova/agent/protocol/event/EventType.java",
+    "name": "EventType",
+    "signature": "字段与完整签名见 reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/event/EventType.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 1,
+    "path": "agent-runtime/agent-protocol/src/main/java/com/gitnova/agent/protocol/event/AgentEvent.java",
+    "name": "AgentEvent",
+    "signature": "字段与完整签名见 reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/event/AgentEvent.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 1,
+    "path": "agent-runtime/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/ApiProblem.java",
+    "name": "ApiProblem",
+    "signature": "字段与完整签名见 reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/ApiProblem.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 1,
+    "path": "agent-runtime/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/TaskView.java",
+    "name": "TaskView",
+    "signature": "字段与完整签名见 reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/TaskView.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 1,
+    "path": "agent-runtime/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/WorkerHealth.java",
+    "name": "WorkerHealth",
+    "signature": "字段与完整签名见 reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/WorkerHealth.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 1,
+    "path": "agent-runtime/agent-protocol/src/main/java/com/gitnova/agent/protocol/snapshot/ExportManifest.java",
+    "name": "ExportManifest",
+    "signature": "字段与完整签名见 reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/snapshot/ExportManifest.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 1,
+    "path": "agent-runtime/agent-protocol/src/main/java/com/gitnova/agent/protocol/transport/WorkerEndpoint.java",
+    "name": "WorkerEndpoint",
+    "signature": "字段与完整签名见 reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/transport/WorkerEndpoint.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 1,
+    "path": "agent-runtime/agent-protocol/src/main/java/com/gitnova/agent/protocol/json/ProtocolJson.java",
+    "name": "ProtocolJson",
+    "signature": "static ObjectMapper mapper(); static byte[] canonicalBytes(Object value); static String sha256(Object value); static AgentCommand readCommand(byte[] body)",
+    "logic": "实现05 canonicalBytes/objectmapper配置；枚举/record明确解码，不改变字段语义。",
+    "tests": "ProtocolJsonTest",
+    "depends": ""
+  },
+  {
+    "step": 2,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/history/SessionLog.java",
+    "name": "SessionLog",
+    "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/history/SessionLog.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 2,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/history/ResultStore.java",
+    "name": "ResultStore",
+    "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/history/ResultStore.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 2,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/history/FileSessionLog.java",
+    "name": "FileSessionLog",
+    "signature": "FileSessionLog(Path stateRoot, String sessionId, long epoch); append(...); read(...); boundary(); awaitAfter(...); close()",
+    "logic": "构造时持有 stateRoot/worker.lock 的 FileLock，拒绝第二个本地写者。逐行恢复当前 epoch 日志，每行保存 event+digest；只隔离不完整尾行。append 用单一 ReentrantLock 分配序号、序列化、写满 ByteBuffer、force，再更新可读尾部并 signalAll。日志失败置不可继续状态。read 只返回已 force 的完整边界；先实现内存 offset 索引，不为每行另造数据库。",
+    "tests": "SessionLogTest：并发100次序号连续；半行尾部可恢复；中间坏行拒绝；force失败不确认；wait注册边界无丢事件。",
+    "depends": "SessionLog,AgentEvent"
+  },
+  {
+    "step": 2,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/history/FileResultStore.java",
+    "name": "FileResultStore",
+    "signature": "FileResultStore(Path objectsRoot); capture(String,long); requireVerified(Ref)",
+    "logic": "captureId 为 UUID；临时文件只创建不覆盖，写入计数达到硬限后继续消费但不再保存，标 captureTruncated。finish force并关闭，算 SHA256，原子rename到 objects/<sha256>；同哈希校验后复用。事件追加成功后以 sourceEventId 为 resultId，事件payload引用 Ref；不要提前预占事件序号。读取先核验大小/hash。",
+    "tests": "LocalResultStoreTest：两个并发相同内容；截断标志；缺对象；错误hash；孤儿文件不会被当成历史结果。",
+    "depends": "ResultStore"
+  },
+  {
+    "step": 2,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/history/HistoryIndex.java",
+    "name": "HistoryIndex",
+    "signature": "rebuild(SessionLog); Optional<ResultRecord> find(String resultId); SearchPage search(SearchQuery query)",
+    "logic": "按TOOL_RESULT建立 resultId→原始事件与对象引用索引；historyReadback=true仅保留执行记录，不进入原始结果召回索引。分页cursor绑定session、epoch集合、query、caseSensitive及through边界。cursor不包含鉴权秘密；MAC防篡改可用会话内派生key，或服务端保存opaque cursor状态。恢复以快照selected-history为活动上下文，旧未来事件只能显式历史查询。",
+    "tests": "HistorySearchTest：跨任务来源正确；读回副本不递归召回；query变化cursor拒绝。",
+    "depends": "SessionLog,ResultStore"
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/model/ModelTypes.java",
+    "name": "ModelTypes",
+    "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/model/ModelTypes.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/config/RuntimeConfig.java",
+    "name": "RuntimeConfig",
+    "signature": "完整record与字段校验见reference/.../core/config/RuntimeConfig.java",
+    "logic": "集中保存所有运行参数；01现有阈值保留80/90/60、输出上限和预算按原基线。验证0<target<trigger<compact<1，预留输出与safety；创建Task时冻结configDigest，运行中不读取平台配置表。",
+    "tests": "RuntimeConfigTest：非法比例/负预算拒绝；digest稳定。",
+    "depends": ""
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/engine/ExecutionControl.java",
+    "name": "ExecutionControl",
+    "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/engine/ExecutionControl.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/engine/TaskInput.java",
+    "name": "TaskInput",
+    "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/engine/TaskInput.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/engine/AgentOutcome.java",
+    "name": "AgentOutcome",
+    "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/engine/AgentOutcome.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/engine/SessionRuntime.java",
+    "name": "SessionRuntime",
+    "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/engine/SessionRuntime.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/tool/ToolTypes.java",
+    "name": "ToolTypes",
+    "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/tool/ToolTypes.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/tool/AgentTool.java",
+    "name": "AgentTool",
+    "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/tool/AgentTool.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/tool/ToolRuntime.java",
+    "name": "ToolRuntime",
+    "signature": "ToolRuntime(List<AgentTool>); definitions(); execute(ModelTypes.ToolCall, ToolTypes.Context)",
+    "logic": "本步创建普通Map注册与分发器，完整参考在reference。步骤3注册测试工具，步骤4替换为真实本地工具；不依赖尚未完成的具体Tool或远程Gateway。Tool持有自己的有界参数解析器；日志持久化失败不被catch成可纠偏参数错误。",
+    "tests": "ToolRuntimeTest：重名；未知工具；字段类型；持久化失败向上；对返回payload设置大小上限。",
+    "depends": "ModelTypes,AgentTool,ToolTypes"
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/context/ContextTypes.java",
+    "name": "ContextTypes",
+    "signature": "完整字段见05/reference；实现入口按本段",
+    "logic": "集中放Position/Group/Summary/HistorySnapshot/Measurement记录。简称必须import这个类的嵌套类型，不能临场另建同名版本。",
+    "tests": "ContextTypesTest",
+    "depends": ""
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/context/ContextCoordinator.java",
+    "name": "ContextCoordinator",
+    "signature": "prepare(TaskInput,SessionRuntime,ExecutionControl,List<ModelTypes.ToolDefinition>): ModelTypes.Request; observeResponse(Response): void",
+    "logic": "先建立接口，让步骤3脚本模型测试用固定上下文实现；步骤5接入DefaultContextCoordinator，避免先依赖尚未创建的具体类。",
+    "tests": "ContextCoordinatorTest",
+    "depends": ""
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/model/ModelGateway.java",
+    "name": "ModelGateway",
+    "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/model/ModelGateway.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/engine/AgentEngine.java",
+    "name": "AgentEngine",
+    "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/engine/AgentEngine.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/engine/DefaultExecutionControl.java",
+    "name": "DefaultExecutionControl",
+    "signature": "DefaultExecutionControl(Instant deadline); implements ExecutionControl",
+    "logic": "用同一锁协调STEER接收与STOP确认。acceptSteer在锁内先耐久append再入有界队列。finishIfNoSteer在锁内检查取消/队列/输入关闭标志；无待处理消息才执行保存answer的回调并关闭输入。registerCancellable需处理注册前已经取消的竞态；取消先置标志再在锁外关闭HTTP/进程。禁止回调获取TaskInbox锁，锁顺序见05。",
+    "tests": "ControlRaceTest：取消先于注册；STEER先于STOP；STOP先于STEER；deadline。",
+    "depends": "ExecutionControl"
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/model/OpenAiModelGateway.java",
+    "name": "OpenAiModelGateway",
+    "signature": "OpenAiModelGateway(URI endpoint, Supplier<String> token, OkHttpClient client); Response complete(Request,ExecutionControl)",
+    "logic": "迁移旧网关的请求字段和响应解析，不替换供应商方言。Call创建后立即注册cancel回调；请求开始/完成都清理回调。message.content与reasoning_content分开，保留usage与finish_reason；将空/非法响应作为有类型异常交给Engine。固定代理URL，不接受Task中的upstream地址。默认保持已有非流式complete，页面展示阶段事件；字级流不是本次必需的新增模型能力。",
+    "tests": "ModelGatewayTest：MockWebServer返回原供应商fixture、取消、非200、空STOP和thinking。",
+    "depends": "ModelTypes,ExecutionControl"
+  },
+  {
+    "step": 3,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/engine/DefaultAgentEngine.java",
+    "name": "DefaultAgentEngine",
+    "signature": "DefaultAgentEngine(ModelGateway, ToolRuntime, ContextCoordinator, RuntimeConfig); AgentOutcome run(TaskInput,SessionRuntime,ExecutionControl)",
+    "logic": "按02步骤3的完整循环。每次先应用steer并检查预算，Context构造请求；先落MODEL_CALL_STARTED，取得响应后先落MODEL_RESPONSE。工具按声明顺序串行执行：记录开始→执行→保存原始结果→追加结果→生成模型可见投影。STOP通过control.finishIfNoSteer原子确认，生成ANSWER_DELIVERED引用响应；LENGTH/空正文/未知工具等按明确策略返回。finally绝不偷偷调用模型补答案。",
+    "tests": "AgentEngineTest：脚本模型read/edit/shell/STOP；空STOP拒绝；途中说明不是answer；失败不重放副作用。",
+    "depends": "AgentEngine,ModelGateway,ToolRuntime,ContextCoordinator"
+  },
+  {
+    "step": 4,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/process/ProcessSupervisor.java",
+    "name": "ProcessSupervisor",
+    "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/process/ProcessSupervisor.java",
+    "logic": "先阅读接口注释，再按 05 的字段校验表创建；协议类型不放平台实体。接口只描述边界，具体实现见本表对应实现类。",
+    "tests": "ProtocolRoundTripTest（协议）；ContractCompileTest（所有接口）",
+    "depends": ""
+  },
+  {
+    "step": 4,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/tool/ToolSchemaValidator.java",
+    "name": "ToolSchemaValidator",
+    "signature": "List<FieldError> validate(String schemaJson,String argumentsJson)",
+    "logic": "搬现有验证器支持的JSON Schema子集，不宣称实现全部规范。返回稳定路径、期望类型与缺字段。限制JSON深度/大小，禁止Jackson default typing。每个工具的语义限制（例如oldText匹配）在工具内，不塞入通用验证器。",
+    "tests": "SchemaTest：required/类型/additionalProperties/最大长度。",
+    "depends": ""
+  },
+  {
+    "step": 4,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/tool/SafePaths.java",
+    "name": "SafePaths",
+    "signature": "SafePaths(Path workRoot); Path existing(String); Path forCreate(String)",
+    "logic": "初始化workRoot.toRealPath，允许逻辑/workspace映射到可信root；候选normalize后检查Path.startsWith，逐级NOFOLLOW检查软链。创建只允许父目录在根内；不接受任意file:/artifact URI。可信任务基础线下用单写入锁与目录权限控制TOCTOU，不能宣称可抵抗恶意shell同UID篡改。",
+    "tests": "SafePathsTest：../、前缀同名、软链、嵌套不存在父目录、UTF8路径。",
+    "depends": ""
+  },
+  {
+    "step": 4,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/tool/LocalReadTool.java",
+    "name": "LocalReadTool",
+    "signature": "LocalReadTool(SafePaths); definition(); execute(String,Context)",
+    "logic": "args path/startLine/endLine；验证UTF8，用有界流读，返回实际行号、totalLines或hasMore和nextStart；不要只给字符串造成分页歧义。二进制返回UNSUPPORTED_TEXT，shell可处理字节文件。文件不存在NOT_FOUND。",
+    "tests": "LocalReadTest：CRLF、空文件、末尾无换行、大文件截断。",
+    "depends": "SafePaths"
+  },
+  {
+    "step": 4,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/tool/LocalEditTool.java",
+    "name": "LocalEditTool",
+    "signature": "LocalEditTool(SafePaths); definition(); execute(String,Context)",
+    "logic": "一个工具通过mode=CREATE/REPLACE/DELETE表达全部基础修改。REPLACE需oldText唯一匹配或expectedSha256，保持未修改字节/换行，临时文件force后原子替换并保留可执行位。CREATE禁止覆盖，DELETE必须确认目标内容hash；父目录可创建但不能越界。不使用全树generation。",
+    "tests": "LocalEditTest：create冲突、0/2次匹配、撤销、二进制拒绝、路径安全。",
+    "depends": "SafePaths"
+  },
+  {
+    "step": 4,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/process/LinuxProcessSupervisor.java",
+    "name": "LinuxProcessSupervisor",
+    "signature": "LinuxProcessSupervisor(ResultStore, Path processRoot, Limits); implements ProcessSupervisor",
+    "logic": "用deploy/process-launch.py作为可信启动器：先os.setsid取得会话/进程组，原子写pid/pgid/starttime控制记录，再exec真正argv。stdin关闭，两个独立消费线程持续排空stdout/stderr。超时TERM→2秒→KILL；验证bootId/starttime避免PID复用后杀错。剩余进程无法确认停止则BLOCKED，平台销毁实例确认前不重用卷。后台句柄也必须登记，seal执行stopAllAndConfirm。详见06及Linux测试脚本，不把Java destroy当kill-tree。",
+    "tests": "LinuxProcessIT：正常退出3、输出各2MB、子进程取消、后台poll/stop、控制文件伪造拒绝。",
+    "depends": "ProcessSupervisor,ResultStore"
+  },
+  {
+    "step": 4,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/tool/LocalShellTool.java",
+    "name": "LocalShellTool",
+    "signature": "LocalShellTool(ProcessSupervisor,SafePaths); definition(); execute(String,Context)",
+    "logic": "args action=RUN/START/POLL/STOP；RUN与START传script/cwd/timeoutSeconds，POLL/STOP传processId与cursor。RUN通过bash -lc执行模型生成脚本，绝不直接执行用户Task正文。START仅允许受管理后台任务；POLL返回有界增量和真实状态，不能把未完成表示exit=0。",
+    "tests": "LocalShellTest：每种action字段约束；无效句柄；退出非0仍返回事实。",
+    "depends": "ProcessSupervisor,SafePaths"
+  },
+  {
+    "step": 5,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/context/SessionHistoryReader.java",
+    "name": "SessionHistoryReader",
+    "signature": "HistorySnapshot load(SessionRuntime,String currentTaskId); List<Message> project(HistorySnapshot)",
+    "logic": "迁移SessionContextService的配对/覆盖规则，数据源换SessionLog。摘要覆盖前缀但原始事件不删；Assistant的toolCalls与每个结果保持一组；没有结果的TOOL_STARTED作为中断证据，不伪造成功tool。旧任务限制保留taskId且不标当前任务。",
+    "tests": "ContextReplayTest：跨8个Task、摘要覆盖、工具配对、未来历史不污染。",
+    "depends": "SessionLog,HistoryIndex,ModelTypes"
+  },
+  {
+    "step": 5,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/context/TokenEstimator.java",
+    "name": "TokenEstimator",
+    "signature": "Measurement estimate(ModelTypes.Request request)",
+    "logic": "移植旧jtokkit及参考编码，保留固定工具schema、message、预留输出计数。计数是预算近似而非计费真值；实际provider usage单独记录。",
+    "tests": "TokenEstimatorTest：中文、schema、大输出预算。",
+    "depends": ""
+  },
+  {
+    "step": 5,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/context/ContextSummarizer.java",
+    "name": "ContextSummarizer",
+    "signature": "Summary summarize(HistorySnapshot,RuntimeConfig,ExecutionControl)",
+    "logic": "迁旧总结提示与解析；保留用户约束/关键进度/来源与最近组；采用专门的摘要modelCallId，不能刷新主模型usage锚点。摘要正文与through引用同一记录落日志；失败不破坏现有历史。",
+    "tests": "SummarizerTest：坏JSON/空正文/超预算/取消。",
+    "depends": "ModelGateway"
+  },
+  {
+    "step": 5,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/context/ToolObservationProjector.java",
+    "name": "ToolObservationProjector",
+    "signature": "ModelTypes.Message project(ToolCall,ToolTypes.Result,AgentEvent source)",
+    "logic": "小结果原样内联但附sourceEventId/resultId；大结果生成有限预览及继续读取定位。完整字节先由ResultStore保存。历史回读只作为新tool消息，不把旧验证转成当前验证。",
+    "tests": "ObservationTest：4096/1024预算边界、引用稳定、captureTruncated。",
+    "depends": "HistoryIndex"
+  },
+  {
+    "step": 5,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/context/DefaultContextCoordinator.java",
+    "name": "DefaultContextCoordinator",
+    "signature": "DefaultContextCoordinator(SessionHistoryReader,ContextSummarizer,TokenEstimator,RuntimeConfig); implements ContextCoordinator",
+    "logic": "保留旧ContextAssembler/ContextBudget/ContextUsage算法，转为纯Java组合；先估算固定提示/工具/输出保留，80%摘要、90%强压缩、压缩后再次预算校验。摘要请求也有自己的预算，不能通过放大阈值掩盖数据迁移错误。保存覆盖到具体epoch+sequence。",
+    "tests": "ContextBudgetTest,ContextPreparationTest：超限拒绝与强压缩。",
+    "depends": "SessionHistoryReader,ContextSummarizer,TokenEstimator"
+  },
+  {
+    "step": 5,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/tool/HistoryReadTool.java",
+    "name": "HistoryReadTool",
+    "signature": "definition(); execute(String,Context); // read(resultId,view,startLine,endLine)",
+    "logic": "通过HistoryIndex验证结果属于当前会话，使用原始事件的对象引用，不按用户绝对路径任意读state。支持stdout/stderr/result.json的显式view，损坏报错；来源task/epoch不改写。",
+    "tests": "HistoryToolsTest：来源、分页、坏cursor、不可达结果。",
+    "depends": "HistoryIndex,ResultStore"
+  },
+  {
+    "step": 5,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/tool/HistorySearchTool.java",
+    "name": "HistorySearchTool",
+    "signature": "definition(); execute(String,Context); // search(query,through,cursor,caseSensitive)",
+    "logic": "仅有界搜索当前Session原始结果集合；游标固定through与查询，不包含回读副本。已找到足够证据可停止；声称全部/不存在时须完成对应范围。",
+    "tests": "HistoryToolsTest：来源、分页、坏cursor、不可达结果。",
+    "depends": "HistoryIndex,ResultStore"
+  },
+  {
+    "step": 6,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/control/WorkerResources.java",
+    "name": "WorkerResources",
+    "signature": "完整接口见reference；receiveBootstrap/initialize/export/previewJson",
+    "logic": "HTTP只依赖此端口；步骤6在test用内存替身，步骤8用BundleCodec+ExportStore实现。读取export必须通过授权ID解析，不接受任意路径。",
+    "depends": "AgentCommand",
+    "tests": "WorkerResourceContractTest"
+  },
+  {
+    "step": 6,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/WorkerConfig.java",
+    "name": "WorkerConfig",
+    "signature": "record WorkerConfig(sessionId,runnerEpoch,port,sessionRoot,modelEndpoint,modelToken,workerToken,limits); static load(Map<String,String>)",
+    "logic": "从固定环境变量读取；端口8081，workRoot=/session/worktree,stateRoot=/session/state,exportRoot=/session/exports。启动先创建目录、校验权限，token不写普通日志。缺参快速失败。不要从用户Task接受root路径。",
+    "tests": "WorkerConfigTest：缺参、坏epoch、目录重叠。",
+    "depends": ""
+  },
+  {
+    "step": 6,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/control/TaskFinalizer.java",
+    "name": "TaskFinalizer",
+    "signature": "finish(TaskInput,AgentOutcome): void; acknowledge(AgentCommand.Ack): void",
+    "logic": "HTTP/TaskInbox只依赖此接口，不提前依赖步骤8的SessionSealer；测试替身仅在测试源码，最终assembly只能装真实Sealer。",
+    "tests": "TaskFinalizerTest",
+    "depends": ""
+  },
+  {
+    "step": 6,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/control/WorkerSession.java",
+    "name": "WorkerSession",
+    "signature": "snapshot(); initialize(...); begin(TaskInput); beginFinalizing(...); awaitSettlement(exportId); settle(Ack); block(code)",
+    "logic": "唯一Worker状态拥有者，TaskInbox与执行收尾共用该对象。State枚举取协议WorkerHealth，状态迁移表在05。只在短锁内改状态/记录日志，不在锁内跑模型、网络或zip。进程重启从完整日志重建。",
+    "tests": "WorkerStateTest：表驱动验证全部状态/命令组合。",
+    "depends": "WorkerHealth,SessionLog"
+  },
+  {
+    "step": 6,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/control/TaskInbox.java",
+    "name": "TaskInbox",
+    "signature": "CommandReceipt accept(AgentCommand); Optional<CommandReceipt> receipt(String); TaskView task(String)",
+    "logic": "校验身份→按commandId查已存接受记录→内容摘要一致→状态检查→落COMMAND_ACCEPTED→交给taskExecutor。幂等Task还需按taskId+attemptId查，防换commandId重复执行同attempt。不同任务忙则409，不落受理记录。CANCEL/STEER走controlExecutor，不能排在Agent后。拒绝调度时保留受理事实再记录失败，不能删除历史。 mode由平台入口固定；CODING才使用写工具与自动发布，QA/REVIEW不注册Shell和写代码工具。mode进入命令规范化摘要，重复请求不能改模式。",
+    "tests": "WorkerAdmissionIT：重复命令/重复attempt、错正文、两任务、控制及时性。",
+    "depends": "WorkerSession,DefaultExecutionControl,AgentEngine"
+  },
+  {
+    "step": 6,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/http/HttpJson.java",
+    "name": "HttpJson",
+    "signature": "AgentCommand readCommand(HttpExchange); void json(exchange,status,Object); void problem(exchange,status,ApiProblem)",
+    "logic": "限制请求字节与JSON深度；按type switch选择record Payload类，ObjectMapper注册JavaTimeModule，关闭未知字段和default typing。写JSON Content-Type并关闭exchange，错误码映射见05。body末尾多余内容拒绝。",
+    "tests": "HttpJsonTest：中文、多行、非法字段、413。",
+    "depends": "AgentCommand"
+  },
+  {
+    "step": 6,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/http/AgentWorkerServer.java",
+    "name": "AgentWorkerServer",
+    "signature": "AgentWorkerServer(WorkerConfig,TaskInbox,WorkerSession,SessionLog,WorkerResources); start(); close()",
+    "logic": "JDK HttpServer监听0.0.0.0:port；精确路由而不是只按前缀匹配。HTTP请求运行在有界入口+Java21虚拟线程执行器；SSE订阅另有限额。注册命令、receipt、task、health、events、exports和previews。调用不进入长Loop，Loop使用独立单线程。",
+    "tests": "WorkerHttpIT：路由/状态码/token/慢SSE不阻断取消。",
+    "depends": "WorkerResources等接口，不直接依赖步骤8的ExportStore"
+  },
+  {
+    "step": 6,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/WorkerAssembly.java",
+    "name": "WorkerAssembly",
+    "signature": "static WorkerApplication build(WorkerConfig)",
+    "logic": "唯一手写装配点：Paths→FileSessionLog→FileResultStore→HistoryIndex→ModelGateway→Context→ProcessSupervisor→Tools→Engine→WorkerSession→TaskInbox→HTTP。把执行结束回调连接到sealer，步骤8之前测试用in-memory假sealer；正式发布不允许该假实现。close逆序且所有资源只由assembly关一次。",
+    "tests": "AssemblyTest：两次关闭不异常；依赖中无Server DB/MQ。",
+    "depends": ""
+  },
+  {
+    "step": 6,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/AgentWorkerMain.java",
+    "name": "AgentWorkerMain",
+    "signature": "public static void main(String[] args)",
+    "logic": "load config→build→start HTTP→注册shutdownHook→等待关闭。进程活着时BOOTING也可响应live，INITIALIZE成功才ready。不要将Agent线程放在main里占住所有控制。",
+    "tests": "WorkerBootIT：ready门槛、SIGTERM关闭过程。",
+    "depends": "WorkerAssembly"
+  },
+  {
+    "step": 7,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/http/EventStreamHandler.java",
+    "name": "EventStreamHandler",
+    "signature": "void handle(HttpExchange); void writeFrame(OutputStream,AgentEvent)",
+    "logic": "校验token/session/epoch/cursor；使用SessionLog循环read→awaitAfter→read。cursor上界/丢失返回明确错误；慢连接只断本订阅。SSE每frame空行与flush，15秒注释心跳；每个raw事件最终已耐久，任何用户stdout只能位于payload中。",
+    "tests": "EventReplayIT：首次从头、gap、断连、半字符、慢client。",
+    "depends": "SessionLog"
+  },
+  {
+    "step": 7,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/http/QueryHandlers.java",
+    "name": "QueryHandlers",
+    "signature": "QueryHandlers(WorkerSession,TaskInbox,WorkerResources); handleHealth/handleCommand/handleTask/handleExport/handlePreview(HttpExchange)",
+    "logic": "路径只接UUID或事件身份，校验归属。export以exportId查ExportStore而非拼用户path；stream body限制超时/大小。Task.answer仅沿answerEventId→MODEL_RESPONSE；旧中间STOP不能被查询为最终答案。",
+    "tests": "QueryIT：不能任意下载、错误task/epoch、原文回复保真。",
+    "depends": "TaskInbox,WorkerSession,WorkerResources"
+  },
+  {
+    "step": 8,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/seal/BundleCodec.java",
+    "name": "BundleCodec",
+    "signature": "write(bundleInputs,zip); readBootstrap(zip,expected); hashManifestEntries(...)",
+    "logic": "TREE、STATE、BASELINE三个集合，UTF8路径排序与固定长度前缀hash，见05字节规范。bootstrap显式大小检查；恢复state复制只到完整N；不要把活动临时ZIP打包到自己。只把manifest指定的普通文件按字节复制，排除规则对tracked不能默删。",
+    "tests": "BundleCodecTest",
+    "depends": ""
+  },
+  {
+    "step": 8,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/seal/ExportStore.java",
+    "name": "ExportStore",
+    "signature": "begin(exportId); publish(temp,manifest); require(exportId); list(); deleteAfterAck(...)",
+    "logic": "exports独立于state/tree，固定exportId临时路径最后atomic rename；不按随机重试生成新包。创建意图及seal覆盖先落日志，seal成功包hash记录到log；重启能识别包已成但事件没写的窗口。",
+    "tests": "ExportStoreTest",
+    "depends": ""
+  },
+  {
+    "step": 8,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/seal/LocalWorkerResources.java",
+    "name": "LocalWorkerResources",
+    "signature": "implements WorkerResources; LocalWorkerResources(WorkerSession,WorkerConfig,BundleCodec,ExportStore)",
+    "logic": "实现WorkerResources的唯一生产适配。bootstrap只在BOOTING上传到独立incoming目录，校验size/hash、原子改名；initialize先解包到新临时目录全部验证，再装载tree/state/baseline并切换READY。查询export只读封存对象；预览返回Sealer写下的固定JSON。与SessionSealer共享WorkerSession屏障，不在正在运行时覆盖目录。",
+    "depends": "WorkerResources,BundleCodec,ExportStore",
+    "tests": "LocalWorkerResourcesTest"
+  },
+  {
+    "step": 8,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/seal/SessionSealer.java",
+    "name": "SessionSealer",
+    "signature": "SessionSealer(...) implements TaskFinalizer; sealTask(...); sealIdle(...); preview(...); applySettlement(...)",
+    "logic": "Worker进入FINALIZING，控制API不能开始新Task；ProcessSupervisor确认无写进程。固定日志N+byteoffset；复制受支持的源码与恢复状态，生成manifest/treeDigest/stateDigest，导出包→SNAPSHOT_SEALED→WAITING_SETTLEMENT。ACK已耐久才替换baseline并TURN_SETTLED。PUBLISHED使用同sealedTree为新baseline；SKIPPED保留旧baseline和dirty。",
+    "tests": "SessionSealerIT",
+    "depends": ""
+  },
+  {
+    "step": 9,
+    "path": "src/main/java/com/gitnova/service/agent/control/ControlTypes.java",
+    "name": "ControlTypes",
+    "signature": "完整嵌套record见reference/server-control/.../ControlTypes.java",
+    "logic": "字段来自05数据库/manifest和06创建API。LaunchSpec必须包含sessionId/epoch/createOperationId/volumeName/imageRef/runtimeConfigDigest/modelEndpoint/令牌来源；Binding不保存绝对宿主路径。VerifiedBundle只在包已验证且不可变时构造，附Path/manifest/hash；业务controller不接收该内部对象。",
+    "tests": "ControlTypesTest",
+    "depends": ""
+  },
+  {
+    "step": 9,
+    "path": "src/main/java/com/gitnova/service/agent/control/SandboxControl.java",
+    "name": "SandboxControl",
+    "signature": "完整五方法见contracts/component-methods.md，异常为IOException",
+    "logic": "平台唯一基础设施接口，domain类型不泄露SDK对象；代理endpoint保留路径和headers，销毁仅确认不存在才返回。",
+    "tests": "OpenSandboxControlIT",
+    "depends": ""
+  },
+  {
+    "step": 9,
+    "path": "src/main/java/com/gitnova/service/agent/control/OpenSandboxControlAdapter.java",
+    "name": "OpenSandboxControlAdapter",
+    "signature": "implements SandboxControl",
+    "logic": "实际SDK调用逐行见06/示例。先持久createOperationId和metadata，create只发送一次；响应不明先查资源标签，不立即重建。连SDK句柄关闭不意味着容器删除；idle不用stop来冒充destroy。",
+    "tests": "OpenSandboxControlIT",
+    "depends": ""
+  },
+  {
+    "step": 9,
+    "path": "src/main/java/com/gitnova/service/agent/control/AgentWorkerClient.java",
+    "name": "AgentWorkerClient",
+    "signature": "send(endpoint,command); receipt(...); task(...); streamEvents(...); downloadExport(...)",
+    "logic": "只封装HTTP序列化、受控headers、时间限制和SSE读取，不自行循环重试SUBMIT。URL拼接保留代理前缀，SSE不复用30秒整次请求deadline；超时结果UNKNOWN由Dispatcher处理。",
+    "tests": "WorkerClientTest",
+    "depends": ""
+  },
+  {
+    "step": 10,
+    "path": "src/main/java/com/gitnova/entity/agent/control/ControlRows.java",
+    "name": "ControlRows",
+    "signature": "静态POJO：SessionRow、BindingRow、TaskRow、AttemptRow、CommandRow、EventRow、ArchiveRow、PublicationRow、PullRequestRow、CommentRow、MergeRow",
+    "logic": "字段逐一对应schema字段，snake_case→camelCase；时间一律Instant映射或UTC LocalDateTime，不能混宿主时区。使用Lombok @Data+无参构造用于现有MyBatis，枚举字段先String，由Service显式解析。生成列active_pair不由代码赋值。",
+    "tests": "RowMappingIT：字段roundtrip、UTC、nullable和大JSON。",
+    "depends": ""
+  },
+  {
+    "step": 10,
+    "path": "src/main/java/com/gitnova/mapper/agent/control/SessionControlMapper.java",
+    "name": "SessionControlMapper",
+    "signature": "按05 SQL事务编号声明 selectForUpdate/insert/update 方法；行类型见05字段字典。",
+    "logic": "只放单条SQL，不在Mapper中发HTTP。使用Mapper注解SQL，完整方法见contracts/mapper-contracts.md。返回ControlRows的同名静态POJO；mapUnderscoreToCamelCase显式开启。UPDATE返回int，调用方必须检查=1。Session/Binding/生命周期。",
+    "tests": "MapperMySqlIT：两连接真实并发/unique/check/rollback。",
+    "depends": ""
+  },
+  {
+    "step": 10,
+    "path": "src/main/java/com/gitnova/service/repository/CommitTreeService.java",
+    "name": "CommitTreeService",
+    "signature": "load(repoKey,sha); saveTree(...); ancestors(...); commonAncestor(...)",
+    "logic": "复用GitObjectReader/Codec/Hasher/ObjectStorage，处理单父链和循环/长度限额。saveTree文件原字节→blob→完整mapping→固定commit元数据，不把diff作为真实文件；不创建标准.git。",
+    "tests": "CommitTreeServiceTest",
+    "depends": ""
+  },
+  {
+    "step": 10,
+    "name": "RepositoryBootstrapService",
+    "path": "src/main/java/com/gitnova/service/repository/RepositoryBootstrapService.java",
+    "signature": "create(long repoId,String baseSha,String sessionId,long epoch,String runtimeConfigDigest):Path",
+    "logic": "读取固定A的完整GNOV mapping，使用原ObjectStorage逐个取blob；构造仅tree+baseline+初始state/manifest的bootstrap ZIP，配置摘要与Session身份固定，不能含密钥。使用JDK ZipOutputStream或Commons Compress生成，格式与协议ExportManifest一致；不导入agent-worker的BundleCodec类到Server。bootstrap文件耐久保存后上传Worker的PUT入口，同bootstrapId重试不重新读取main。",
+    "depends": "CommitTreeService,GitObjectReader,ExportManifest",
+    "tests": "RepositoryBootstrapTest"
+  },
+  {
+    "step": 10,
+    "path": "src/main/java/com/gitnova/config/AgentControlConfiguration.java",
+    "name": "AgentControlConfiguration",
+    "signature": "@Bean SandboxControl/WorkerClient/Mapper services; @ConfigurationProperties",
+    "logic": "集中装配路径、超时、配额、proxy与scheduler；开关SANDBOX_AGENT只影响新session route。移除旧注入需步骤17，不能在这个类中顺带new旧Runtime。",
+    "tests": "ControlBeanGraphTest",
+    "depends": ""
+  },
+  {
+    "step": 10,
+    "path": "src/main/java/com/gitnova/service/agent/control/SessionLifecycleService.java",
+    "name": "SessionLifecycleService",
+    "signature": "create(repoId,actorId,request,key); suspend(sessionId); resume(sessionId); close(sessionId)",
+    "logic": "短事务保存PROVISIONING+固定A+branchName→事务外bootstrap/openSandbox→确认ready→短事务创建branch并ACTIVE。重复先查idempotency不重取变化后的A。生命周期变更与Task受理锁同一Session行。",
+    "tests": "SessionProvisionIT",
+    "depends": ""
+  },
+  {
+    "step": 11,
+    "path": "src/main/java/com/gitnova/mapper/agent/control/TaskControlMapper.java",
+    "name": "TaskControlMapper",
+    "signature": "按05 SQL事务编号声明 selectForUpdate/insert/update 方法；行类型见05字段字典。",
+    "logic": "只放单条SQL，不在Mapper中发HTTP。使用Mapper注解SQL，完整方法见contracts/mapper-contracts.md。返回ControlRows的同名静态POJO；mapUnderscoreToCamelCase显式开启。UPDATE返回int，调用方必须检查=1。Task/Attempt/Command与活跃槽。",
+    "tests": "MapperMySqlIT：两连接真实并发/unique/check/rollback。",
+    "depends": ""
+  },
+  {
+    "step": 11,
+    "path": "src/main/java/com/gitnova/mapper/agent/control/EventArchiveMapper.java",
+    "name": "EventArchiveMapper",
+    "signature": "按05 SQL事务编号声明 selectForUpdate/insert/update 方法；行类型见05字段字典。",
+    "logic": "只放单条SQL，不在Mapper中发HTTP。使用Mapper注解SQL，完整方法见contracts/mapper-contracts.md。返回ControlRows的同名静态POJO；mapUnderscoreToCamelCase显式开启。UPDATE返回int，调用方必须检查=1。事件与连续游标/查询。",
+    "tests": "MapperMySqlIT：两连接真实并发/unique/check/rollback。",
+    "depends": ""
+  },
+  {
+    "step": 11,
+    "path": "src/main/java/com/gitnova/mapper/agent/control/DeliveryMapper.java",
+    "name": "DeliveryMapper",
+    "signature": "按05 SQL事务编号声明 selectForUpdate/insert/update 方法；行类型见05字段字典。",
+    "logic": "只放单条SQL，不在Mapper中发HTTP。使用Mapper注解SQL，完整方法见contracts/mapper-contracts.md。返回ControlRows的同名静态POJO；mapUnderscoreToCamelCase显式开启。UPDATE返回int，调用方必须检查=1。归档与Publication。",
+    "tests": "MapperMySqlIT：两连接真实并发/unique/check/rollback。",
+    "depends": ""
+  },
+  {
+    "step": 11,
+    "path": "src/main/java/com/gitnova/service/agent/control/BundleValidator.java",
+    "name": "BundleValidator",
+    "signature": "validate(Path zip,ExpectedScope,Limits): VerifiedBundle",
+    "logic": "先查central目录软链/重复、限制entry数量和流式解压字节、manifest严格映射、SHA256、scope、N边界。用Commons Compress或明确拒绝external mode指示的链接；不要仅JDK ZipEntry.isDirectory来判断软链。安全临时目录不执行任何包中脚本。",
+    "tests": "BundleValidatorTest",
+    "depends": ""
+  },
+  {
+    "step": 11,
+    "path": "src/main/java/com/gitnova/service/agent/control/ArchiveService.java",
+    "name": "ArchiveService",
+    "signature": "collect(sessionId,exportId); archiveBootstrap(...); requireArchive(archiveId)",
+    "logic": "下载到唯一临时路径，BundleValidator检查zip和manifest，平台内容寻址对象存储耐久完成后插archive行；同export哈希不同拒绝。下载失败重试同包。拿到包不直接推进Branch。",
+    "tests": "ArchiveIT",
+    "depends": ""
+  },
+  {
+    "step": 11,
+    "path": "src/main/java/com/gitnova/service/agent/control/TaskApplicationService.java",
+    "name": "TaskApplicationService",
+    "signature": "submit(repoId,sessionId,actorId,message,key); steer(...); cancel(...); retryInterrupted(...); detail(...)",
+    "logic": "鉴权后锁Session，先同key查Task再检查空槽/ACTIVE/workflow OPEN；一次事务插Task+Attempt+SUBMIT command并设置activeTaskId。事务外请求发送，202不宣称Worker已接收。retry只对确认中断的任务创建新attempt，不自动重放工具。",
+    "tests": "TaskDispatchIT",
+    "depends": ""
+  },
+  {
+    "step": 11,
+    "path": "src/main/java/com/gitnova/service/agent/control/CommandDispatcher.java",
+    "name": "CommandDispatcher",
+    "signature": "dispatch(commandId); reconcilePending(); reconcileReceipt(commandId)",
+    "logic": "从control-command读确定信封，发送前deadline和epoch校验；200/202标accepted，明确拒绝标rejected，传输失败UNKNOWN。扫描器重查同identity，不生成新Task。CANCEL可先于SUBMIT到达时记待取消标志，SUBMIT受理后立即执行取消；此竞态见05。",
+    "tests": "DispatchLossIT",
+    "depends": ""
+  },
+  {
+    "step": 11,
+    "path": "src/main/java/com/gitnova/service/agent/control/EventProjector.java",
+    "name": "EventProjector",
+    "signature": "archiveAndProject(AgentEvent); answer(taskId); publicEvents(sessionId,offset,limit)",
+    "logic": "按Session行→Binding锁顺序，验证event身份/seq/hash→插archive→更新Task/Attempt→更新连续cursor同事务。旧epoch只归档；不更新当前任务。答复引用先查原事件归属/STOP条件。每Session串行归档保证页面offset不会因事务提交乱序漏读。",
+    "tests": "EventProjectionIT",
+    "depends": ""
+  },
+  {
+    "step": 11,
+    "path": "src/main/java/com/gitnova/service/agent/control/EventCollector.java",
+    "name": "EventCollector",
+    "signature": "attach(sessionId,epoch); collectOnce(...); reconnect(...); stop(...)",
+    "logic": "从Binding.lastArchivedSequence接事件；拿到完整帧才交Projector。断流重连从DB连续游标，不按最后看到的内容。允许多副本重复接收，DB串行去重。持久收集器队列有界，慢数据库不无限内存缓存。",
+    "tests": "CollectorReplayIT",
+    "depends": ""
+  },
+  {
+    "name": "AgentEventController",
+    "step": 11,
+    "path": "src/main/java/com/gitnova/controller/AgentEventController.java",
+    "signature": "GET /api/repos/{repoId}/agent/sessions/{sessionId}/events?after=offset",
+    "logic": "核对当前用户可访问Session；从数据库归档读取公共白名单投影；UTF-8/SSE flush；断连只关订阅，不调用cancel。",
+    "depends": "EventArchiveMapper,TaskApplicationService",
+    "tests": "PublicEventIT"
+  },
+  {
+    "name": "AgentModelProxyController",
+    "step": 12,
+    "path": "src/main/java/com/gitnova/controller/AgentModelProxyController.java",
+    "signature": "POST /internal/agent/model/chat/completions",
+    "logic": "校验Worker派生令牌和当前epoch，转固定供应商。禁止请求带任意upstream URL；取消/关闭响应要释放上游Call；无透明POST重试。",
+    "depends": "ModelProxyService",
+    "tests": "ModelProxyIT"
+  },
+  {
+    "step": 12,
+    "path": "src/main/java/com/gitnova/service/agent/control/ModelProxyService.java",
+    "name": "ModelProxyService",
+    "signature": "forward(actorScope,request,downstreamResponse)",
+    "logic": "只访问配置允许的供应商地址，删除用户host/auth等敏感头后注入真实key；body大小/模型/截止/额度校验。不读取messages改策略，不再跑Agent。用户断连或Worker取消尽力终止上游Call，无exactly-once计费承诺。",
+    "tests": "ModelProxyIT",
+    "depends": ""
+  },
+  {
+    "step": 13,
+    "path": "src/main/resources/static/agent-ui/api.js",
+    "name": "api.js",
+    "signature": "export函数名见上方与05公共API",
+    "logic": "封装fetch Bearer认证、JSON错误与command id；只连接平台，绝不连接Sandbox；重试POST重用同Idempotency-Key。",
+    "tests": "BrowserAgentE2E",
+    "depends": ""
+  },
+  {
+    "step": 13,
+    "path": "src/main/resources/static/agent-ui/index.html",
+    "name": "index.html",
+    "signature": "export函数名见上方与05公共API",
+    "logic": "独立调试入口，引用type=module脚本；挂载root并通过既有登录态API获取token，不硬编码。线上页面通过同一mount接入，无需重做全站UI。",
+    "tests": "BrowserAgentE2E",
+    "depends": ""
+  },
+  {
+    "step": 13,
+    "path": "src/main/resources/static/agent-ui/session.js",
+    "name": "session.js",
+    "signature": "export函数名见上方与05公共API",
+    "logic": "导出mountAgentSession(root,api)；显示准备/发送/执行/封存/发布状态；提交/steer/cancel/预览/重试/跳过分别按钮。旧输入在409时保留，不吞消息。关闭页面仅abort订阅。",
+    "tests": "BrowserAgentE2E",
+    "depends": ""
+  },
+  {
+    "step": 13,
+    "path": "src/main/resources/static/agent-ui/sse.js",
+    "name": "sse.js",
+    "signature": "export函数名见上方与05公共API",
+    "logic": "TextDecoder stream=true跨chunk连续解码，支持CRLF、多行data、空行分帧与注释；只在完整事件经reducer确认后前移cursor。重连从lastOffset。",
+    "tests": "BrowserAgentE2E",
+    "depends": ""
+  },
+  {
+    "step": 14,
+    "path": "src/main/java/com/gitnova/service/repository/BranchPublicationService.java",
+    "name": "BranchPublicationService",
+    "signature": "createReference(...); publishExpected(...); assertManagedBranchWrite(...)",
+    "logic": "提取TransferService可共享的权威检查；事务短，先验证objects完整，再锁Session/Publication（如有）和分支。普通Push写受管agent分支拒绝；保持默认branch缓存及PostReceive语义，不把eventPublisher误说成MQ。CommitRecord按repo+sha索引，不用branchName字段判断祖先。",
+    "tests": "HostedPushRegressionTest,BranchPublicationIT",
+    "depends": ""
+  },
+  {
+    "step": 14,
+    "path": "src/main/java/com/gitnova/service/agent/control/PublicationService.java",
+    "name": "PublicationService",
+    "signature": "publish(archiveId); retry(publicationId); skip(publicationId); settleAndAck(...)",
+    "logic": "唯一session+export固定parent/time/message。比较完整父树；无变化NO_CHANGES，有变化构造objects再短事务CAS与metadata。发布失败保留answer/归档。ACK记录和确定结果同事务保存，由Dispatcher补发；只有TURN_SETTLED释放Session槽。",
+    "tests": "PublicationIT",
+    "depends": ""
+  },
+  {
+    "step": 15,
+    "path": "src/main/java/com/gitnova/mapper/agent/control/PullRequestMapper.java",
+    "name": "PullRequestMapper",
+    "signature": "按05 SQL事务编号声明 selectForUpdate/insert/update 方法；行类型见05字段字典。",
+    "logic": "只放单条SQL，不在Mapper中发HTTP。使用Mapper注解SQL，完整方法见contracts/mapper-contracts.md。返回ControlRows的同名静态POJO；mapUnderscoreToCamelCase显式开启。UPDATE返回int，调用方必须检查=1。PR/评论/merge request。",
+    "tests": "MapperMySqlIT：两连接真实并发/unique/check/rollback。",
+    "depends": ""
+  },
+  {
+    "step": 15,
+    "path": "src/main/java/com/gitnova/service/pullrequest/CommitCompareService.java",
+    "name": "CommitCompareService",
+    "signature": "compare(repoId,sourceHead,targetHead); diffFiles(...)",
+    "logic": "共同祖先沿单父链查；PR默认展示ancestor→source而不是target→source混淆双方修改，另返回targetHead与mergeability。缓存key包含两个确定HEAD。列表分页和diff返回大小有界，二进制仅metadata。",
+    "tests": "CommitCompareTest",
+    "depends": ""
+  },
+  {
+    "step": 15,
+    "path": "src/main/java/com/gitnova/service/pullrequest/ThreeWayMergeService.java",
+    "name": "ThreeWayMergeService",
+    "signature": "merge(baseTree,targetTree,sourceTree): MergeCandidate",
+    "logic": "先按blob相等三方规则选取；双改UTF8文本使用JGit MergeAlgorithm/RawTextComparator，不开启Git传输。统一LF或CRLF文件可按约定恢复该换行；混合换行/无法可靠表达的格式返回conflict，不悄悄规范化。冲突不写目标分支。",
+    "tests": "ThreeWayMergeTest：add/add、modify/delete、nonoverlap、CRLF、binary。",
+    "depends": ""
+  },
+  {
+    "step": 15,
+    "path": "src/main/java/com/gitnova/service/pullrequest/PullRequestService.java",
+    "name": "PullRequestService",
+    "signature": "create/list/detail/comment/changeDraft/close/reopen/merge",
+    "logic": "PR独立于Agent。开放同source/target唯一；MERGED不能重开。merge固定PR revision与两HEAD，在事务外计算，再依全局锁序校验并提交目标CAS和PR状态。Agent来源Session必须空闲且已settled，merge成功标workflow MERGED拒绝后续coding；不允许merge写入另一个活跃Session的受管target。",
+    "tests": "PullRequestIT",
+    "depends": ""
+  },
+  {
+    "step": 15,
+    "path": "src/main/java/com/gitnova/controller/PullRequestController.java",
+    "name": "PullRequestController",
+    "signature": "/api/repos/{repoId}/pulls 全接口见05",
+    "logic": "只解析权限上下文和DTO、调用Service；错误409与details返回具体冲突文件。公开API不接受authorId、repoKey、模型内部权限字段。",
+    "tests": "PullRequestApiIT",
+    "depends": ""
+  },
+  {
+    "step": 15,
+    "path": "src/main/resources/static/agent-ui/pull-request.js",
+    "name": "pull-request.js",
+    "signature": "export函数名见上方与05公共API",
+    "logic": "PR列表/detail/comments/draft/close/reopen/merge；merge携带revision+sourceHead+targetHead+idempotencyKey；409刷新预览并显示冲突。",
+    "tests": "BrowserAgentE2E",
+    "depends": ""
+  },
+  {
+    "step": 16,
+    "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/control/WorkerRecovery.java",
+    "name": "WorkerRecovery",
+    "signature": "recoverBeforeReady(bootstrap,settlementEnvelope); recoverLocalLog(...)",
+    "logic": "区分同卷重启和旧归档新epoch，读取有效日志恢复receipts；未完成工具标UNKNOWN、attempt INTERRUPTED，不重执行。旧归档未含ACK时用平台已提交settlement envelope确认publishedHead和archive后完成本地结算。新epoch保留旧结果身份，活动Context只选择归档覆盖及新的恢复说明。",
+    "tests": "WorkerRecoveryTest",
+    "depends": ""
+  },
+  {
+    "step": 16,
+    "path": "src/main/java/com/gitnova/service/agent/control/LifecycleReconciler.java",
+    "name": "LifecycleReconciler",
+    "signature": "tick(); renewActive(); reconcileUnknown(); reapIdle(); recoverSession(...)",
+    "logic": "扫描绑定而非每tool；IDLE回收与Task受理共用Session锁。确认旧实例死亡再增加epoch并接管卷，UNKNOWN不让两端双写。快照恢复加入settlement envelope修复包内未含ACK的窗口；本机死亡无归档时明确失败。",
+    "tests": "RecoveryIT",
+    "depends": ""
+  },
+  {
+    "name": "ReviewReportTool",
+    "step": 17,
+    "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/tool/ReviewReportTool.java",
+    "signature": "execute(argumentsJson, ToolTypes.Context): ToolTypes.Result",
+    "logic": "仅REVIEW工具配置启用。接收findings[{path,line,severity,message}]并验证固定review快照路径/行号；写ResultStore报告对象而不是直接写平台数据库，返回reportRef；不是结束工具。模型仍自然STOP，平台经报告引用再次验证后写旧review_comment。CODING工具定义不含此工具。",
+    "depends": "ResultStore,SafePaths",
+    "tests": "ReviewReportToolTest"
+  },
+  {
+    "name": "LegacyCapabilityAdapter",
+    "step": 17,
+    "path": "src/main/java/com/gitnova/service/agent/control/LegacyCapabilityAdapter.java",
+    "signature": "submitReview(PostReceiveEvent); answerRepositoryQuestion(...); mapVerifiedReviewReport(...)",
+    "logic": "先盘点旧入口是否实际启用/完成。已有自动Review改为REVIEW模式新Session/Task，固定review target与base，仅开放本地读取/历史以及限定报告写入工具，禁止改代码与自动发布。已有QA改为QA模式。旧suggest-message若仅一次模型调用，继续通过现有网关/代理，不为了删除目录强行改成Agent。未实现旧stub不在本次凭空补成新产品。",
+    "depends": "SessionLifecycleService,TaskApplicationService,RepositoryAccessService",
+    "tests": "LegacyCapabilitiesIT"
+  },
+  {
+    "step": 17,
+    "path": "src/main/java/com/gitnova/service/agent/control/LegacyAgentReadService.java",
+    "name": "LegacyAgentReadService",
+    "signature": "sessionDetail(...); taskDetail(...); listEvents(...)",
+    "logic": "只读旧agent_session/task/run/step和既有artifact，不注入旧Loop/WorkspaceRegistry。对旧finishTask历史使用只读解码器，新自然STOP沿原answer指针。新链只按executionBackend切查询，不恢复旧执行。",
+    "tests": "LegacyReadIT",
+    "depends": ""
+  }
+]

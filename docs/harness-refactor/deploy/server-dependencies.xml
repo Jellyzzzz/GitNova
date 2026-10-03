@@ -1,0 +1,7 @@
+<!-- Merge into existing root pom dependencies. Do NOT make server depend on agent-core/worker. -->
+<dependencies>
+ <dependency><groupId>com.gitnova</groupId><artifactId>agent-protocol</artifactId><version>1.0.0-SNAPSHOT</version></dependency>
+ <dependency><groupId>com.alibaba.opensandbox</groupId><artifactId>sandbox</artifactId><version>1.1.0</version></dependency>
+ <dependency><groupId>org.eclipse.jgit</groupId><artifactId>org.eclipse.jgit</artifactId><version>6.10.0.202406032230-r</version></dependency>
+ <dependency><groupId>org.apache.commons</groupId><artifactId>commons-compress</artifactId><version>1.27.1</version></dependency>
+</dependencies>

@@ -1,0 +1,28 @@
+# Same-host LOOPBACK sample only. Not the Mac-to-Windows profile.
+# Dual-host: use opensandbox.windows-wsl.example.toml; native Linux: opensandbox.linux.example.toml.
+# Merge with the generated release-1.1.0 template. For private local development only.
+[server]
+host = "127.0.0.1"
+port = 8090
+api_key = "REPLACE_WITH_RANDOM_SECRET_IN_PRIVATE_FILE"
+max_sandbox_timeout_seconds = 86400
+[proxy]
+resolve_internal = false
+[log]
+level = "INFO"
+[runtime]
+type = "docker"
+execd_image = "opensandbox/execd:release-1.1.0"
+[docker]
+network_mode = "bridge"
+port_range_min = 40000
+port_range_max = 41000
+no_new_privileges = true
+pids_limit = 256
+[store]
+type = "sqlite"
+path = "~/.opensandbox/gitnova.db"
+[ingress]
+mode = "direct"
+[renew_intent]
+enabled = false

@@ -1,0 +1,8 @@
+{
+  "commandId": "cmd-example-001",
+  "taskId": "task-example-001",
+  "attemptId": "attempt-example-001",
+  "accepted": true,
+  "duplicate": false,
+  "executionStatus": "ACCEPTED"
+}

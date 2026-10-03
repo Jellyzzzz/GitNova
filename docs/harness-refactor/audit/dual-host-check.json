@@ -1,0 +1,35 @@
+{
+  "checked_at_utc": "2026-10-03T08:40:04.431166+00:00",
+  "checks": [
+    {
+      "name": "DEPLOYMENT_PROFILES",
+      "status": "PASS",
+      "detail": "TOML parsed; deployment choices and WSL INI budget present; not provider/runtime validation"
+    },
+    {
+      "name": "DUAL_HOST_DOCUMENT_CONTRACT",
+      "status": "PASS",
+      "detail": "CLI command blocks, address matrix, multi-client and early-infrastructure lane checked"
+    },
+    {
+      "name": "DUAL_HOST_ACCEPTANCE_COVERAGE",
+      "status": "PASS",
+      "detail": {
+        "cases": 120,
+        "new_dual_host_cases": 16,
+        "executed_product_cases": 0
+      }
+    },
+    {
+      "name": "SDK_PROBE_SOURCE_STATIC",
+      "status": "PASS",
+      "detail": "Probe inputs/streaming path and embedded Python syntax checked; SDK NOT compiled"
+    }
+  ],
+  "overall": "PASS",
+  "scope": "Static document/config/source consistency only",
+  "mac_windows_network": "NOT_RUN",
+  "opensandbox_sdk_compile": "NOT_RUN",
+  "opensandbox_live": "NOT_RUN",
+  "product_cases_executed": 0
+}

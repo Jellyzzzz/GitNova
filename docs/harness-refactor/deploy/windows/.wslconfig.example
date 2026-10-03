@@ -1,0 +1,9 @@
+# Merge into Windows %UserProfile%\.wslconfig. Do not overwrite existing settings.
+# Initial engineering budget for a 32GB machine; NOT a measured capacity guarantee.
+[wsl2]
+memory=16GB
+swap=4GB
+# Optional, only on supported Windows 11/WSL versions:
+# networkingMode=mirrored
+# Keep firewall enabled; scope inbound rules instead of disabling protections.
+# Applying changes via `wsl --shutdown` interrupts ALL WSL workloads.

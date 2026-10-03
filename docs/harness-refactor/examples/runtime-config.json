@@ -1,0 +1,17 @@
+{
+  "model": "USE_YOUR_EXISTING_MODEL_ID",
+  "maxModelCalls": 40,
+  "maxToolCalls": 80,
+  "maxOutputTokens": 32768,
+  "contextWindow": 128000,
+  "safetyMarginTokens": 2048,
+  "summaryTrigger": 0.8,
+  "compactTrigger": 0.9,
+  "compactTarget": 0.6,
+  "retainGroups": 2,
+  "inlineTokens": 4096,
+  "previewTokens": 1024,
+  "maxCaptureBytes": 33554432,
+  "thinkingJson": "{}",
+  "summaryThinkingJson": "{}"
+}

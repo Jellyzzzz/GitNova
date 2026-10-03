@@ -1,0 +1,18 @@
+id: 1:41
+event: COMMAND_ACCEPTED
+data: {"schemaVersion":1,"sessionId":"session-example-001","runnerEpoch":1,"sequence":41,"eventId":"session-example-001:1:41","taskId":"task-example-001","attemptId":"attempt-example-001","payload":{"commandId":"cmd-example-001"},"type":"COMMAND_ACCEPTED"}
+
+id: 1:42
+event: MODEL_RESPONSE
+data: {"schemaVersion":1,"sessionId":"session-example-001","runnerEpoch":1,"sequence":42,"eventId":"session-example-001:1:42","taskId":"task-example-001","attemptId":"attempt-example-001","payload":{"modelCallId":"model-call-example-001","finishReason":"STOP","text":"已完成修复；相关测试通过。","toolCalls":[]},"type":"MODEL_RESPONSE"}
+
+id: 1:43
+event: ANSWER_DELIVERED
+data: {"schemaVersion":1,"sessionId":"session-example-001","runnerEpoch":1,"sequence":43,"eventId":"session-example-001:1:43","taskId":"task-example-001","attemptId":"attempt-example-001","payload":{"responseEventId":"session-example-001:1:42","modelCallId":"model-call-example-001"},"type":"ANSWER_DELIVERED"}
+
+id: 1:44
+event: TASK_FINISHED
+data: {"schemaVersion":1,"sessionId":"session-example-001","runnerEpoch":1,"sequence":44,"eventId":"session-example-001:1:44","taskId":"task-example-001","attemptId":"attempt-example-001","payload":{"outcome":"COMPLETED","terminalReason":"ANSWER_DELIVERED","answerEventId":"session-example-001:1:42"},"type":"TASK_FINISHED"}
+
+: heartbeat
+
