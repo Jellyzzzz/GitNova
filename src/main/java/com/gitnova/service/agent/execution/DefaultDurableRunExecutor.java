@@ -137,7 +137,8 @@ public class DefaultDurableRunExecutor implements DurableRunExecutor {
                             workerId,
                             fencingToken,
                             outcome,
-                            result.terminationReason().name()
+                            result.terminationReason().name(),
+                            result.answer() == null ? null : result.answer().modelCallId()
                     ));
         } catch (AgentExecutionControl.LeaseLostException exception) {
             logger.info(

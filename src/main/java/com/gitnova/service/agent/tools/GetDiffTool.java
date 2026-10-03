@@ -31,7 +31,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** Returns semantic unified-diff hunks for one file in the trusted review range. */
-@Component
 public class GetDiffTool implements AgentTool {
 
     private static final Pattern CURSOR_PATTERN = Pattern.compile("h([1-9]\\d*)");

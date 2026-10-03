@@ -126,4 +126,22 @@ public interface AgentStepMapper {
             FOR UPDATE
             """)
     AgentStepEntity selectByEventId(@Param("eventId") String eventId);
+
+    /** The committed terminal event points to its original, immutable model answer. */
+    @Select("""
+            SELECT response.* FROM agent_step terminal
+            JOIN agent_step response
+              ON response.event_id = terminal.causation_event_id
+             AND response.session_id = terminal.session_id
+             AND response.task_id = terminal.task_id
+             AND response.run_id = terminal.run_id
+            WHERE terminal.session_id = #{sessionId} AND terminal.task_id = #{taskId}
+              AND terminal.step_type = 'RUN_COMPLETED'
+              AND terminal.schema_version = 1
+              AND response.step_type = 'MODEL_RESPONSE'
+              AND response.session_sequence < terminal.session_sequence
+            ORDER BY terminal.session_sequence DESC LIMIT 1
+            """)
+    AgentStepEntity selectCompletedAnswer(@Param("sessionId") String sessionId,
+                                         @Param("taskId") String taskId);
 }

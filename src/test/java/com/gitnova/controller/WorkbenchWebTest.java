@@ -37,6 +37,10 @@ class WorkbenchWebTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertTrue(html.contains("登录你的工作台"));
+        assertTrue(html.contains("id=\"task-dialog\""));
+        assertTrue(html.contains("id=\"task-form\""));
+        assertTrue(html.contains("id=\"task-message\""));
+        assertTrue(html.contains("id=\"task-messages\""));
         for (String asset : new String[] {"/app.css", "/app.js", "/api.js"}) {
             mvc.perform(get(asset)).andExpect(status().isOk());
         }

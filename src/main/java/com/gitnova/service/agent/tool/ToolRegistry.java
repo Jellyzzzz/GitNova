@@ -1,6 +1,9 @@
 package com.gitnova.service.agent.tool;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.dto.ToolDefinition;
 import com.gitnova.service.agent.runtime.AgentCapabilityPolicy;
 import com.gitnova.service.agent.execution.AgentExecutionPersistenceException;
@@ -92,11 +95,38 @@ public class ToolRegistry {
                     false
             );
         }
-        List<String>errors= ToolSchemaValidator.validate(tool.definition(),arguments);
-        if(!errors.isEmpty()){
+        List<ToolSchemaValidator.Violation> errors =
+                ToolSchemaValidator.validateDetailed(tool.definition(), arguments);
+        if (!errors.isEmpty()) {
+            ObjectNode payload = JsonNodeFactory.instance.objectNode();
+            payload.put("stage", "ARGUMENT_VALIDATION");
+            payload.put("executionState", "NOT_STARTED");
+            payload.put("nextAction",
+                    "Correct the listed fields and submit a new tool call; changing unrelated "
+                            + "arguments will not repair this request.");
+            ArrayNode violations = payload.putArray("violations");
+            for (ToolSchemaValidator.Violation error : errors) {
+                violations.addObject()
+                        .put("path", error.path())
+                        .put("code", error.code())
+                        .put("message", error.message());
+            }
+            JsonNode expectedGeneration = tool.definition().inputSchema()
+                    .path("properties")
+                    .path("expectedGeneration");
+            if (!expectedGeneration.isMissingNode()
+                    && execution.observedWorkspaceGeneration() != null) {
+                payload.putObject("workspaceState")
+                        .put("observedGeneration", execution.observedWorkspaceGeneration())
+                        .put("source", "PRE_DISPATCH_REFRESH")
+                        .put("usage", "Use only if no newer Workspace evidence supersedes it");
+            }
+            ToolSchemaValidator.Violation first = errors.get(0);
             return ToolResult.error(ToolStatus.INVALID_ARGUMENT,
+                    payload,
                     "SCHEMA_VALIDATION_FAILED",
-                    "Invalid tool arguments",
+                    "Invalid tool arguments at " + first.path() + ": "
+                            + first.message() + ". Tool execution was not started.",
                     false);
         }
         try{

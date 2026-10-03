@@ -42,6 +42,33 @@ public class AgentTaskController {
         return ApiResponse.success(TaskResponse.from(result));
     }
 
+    @GetMapping("/{taskId}")
+    public ApiResponse<TaskDetailResponse> find(
+            @PathVariable Long repoId,
+            @PathVariable String sessionId,
+            @PathVariable String taskId
+    ) {
+        Long actorId = UserContext.getUserId();
+        if (actorId == null || actorId <= 0) {
+            throw new IllegalStateException("Authenticated actor is missing");
+        }
+        Repository repository = repositoryAccessService.requireReadAccess(repoId, actorId);
+        RepoKey repoKey = RepoKey.of(repository.getOwnerId(), repository.getId());
+        AgentTaskService.TaskView view = taskService.find(repoKey, sessionId, actorId, taskId);
+        return ApiResponse.success(new TaskDetailResponse(
+                view.task().taskId(),
+                view.task().sessionId(),
+                view.task().status().name(),
+                view.task().terminalReason(),
+                view.answer().map(answer -> new AnswerResponse(answer.content())).orElse(null)
+        ));
+    }
+
+    public record AnswerResponse(String content) {}
+
+    public record TaskDetailResponse(String taskId, String sessionId, String status,
+                                     String terminalReason, AnswerResponse answer) {}
+
     public record CreateTaskRequest(String message){
         public CreateTaskRequest{
             requireNonBlank(message,"message");

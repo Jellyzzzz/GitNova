@@ -110,7 +110,8 @@ class ToolSchemaValidatorTest {
         ObjectNode args = JsonNodeFactory.instance.objectNode().put("path", "test/A.java").put("pageSize", 10);
         assertTrue(ToolSchemaValidator.validate(tool, args).isEmpty());
         args.put("path", "other/A.java");
-        assertEquals(List.of("arguments must match one of the declared anyOf forms"), ToolSchemaValidator.validate(tool, args));
+        assertEquals(List.of("arguments must match one of the declared anyOf forms", "string does not match its required pattern"),
+                ToolSchemaValidator.validate(tool, args));
     }
 
     private ToolDefinition definition() {

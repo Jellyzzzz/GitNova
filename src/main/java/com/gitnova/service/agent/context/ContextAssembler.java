@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /** One Run's context preparation. Durable control belongs to the Session, not to this instance. */
@@ -63,7 +64,9 @@ public final class ContextAssembler {
         }
         boolean ordinaryArmed = control.summaryArmed() || ratio < budget.summaryTriggerRatio();
         boolean urgentArmed = control.urgentArmed() || ratio < budget.compactTriggerRatio();
-        var rearmed = new SummaryControl(control.fixedDigest(), budget, request.maxOutputTokens(), ordinaryArmed, urgentArmed);
+        boolean compactionArmed = control.compactionArmed() || ratio < budget.summaryTriggerRatio();
+        var rearmed = new SummaryControl(control.fixedDigest(), budget, request.maxOutputTokens(),
+                ordinaryArmed, urgentArmed, compactionArmed);
         if (!rearmed.equals(control)) {
             executionControl.requireLease();
             committed.accept(service.saveControl(scope, request.requestId() + ":context:rearm", rearmed));
@@ -72,79 +75,122 @@ public final class ContextAssembler {
         if (ratio < budget.summaryTriggerRatio()) return request.messages();
 
         boolean urgent = ratio >= budget.compactTriggerRatio();
-        if (!(urgent ? control.urgentArmed() : control.summaryArmed())) {
-            if (urgent) throw new PreparationException("Stronger compaction is required; automatic repeated summaries are disabled");
-            return request.messages();
-        }
+        boolean tryOrdinary = urgent ? control.urgentArmed() : control.summaryArmed();
+        if (!urgent && !tryOrdinary) return request.messages();
 
-        // Disarm durably BEFORE a potentially slow/failed call. No database transaction spans the LLM call.
-        var disarmed = new SummaryControl(control.fixedDigest(), budget, request.maxOutputTokens(), false, !urgent);
-        executionControl.requireLease();
-        String attemptId = request.requestId() + ":context:summary";
-        committed.accept(service.saveControl(scope, attemptId + ":started", disarmed));
-        control = disarmed;
-
-        var snapshot = service.load(context.sessionId());
-        throughSessionSequence = snapshot.throughSessionSequence();
-        var selection = selectWindow(snapshot.groups(), budget.keepRecentGroups());
-        if (selection.groupsToCompact().isEmpty()) {
-            if (urgent) throw new PreparationException("Protected recent context cannot fit the configured compaction threshold");
-            return request.messages();
-        }
-
-        attemptedSummary = true;
-        ContextSummarizer.SummaryOutput output;
-        try {
+        // Two bounded phases, not a retry loop: ordinary summary first, then budget-targeted compaction.
+        // Both reuse the same generator and fenced publication. Never publish an over-budget candidate
+        // and then summarize that unaccepted candidate again: compact the committed source instead.
+        for (int phase = 0; phase < 2; phase++) {
+            boolean compact = phase == 1;
+            if (!compact && !tryOrdinary) continue;
+            if (compact && (budget.compactTargetRatio() == null || !control.compactionArmed())) {
+                throw new PreparationException("Strong compaction is unavailable or already attempted; context retained");
+            }
+            String operation = compact ? "COMPACTION" : "SUMMARY";
+            String attemptId = request.requestId() + (compact ? ":context:compact" : ":context:summary");
+            var disarmed = new SummaryControl(control.fixedDigest(), budget, request.maxOutputTokens(),
+                    false, compact ? false : !urgent, compact ? false : control.compactionArmed());
             executionControl.requireLease();
-            output = summarizer.summarize(snapshot.summaryInput(context.taskText(), selection.groupsToCompact()));
-        } catch (ModelGatewayException | IllegalArgumentException | IllegalStateException failure) {
-            if (failure instanceof ModelGatewayException gatewayFailure) {
-                logger.warn("Summary gateway failed: runId={}, attemptId={}, errorCode={}, httpStatus={}, retryable={}",
-                        scope.runId(), attemptId, gatewayFailure.errorCode(), gatewayFailure.providerStatusCode(), gatewayFailure.retryable());
+            committed.accept(service.saveControl(scope, attemptId + ":started", disarmed));
+            control = disarmed;
+
+            var snapshot = service.load(context.sessionId());
+            throughSessionSequence = snapshot.throughSessionSequence();
+            var selection = selectWindow(snapshot.groups(), budget.keepRecentGroups());
+            if (selection.groupsToCompact().isEmpty() && (!compact || snapshot.summary() == null)) {
+                if (compact) throw new PreparationException("No compressible history; protected context must be retained");
+                if (!urgent) return request.messages();
+                continue;
+            }
+            var input = snapshot.summaryInput(context.taskText(), selection.groupsToCompact());
+            Long targetInputTokens = null;
+            Long targetSummaryTokens = null;
+            if (compact) {
+                long covered = selection.groupsToCompact().isEmpty() ? snapshot.summary().throughSessionSequence()
+                        : selection.groupsToCompact().get(selection.groupsToCompact().size() - 1).lastSessionSequence();
+                // Pure measurement shell: count SYSTEM/tools, current Task, complete recent groups,
+                // and the summary's message envelope. This placeholder is never published or sent.
+                var shell = new ContextSummary(UUID.randomUUID().toString(), snapshot.sessionId(),
+                        snapshot.summary() == null ? null : snapshot.summary().summaryId(), covered, "Pending compaction");
+                var protectedMessages = snapshot.modelMessages(request.messages().get(0), shell,
+                        scope.taskId(), context.taskText(), false);
+                var protectedInput = usage.measure(new ModelRequest(request.model(), protectedMessages, request.tools(),
+                        request.maxOutputTokens(), request.temperature(), request.requestId(), request.thinking()));
+                var protectedBudget = budget.assess(protectedInput.estimatedInputTokens(), protectedInput.fixedTokens(), request.maxOutputTokens());
+                targetInputTokens = protectedInput.fixedTokens()
+                        + (long) Math.floor(protectedBudget.dynamicBudget() * budget.compactTargetRatio());
+                targetSummaryTokens = Math.min(request.maxOutputTokens().longValue(),
+                        targetInputTokens - protectedInput.estimatedInputTokens());
+                if (targetSummaryTokens <= 0) {
+                    committed.accept(service.recordSummaryResult(scope, attemptId, null, "PROTECTED_CONTEXT_TOO_LARGE",
+                            measured.estimatedInputTokens(), null, operation, targetInputTokens));
+                    throw new PreparationException("Protected context leaves no room for the compaction target");
+                }
+            }
+
+            attemptedSummary = true;
+            ContextSummarizer.SummaryOutput output;
+            try {
+                executionControl.requireLease();
+                output = summarizer.summarize(input, targetSummaryTokens);
+            } catch (ModelGatewayException | IllegalArgumentException | IllegalStateException failure) {
+                if (failure instanceof ModelGatewayException gatewayFailure) {
+                    logger.warn("Context model failed: runId={}, operation={}, errorCode={}, httpStatus={}, retryable={}, responseDiagnostic={}",
+                            scope.runId(), operation, gatewayFailure.errorCode(), gatewayFailure.providerStatusCode(),
+                            gatewayFailure.retryable(), gatewayFailure.responseDiagnostic());
+                }
+                executionControl.requireLease();
+                String reason = "FAILED_" + failure.getClass().getSimpleName();
+                if (failure instanceof ModelGatewayException gatewayFailure && gatewayFailure.responseDiagnostic() != null) {
+                    reason += ":" + gatewayFailure.responseDiagnostic().reason() + "@" + gatewayFailure.responseDiagnostic().path();
+                }
+                committed.accept(service.recordSummaryResult(scope, attemptId, null,
+                        reason, measured.estimatedInputTokens(), null, operation, targetInputTokens));
+                if (compact) throw new PreparationException("Strong compaction failed; committed context retained");
+                if (!urgent) return request.messages();
+                continue;
             }
             executionControl.requireLease();
-            committed.accept(service.recordSummaryResult(scope, attemptId, null,
-                    "FAILED_" + failure.getClass().getSimpleName(), measured.estimatedInputTokens(), null));
-            if (urgent) throw new PreparationException("Summary failed and stronger compaction is required");
-            return request.messages();
-        }
-        executionControl.requireLease();
 
-        List<ModelMessage> candidate = snapshot.modelMessages(request.messages().get(0), output.summary(),
-                scope.taskId(), context.taskText());
-        var candidateRequest = new ModelRequest(request.model(), candidate, request.tools(), request.maxOutputTokens(),
-                request.temperature(), request.requestId(), request.thinking());
-        var after = usage.measure(candidateRequest);
-        var afterBudget = budget.assess(after.estimatedInputTokens(), after.fixedTokens(), request.maxOutputTokens());
-        // Compare like for like: provider usage and a local estimate can have different biases.
-        var originalProjection = snapshot.modelMessages(request.messages().get(0), snapshot.summary(), scope.taskId(), context.taskText());
-        long beforeLocal = usage.estimateInput(new ModelRequest(request.model(), originalProjection, request.tools(),
-                request.maxOutputTokens(), request.temperature(), request.requestId(), request.thinking()));
-        long afterLocal = usage.estimateInput(candidateRequest);
-        boolean smaller = afterLocal < beforeLocal;
-        committed.accept(service.recordSummaryResult(scope, attemptId, output,
-                smaller ? "CANDIDATE_ACCEPTED" : "NO_REDUCTION", measured.estimatedInputTokens(), after.estimatedInputTokens()));
-        if (!smaller) {
-            if (urgent) throw new PreparationException("Summary did not reduce context; stronger compaction is required");
-            return request.messages();
-        }
+            var candidate = snapshot.modelMessages(request.messages().get(0), output.summary(), scope.taskId(), context.taskText());
+            var candidateRequest = new ModelRequest(request.model(), candidate, request.tools(), request.maxOutputTokens(),
+                    request.temperature(), request.requestId(), request.thinking());
+            var after = usage.measure(candidateRequest);
+            var afterBudget = budget.assess(after.estimatedInputTokens(), after.fixedTokens(), request.maxOutputTokens());
+            // Compare local estimates with local estimates, not a provider count with a different tokenizer.
+            var original = snapshot.modelMessages(request.messages().get(0), snapshot.summary(), scope.taskId(), context.taskText());
+            long beforeLocal = usage.estimateInput(new ModelRequest(request.model(), original, request.tools(),
+                    request.maxOutputTokens(), request.temperature(), request.requestId(), request.thinking()));
+            long afterLocal = usage.estimateInput(candidateRequest);
+            boolean smaller = afterLocal < beforeLocal;
+            boolean fits = compact ? after.estimatedInputTokens() <= targetInputTokens
+                    : afterBudget.useRatio() < budget.compactTriggerRatio() || budget.compactTargetRatio() == null;
+            String disposition = !smaller ? "NO_REDUCTION" : fits ? "CANDIDATE_ACCEPTED" : "TARGET_NOT_REACHED";
+            committed.accept(service.recordSummaryResult(scope, attemptId, output, disposition,
+                    measured.estimatedInputTokens(), after.estimatedInputTokens(), operation, targetInputTokens));
+            logger.info("Context candidate: runId={}, operation={}, disposition={}, beforeEstimate={}, afterEstimate={}, targetInput={}",
+                    scope.runId(), operation, disposition, beforeLocal, afterLocal, targetInputTokens);
+            if (!smaller || !fits) {
+                if (compact) throw new PreparationException("Strong compaction did not reach its target; committed context retained");
+                if (!urgent) return request.messages();
+                continue;
+            }
 
-        // Publication is fenced; only then may Runtime replace its model-visible projection.
-        committed.accept(service.publishSummary(scope, snapshot, output.summary()));
-        if (afterBudget.useRatio() >= budget.compactTriggerRatio()) {
-            throw new PreparationException("Summary committed, but stronger compaction is still required");
+            // A failed commit propagates. Never expose a model-only candidate as durable Session history.
+            committed.accept(service.publishSummary(scope, snapshot, output.summary()));
+            var latest = service.load(context.sessionId());
+            throughSessionSequence = latest.throughSessionSequence();
+            var visible = latest.modelMessages(request.messages().get(0), latest.summary(), scope.taskId(), context.taskText());
+            request = new ModelRequest(request.model(), visible, request.tools(), request.maxOutputTokens(),
+                    request.temperature(), request.requestId(), request.thinking());
+            measured = usage.measure(request);
+            assessment = budget.assess(measured.estimatedInputTokens(), measured.fixedTokens(), request.maxOutputTokens());
+            if (assessment.useRatio() < budget.compactTriggerRatio()) return visible;
+            // New committed Steps arrived during the call. Keep them, and use the remaining phase once.
+            urgent = true;
         }
-        // Preserve Steps appended while the summary was being generated, not just the earlier snapshot.
-        var latest = service.load(context.sessionId());
-        throughSessionSequence = latest.throughSessionSequence();
-        var visible = latest.modelMessages(request.messages().get(0), latest.summary(), scope.taskId(), context.taskText());
-        var finalMeasurement = usage.measure(new ModelRequest(request.model(), visible, request.tools(),
-                request.maxOutputTokens(), request.temperature(), request.requestId(), request.thinking()));
-        var finalBudget = budget.assess(finalMeasurement.estimatedInputTokens(), finalMeasurement.fixedTokens(), request.maxOutputTokens());
-        if (finalBudget.useRatio() >= budget.compactTriggerRatio()) {
-            throw new PreparationException("New Session context requires stronger compaction");
-        }
-        return visible;
+        throw new PreparationException("New Session context exceeds the compaction threshold; no unbounded retries");
     }
 
     public boolean attemptedSummary() {

@@ -5,6 +5,8 @@ package com.gitnova.service.agent.runtime;
  * Runtime may append feedback and continue before it becomes a terminal outcome.
  */
 public enum ProtocolDeviation {
+    INVALID_MODEL_RESPONSE,
+    TOOL_NOT_AVAILABLE,
     MODEL_STOPPED_WITHOUT_FINISH,
     MIXED_TERMINAL_TOOL_CALLS
 }

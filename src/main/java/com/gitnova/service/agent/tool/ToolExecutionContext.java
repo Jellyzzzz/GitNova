@@ -16,16 +16,26 @@ import java.util.Objects;
  * context、turn、toolCallId 均由 Harness 创建，
  * 模型不能直接修改这些字段。
  *
- * @param run        本次工具调用所属的 Agent Run
+ * @param agent      本次工具调用所属的可信 Agent 执行上下文
  * @param turn       当前 Agent 循环轮次，从 0 开始
  * @param toolCallId 模型返回的工具调用 ID
- * @param workspace  Harness 绑定的逻辑 Workspace；Review-only 调用为空
+ * @param observedWorkspaceGeneration Runtime 在分发边界刷新得到的 Workspace generation；
+ *                                    仅用于反馈，不能替代工具锁内的 fencing 校验
  */
 public record ToolExecutionContext(
         AgentExecutionContext agent,
         int turn,
-        String toolCallId
+        String toolCallId,
+        Long observedWorkspaceGeneration
 ) {
+    public ToolExecutionContext(
+            AgentExecutionContext agent,
+            int turn,
+            String toolCallId
+    ) {
+        this(agent, turn, toolCallId, null);
+    }
+
     public ToolExecutionContext {
         Objects.requireNonNull(agent);
         Objects.requireNonNull(toolCallId);
@@ -38,6 +48,11 @@ public record ToolExecutionContext(
         if (toolCallId.isBlank()) {
             throw new IllegalArgumentException(
                     "toolCallId must not be blank"
+            );
+        }
+        if (observedWorkspaceGeneration != null && observedWorkspaceGeneration < 0) {
+            throw new IllegalArgumentException(
+                    "observedWorkspaceGeneration must not be negative"
             );
         }
     }

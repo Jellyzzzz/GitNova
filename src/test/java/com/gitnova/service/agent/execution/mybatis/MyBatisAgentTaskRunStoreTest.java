@@ -3,10 +3,12 @@ package com.gitnova.service.agent.execution.mybatis;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gitnova.entity.agent.AgentRunEntity;
 import com.gitnova.entity.agent.AgentSessionEntity;
+import com.gitnova.entity.agent.AgentStepEntity;
 import com.gitnova.entity.agent.AgentTaskEntity;
 import com.gitnova.entity.agent.AgentWorkspaceEntity;
 import com.gitnova.mapper.agent.AgentRunMapper;
 import com.gitnova.mapper.agent.AgentSessionMapper;
+import com.gitnova.mapper.agent.AgentStepMapper;
 import com.gitnova.mapper.agent.AgentTaskMapper;
 import com.gitnova.mapper.agent.AgentWorkspaceMapper;
 import com.gitnova.service.agent.execution.AgentExecutionPersistenceException;
@@ -15,6 +17,9 @@ import com.gitnova.service.agent.execution.AgentTask;
 import com.gitnova.service.agent.execution.AgentTaskRequest;
 import com.gitnova.service.agent.execution.AgentTaskRunStore;
 import com.gitnova.service.agent.execution.CreateTaskCommand;
+import com.gitnova.service.agent.journal.ModelResponsePayload;
+import com.gitnova.service.agent.model.ModelFinishReason;
+import com.gitnova.service.agent.model.ModelUsage;
 import com.gitnova.service.agent.persistence.AgentExecutionConfigCodec;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.AgentOutboxWriter;
@@ -62,6 +67,8 @@ class MyBatisAgentTaskRunStoreTest {
     AgentTaskMapper taskMapper;
     @Mock
     AgentRunMapper runMapper;
+    @Mock
+    AgentStepMapper stepMapper;
     @Mock
     AgentWorkspaceMapper workspaceMapper;
     @Mock
@@ -315,6 +322,76 @@ class MyBatisAgentTaskRunStoreTest {
     }
 
     @Test
+    void deliveredAnswerMustReferenceCommittedStopResponseAndProjectsItsSource() throws Exception {
+        AgentRunEntity running = runningRun("worker-a", 9L);
+        AgentWorkspaceEntity workspace = workspace(RUN_ID, 9L);
+        stubLockedExecution(running, workspace);
+        String modelCallId = "run-1:turn2:call3";
+        String answerEventId = ModelResponsePayload.eventId(RUN_ID, modelCallId);
+        AgentStepEntity source = new AgentStepEntity();
+        source.setSessionId(SESSION_ID);
+        source.setTaskId(TASK_ID);
+        source.setRunId(RUN_ID);
+        source.setStepType(AgentStepType.MODEL_RESPONSE.name());
+        source.setPayloadJson(new ObjectMapper().writeValueAsString(new ModelResponsePayload(
+                modelCallId, "response-3", "The change is ready; tests were not run.",
+                List.of(), ModelUsage.unknown(), ModelFinishReason.STOP)));
+        when(stepMapper.selectByEventId(answerEventId)).thenReturn(source);
+        when(runMapper.terminate(RUN_ID, "worker-a", 9L, "COMPLETED", "ANSWER_DELIVERED")).thenReturn(1);
+        when(taskMapper.transitionAfterRun(any(), any(), any(), any(), any(), any())).thenReturn(1);
+        when(workspaceMapper.releaseWriter(WORKSPACE_ID, RUN_ID, 9L, 10L)).thenReturn(1);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(projectedTask(AgentTask.Status.COMPLETED));
+        when(runMapper.selectById(RUN_ID)).thenReturn(terminalRun("COMPLETED", "ANSWER_DELIVERED"));
+
+        var result = store().terminateRun(new AgentTaskRunStore.TerminalCommand(
+                "run:terminal:run-1", "task:terminal:task-1:run-1", SESSION_ID, TASK_ID,
+                RUN_ID, "worker-a", 9L, AgentTaskRunStore.TerminalOutcome.COMPLETED,
+                "ANSWER_DELIVERED", modelCallId));
+
+        assertEquals(AgentTask.Status.COMPLETED, result.task().status());
+        ArgumentCaptor<AgentEventAppender.AppendCommand> events =
+                ArgumentCaptor.forClass(AgentEventAppender.AppendCommand.class);
+        verify(eventAppender, org.mockito.Mockito.times(2)).append(events.capture());
+        assertEquals(answerEventId, events.getAllValues().get(0).persistedPayload().path("answerEventId").asText());
+        assertEquals(answerEventId, events.getAllValues().get(0).causationEventId());
+        assertEquals(answerEventId, events.getAllValues().get(1).persistedPayload().path("answerEventId").asText());
+    }
+
+    @Test
+    void shouldRejectAnswerReferenceFromAnotherRunBeforeChangingProjections() {
+        stubLockedExecution(runningRun("worker-a", 9L), workspace(RUN_ID, 9L));
+        String modelCallId = "run-1:turn0:call1";
+        AgentStepEntity foreign = new AgentStepEntity();
+        foreign.setSessionId(SESSION_ID);
+        foreign.setTaskId(TASK_ID);
+        foreign.setRunId("another-run");
+        foreign.setStepType(AgentStepType.MODEL_RESPONSE.name());
+        when(stepMapper.selectByEventId(ModelResponsePayload.eventId(RUN_ID, modelCallId)))
+                .thenReturn(foreign);
+
+        assertThrows(AgentExecutionPersistenceException.class, () -> store().terminateRun(
+                new AgentTaskRunStore.TerminalCommand("run:terminal:run-1", "task:terminal:task-1:run-1",
+                        SESSION_ID, TASK_ID, RUN_ID, "worker-a", 9L,
+                        AgentTaskRunStore.TerminalOutcome.COMPLETED, "ANSWER_DELIVERED", modelCallId)));
+        verify(runMapper, never()).terminate(any(), any(), any(Long.class), any(), any());
+    }
+
+    @Test
+    void shouldReadDeliveredAnswerFromCommittedModelResponse() throws Exception {
+        String modelCallId = "run-1:turn2:call3";
+        AgentStepEntity source = new AgentStepEntity();
+        source.setPayloadJson(new ObjectMapper().writeValueAsString(new ModelResponsePayload(
+                modelCallId, "response-3", "The change is ready; tests were not run.",
+                List.of(), ModelUsage.unknown(), ModelFinishReason.STOP)));
+        when(stepMapper.selectCompletedAnswer(SESSION_ID, TASK_ID)).thenReturn(source);
+
+        var answer = store().findAnswer(SESSION_ID, TASK_ID).orElseThrow();
+
+        assertEquals("The change is ready; tests were not run.", answer.content());
+        assertEquals(modelCallId, answer.modelCallId());
+    }
+
+    @Test
     void failedRunShouldReleaseWriterButKeepTaskActiveForAnotherRun() {
         AgentRunEntity running = runningRun("worker-a", 9L);
         AgentWorkspaceEntity workspace = workspace(RUN_ID, 9L);
@@ -461,6 +538,7 @@ class MyBatisAgentTaskRunStoreTest {
                 sessionMapper,
                 taskMapper,
                 runMapper,
+                stepMapper,
                 workspaceMapper,
                 eventAppender,
                 outboxWriter,

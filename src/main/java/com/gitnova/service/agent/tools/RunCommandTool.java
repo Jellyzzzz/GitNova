@@ -44,24 +44,38 @@ public final class RunCommandTool implements AgentTool {
         ObjectNode properties = schema.putObject("properties");
         properties.putObject("expectedGeneration")
                 .put("type", "integer")
-                .put("minimum", 0);
+                .put("minimum", 0)
+                .put("description", "Use the latest observed Workspace generation, not a guessed increment. "
+                        + "A stale value returns CONFLICT without executing the command.");
         ObjectNode argv = properties.putObject("argv");
         argv.put("type", "array");
         argv.put("minItems", 1);
         argv.put("maxItems", MAX_COMMAND_ARG_COUNT);
+        argv.put("description", "Executable followed by arguments; no implicit shell expansion. "
+                + "Use [\"sh\", \"-c\", \"...\"] for pipelines, redirects or multiple commands. "
+                + "Each argument must be non-blank and at most " + MAX_COMMAND_ARG_BYTES
+                + " UTF-8 bytes; all arguments together at most " + MAX_COMMAND_TOTAL_ARG_BYTES
+                + " UTF-8 bytes.");
         argv.putObject("items")
                 .put("type", "string")
+                .put("minLength", 1)
+                .put("pattern", "\\S")
                 .put("maxLength", MAX_COMMAND_ARG_BYTES);
         properties.putObject("workingDirectory")
                 .put("type", "string")
-                .put("maxLength", MAX_PATH_CHARS);
+                .put("maxLength", MAX_PATH_CHARS)
+                .put("description", "Existing Workspace-relative directory; use '.' for the root. "
+                        + "No absolute host paths or '..' traversal. A previous call's cd is not retained.");
         properties.putObject("timeoutSeconds")
                 .put("type", "integer")
                 .put("minimum", 1)
-                .put("maximum", MAX_COMMAND_TIMEOUT_SECONDS);
+                .put("maximum", MAX_COMMAND_TIMEOUT_SECONDS)
+                .put("description", "Execution timeout for this call in seconds; container cleanup may take "
+                        + "additional time. Timeout does not undo Workspace writes.");
         properties.putObject("purpose")
                 .put("type", "string")
-                .put("maxLength", MAX_COMMAND_PURPOSE_CHARS);
+                .put("maxLength", MAX_COMMAND_PURPOSE_CHARS)
+                .put("description", "Short explanation of why this command is needed; not executed as code.");
         schema.putArray("required")
                 .add("expectedGeneration")
                 .add("argv")
@@ -71,14 +85,32 @@ public final class RunCommandTool implements AgentTool {
         schema.put("additionalProperties", false);
         return new ToolDefinition(
                 "runCommand",
-                "Runs one argv command inside the isolated current Workspace",
+                """
+                Executes one foreground argv command in a fresh network-disabled Docker container.
+                Only the mounted Workspace persists across calls; /tmp, shell state, environment changes
+                and background processes do not. Create, compile and run a temporary probe in the same call.
+                Do not split a /tmp-based workflow across calls.
+
+                Workspace changes are not rolled back on failure or timeout. generationBefore/generationAfter
+                describe observed Workspace versions, not command counts.
+                Tool SUCCESS means an execution result is available, not that tests or the task passed.
+                Inspect payload.status, exitCode, stdout and stderr; TIMED_OUT is not validation success.
+                In shell scripts, preserve the tested command's exit status; a final echo/grep must not hide failure.
+
+                stdout/stderr capture is bounded. stdoutTruncated/stderrTruncated mean text was not fully
+                captured and cannot be recovered from that result. Preview omission is different: read captured
+                content using supplied artifact:// references via readFile/searchText. Never invent an Artifact path.
+                Reuse captured output for unchanged code and the same validation scope. Do not rerun tests solely
+                to recount or reformat output. Repeat execution when new evidence is needed: relevant code/environment
+                changes, missing coverage, insufficient captured evidence, reliability checks or an explicit user request.
+                """,
                 schema
         );
     }
 
     @Override
     public ToolResult execute(ToolExecutionContext execution, JsonNode arguments) {
-        ToolResult invalid = validate(arguments);
+        ToolResult invalid = validate(execution, arguments);
         if (invalid != null) {
             return invalid;
         }
@@ -153,7 +185,7 @@ public final class RunCommandTool implements AgentTool {
         return true;
     }
 
-    private ToolResult validate(JsonNode arguments) {
+    private ToolResult validate(ToolExecutionContext execution, JsonNode arguments) {
         if (!arguments.path("expectedGeneration").isIntegralNumber()
                 || !arguments.path("expectedGeneration").canConvertToLong()
                 || arguments.path("expectedGeneration").longValue() < 0) {
@@ -168,7 +200,8 @@ public final class RunCommandTool implements AgentTool {
             return WorkspaceToolResults.invalid("INVALID_COMMAND_ARGV", "argv must not be empty");
         }
         long totalArgumentBytes = 0;
-        for (JsonNode argument : arguments.path("argv")) {
+        for (int index = 0; index < arguments.path("argv").size(); index++) {
+            JsonNode argument = arguments.path("argv").get(index);
             if (!argument.isTextual() || argument.asText().isBlank()) {
                 return WorkspaceToolResults.invalid(
                         "INVALID_COMMAND_ARGV",
@@ -179,18 +212,16 @@ public final class RunCommandTool implements AgentTool {
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8)
                     .length;
             if (argumentBytes > MAX_COMMAND_ARG_BYTES) {
-                return WorkspaceToolResults.invalid(
-                        "COMMAND_ARGUMENT_TOO_LARGE",
-                        "one argv entry exceeds the size limit"
-                );
+                return WorkspaceToolResults.invalid(execution, "COMMAND_ARGUMENT_TOO_LARGE", "/argv/" + index,
+                        "argv[" + index + "] has " + argumentBytes + " UTF-8 bytes; maximum is " + MAX_COMMAND_ARG_BYTES,
+                        argumentBytes, MAX_COMMAND_ARG_BYTES);
             }
             totalArgumentBytes += argumentBytes;
         }
         if (totalArgumentBytes > MAX_COMMAND_TOTAL_ARG_BYTES) {
-            return WorkspaceToolResults.invalid(
-                    "COMMAND_ARGUMENTS_TOO_LARGE",
-                    "argv exceeds the total size limit"
-            );
+            return WorkspaceToolResults.invalid(execution, "COMMAND_ARGUMENTS_TOO_LARGE", "/argv",
+                    "argv has " + totalArgumentBytes + " UTF-8 bytes; total maximum is " + MAX_COMMAND_TOTAL_ARG_BYTES,
+                    totalArgumentBytes, MAX_COMMAND_TOTAL_ARG_BYTES);
         }
         if (!arguments.path("workingDirectory").isTextual()
                 || arguments.path("workingDirectory").asText().isBlank()

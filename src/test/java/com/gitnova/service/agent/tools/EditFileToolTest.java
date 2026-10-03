@@ -142,8 +142,14 @@ class EditFileToolTest {
         ObjectNode args = mapper.createObjectNode().put("expectedGeneration", 0);
         args.putArray("operations").addObject().put("type", "EDIT").put("filePath", "file.txt");
         assertEquals("INVALID_PATCH_OPERATION_TYPE", patch.execute(execution, args).errorCode());
-        // Nested enum validation is currently owned by the tool parser, not ToolSchemaValidator.
-        assertEquals("INVALID_PATCH_OPERATION_TYPE", new ToolRegistry(List.of(patch)).execute(execution, "applyPatch", args).errorCode());
+        // Registry dispatch rejects the nested enum before entering the tool parser.
+        var result = new ToolRegistry(List.of(patch)).execute(execution, "applyPatch", args);
+        assertEquals(ToolStatus.INVALID_ARGUMENT, result.status());
+        assertEquals("SCHEMA_VALIDATION_FAILED", result.errorCode());
+        assertEquals("NOT_STARTED", result.payload().path("executionState").asText());
+        assertEquals(1, result.payload().path("violations").size());
+        assertEquals("/operations/0/type", result.payload().path("violations").path(0).path("path").asText());
+        assertEquals("ENUM_MISMATCH", result.payload().path("violations").path(0).path("code").asText());
     }
 
     private ObjectNode arguments(long generation, String oldText, String newText) {

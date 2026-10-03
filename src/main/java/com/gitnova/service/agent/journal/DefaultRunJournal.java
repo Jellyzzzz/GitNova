@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.mapper.agent.AgentStepMapper;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.AgentStepType;
+import com.gitnova.service.agent.model.ModelGatewayException;
 import com.gitnova.storage.artifact.ArtifactRef;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -104,11 +105,7 @@ public class DefaultRunJournal implements RunJournal {
                 + ":model-call:"
                 + payload.modelCallId()
                 + ":started";
-        String eventId = "run:"
-                + scope.runId()
-                + ":model-call:"
-                + payload.modelCallId()
-                + ":response";
+        String eventId = ModelResponsePayload.eventId(scope.runId(), payload.modelCallId());
         ObjectNode persistedPayload = objectMapper.valueToTree(payload);
 
         return append(scope, new AgentEventAppender.AppendCommand(
@@ -124,6 +121,26 @@ public class DefaultRunJournal implements RunJournal {
                 null,
                 null
         ));
+    }
+
+    @Override
+    @Transactional
+    public AgentEventAppender.AppendResult appendModelCallFailed(
+            RunJournalScope scope, String modelCallId, ModelGatewayException failure) {
+        Objects.requireNonNull(scope, "scope");
+        Objects.requireNonNull(failure, "failure");
+        if (modelCallId == null || modelCallId.isBlank()) throw new IllegalArgumentException("Model Call id is required");
+        String prefix = "run:" + scope.runId() + ":model-call:" + modelCallId;
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("modelCallId", modelCallId);
+        payload.put("errorCode", failure.errorCode().name());
+        payload.put("retryable", failure.retryable());
+        if (failure.providerStatusCode() != null) payload.put("httpStatus", failure.providerStatusCode());
+        if (failure.responseDiagnostic() != null) payload.set("responseDiagnostic", objectMapper.valueToTree(failure.responseDiagnostic()));
+        // Never serialize the exception itself: messages/causes/headers may contain provider data.
+        return append(scope, new AgentEventAppender.AppendCommand(
+                prefix + ":failed", scope.sessionId(), scope.taskId(), scope.runId(),
+                AgentStepType.MODEL_CALL_FAILED, 1, payload, prefix + ":started", scope.runId(), null, null));
     }
 
     @Override

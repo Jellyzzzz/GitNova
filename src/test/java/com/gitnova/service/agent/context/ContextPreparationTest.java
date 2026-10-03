@@ -38,6 +38,7 @@ class ContextPreparationTest {
     private final SessionContextService service = new SessionContextService(steps, sessions, appender, mapper, new MessageFactory(mapper));
     private final RunJournalScope scope = new RunJournalScope("session", "current", "run", "worker", 1, "a".repeat(64));
     private final ContextBudget budget = new ContextBudget(1200, 0, .8, .9, 1);
+    private final ContextBudget compactionBudget = new ContextBudget(1200, 0, .8, .9, 1, true, .6);
     private final ModelMessage system = new ModelMessage(ModelRole.SYSTEM, "Trusted system", List.of(), null);
     private AgentExecutionContext context;
     private ContextAssembler assembler;
@@ -45,6 +46,8 @@ class ContextPreparationTest {
     private long originalTokens = 900; // (900 - fixed 100) / dynamic budget 1000 == a
     private long candidateTokens = 300;
     private long beforeLocalTokens = 1000;
+    private long compactedTokens = 400;
+    private long protectedTokens = 200;
 
     @BeforeEach
     void setUp() {
@@ -63,6 +66,7 @@ class ContextPreparationTest {
             AgentEventAppender.AppendCommand command = call.getArgument(0);
             assertEquals(new AgentEventAppender.RunExecutionAuthority(1, "worker"), call.getArgument(1));
             var row = add(command.stepType().name(), command.taskId(), command.runId(), command.persistedPayload());
+            row.setSchemaVersion(command.schemaVersion());
             row.setEventId(command.eventId());
             return new AgentEventAppender.AppendResult(history.size(), history.size(), (long) history.size(), false);
         });
@@ -70,12 +74,18 @@ class ContextPreparationTest {
             ModelRequest input = call.getArgument(0);
             boolean summarized = input.messages().stream().anyMatch(message -> message.content() != null
                     && message.content().contains("<session_summary>"));
+            String text = input.messages().toString();
+            long count = text.contains("authority.\n\n</session_summary>") ? protectedTokens
+                    : text.contains("Compact checkpoint") ? compactedTokens
+                    : text.contains("Previous durable summary") ? originalTokens : summarized ? candidateTokens : originalTokens;
             return new ContextUsage.Measurement("model", "a".repeat(64), "b".repeat(64), input.messages().size(),
-                    summarized ? candidateTokens : originalTokens, 100, "LOCAL_ESTIMATE");
+                    count, 100, "LOCAL_ESTIMATE");
         });
         when(usage.estimateInput(any())).thenAnswer(call -> {
             ModelRequest input = call.getArgument(0);
-            return input.messages().toString().contains("<session_summary>") ? candidateTokens : beforeLocalTokens;
+            String text = input.messages().toString();
+            return text.contains("Compact checkpoint") ? compactedTokens : text.contains("Previous durable summary")
+                    ? beforeLocalTokens : text.contains("<session_summary>") ? candidateTokens : beforeLocalTokens;
         });
         when(model.complete(any())).thenReturn(new ModelResponse("summary-response", "Keep the public API unchanged.",
                 List.of(), new ModelUsage(200, 30, 230), ModelFinishReason.STOP));
@@ -250,16 +260,24 @@ class ContextPreparationTest {
         assertNull(service.load("session").summary());
     }
 
-    @Test
-    void publicationFailureRetainsOriginalHistoryAndDoesNotReturnCandidate() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void publicationFailureRetainsOriginalHistoryAndDoesNotReturnCandidate(boolean compact) {
+        if (compact) {
+            originalTokens = 1000;
+            candidateTokens = 1000;
+            when(model.complete(any())).thenReturn(
+                    new ModelResponse("ordinary", "Still detailed", List.of(), ModelUsage.unknown(), ModelFinishReason.STOP),
+                    new ModelResponse("compact", "Compact checkpoint", List.of(), ModelUsage.unknown(), ModelFinishReason.STOP));
+        }
         doAnswer(call -> {
             AgentEventAppender.AppendCommand command = call.getArgument(0);
             if (command.stepType().name().equals("CONTEXT_SUMMARY_CREATED")) throw new IllegalStateException("Commit failed");
             add(command.stepType().name(), command.taskId(), command.runId(), command.persistedPayload());
             return new AgentEventAppender.AppendResult(history.size(), history.size(), (long) history.size(), false);
         }).when(appender).appendFence(any(), any());
-        assertThrows(IllegalStateException.class, () -> assembler.assemble(request, budget, usage, context));
-        verify(model).complete(any());
+        assertThrows(IllegalStateException.class, () -> assembler.assemble(request, compact ? compactionBudget : budget, usage, context));
+        verify(model, times(compact ? 2 : 1)).complete(any());
         assertNull(service.load("session").summary());
         assertTrue(service.load("session").messages().toString().contains("Old detailed investigation"));
     }
@@ -297,6 +315,176 @@ class ContextPreparationTest {
         assertThrows(AgentExecutionControl.LeaseLostException.class, () -> assembler.assemble(request, budget, usage, context));
         assertNull(latest("CONTEXT_SUMMARY_CREATED"));
         assertNull(latest("CONTEXT_SUMMARY_RESULT"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {400, 700})
+    void urgentSummaryFallsBackToTargetedCompactionAndOnlyPublishesTheAcceptedCandidate(long finalTokens) throws Exception {
+        compactedTokens = finalTokens;
+        originalTokens = 1100;
+        beforeLocalTokens = 1200;
+        candidateTokens = 1000; // Ordinary summary shrinks, but still reaches b.
+        when(model.complete(any())).thenReturn(
+                new ModelResponse("ordinary", "Still detailed", List.of(), new ModelUsage(200, 30, 230), ModelFinishReason.STOP),
+                new ModelResponse("compact", "Compact checkpoint", List.of(), new ModelUsage(220, 20, 240), ModelFinishReason.STOP));
+
+        var messages = assembler.assemble(request, compactionBudget, usage, context);
+
+        assertSame(system, messages.get(0));
+        assertTrue(messages.toString().contains("Add tests"));
+        assertTrue(messages.toString().contains("Current generation is 7"));
+        assertTrue(messages.toString().contains("Recent exact investigation"));
+        assertTrue(messages.toString().contains("Compact checkpoint"));
+        assertEquals(1, history.stream().filter(row -> row.getStepType().equals("CONTEXT_SUMMARY_CREATED")).count());
+        assertEquals(2, history.stream().filter(row -> row.getStepType().equals("CONTEXT_SUMMARY_RESULT")).count());
+        assertTrue(history.stream().anyMatch(row -> row.getPayloadJson().contains("TARGET_NOT_REACHED")));
+        var result = mapper.readTree(latest("CONTEXT_SUMMARY_RESULT").getPayloadJson());
+        assertEquals("COMPACTION", result.path("operation").asText());
+        assertEquals(700, result.path("targetInputTokens").asLong()); // 100 fixed + 1000 dynamic * .6
+        assertEquals(240, result.at("/output/usage/totalTokens").asLong());
+        var captured = org.mockito.ArgumentCaptor.forClass(ModelRequest.class);
+        verify(model, times(2)).complete(captured.capture());
+        assertFalse(captured.getAllValues().get(1).messages().toString().contains("Still detailed"));
+        assertTrue(captured.getAllValues().get(1).messages().get(0).content().contains("强压缩"));
+        assertEquals(history.size(), assembler.throughSessionSequence());
+        verify(usage, never()).accept(any(), any());
+    }
+
+    @Test
+    void compactExistingSummaryWithoutNewOldGroupsPreservesItsCoverageAndRecentProtocol() {
+        var previous = new ContextSummary("previous", "session", null, 3, "Previous durable summary");
+        add("CONTEXT_SUMMARY_CREATED", "current", "run", previous);
+        originalTokens = 1000;
+        when(model.complete(any())).thenReturn(new ModelResponse("compact", "Compact checkpoint", List.of(),
+                new ModelUsage(200, 20, 220), ModelFinishReason.STOP));
+        var originalRows = history.stream().map(AgentStepEntity::getPayloadJson).toList();
+        var source = service.load("session");
+        var prepared = new ModelRequest("model", source.modelMessages(system, previous, "current", "Add tests"),
+                List.of(), 100, null, "rewrite-only");
+
+        var messages = assembler.assemble(prepared, compactionBudget, usage, context);
+
+        var restored = service.load("session");
+        assertEquals(3, restored.summary().throughSessionSequence());
+        assertEquals("previous", restored.summary().parentSummaryId());
+        assertNotEquals(previous.summaryId(), restored.summary().summaryId());
+        assertTrue(messages.toString().contains("Recent exact investigation"));
+        assertEquals(originalRows, history.subList(0, originalRows.size()).stream().map(AgentStepEntity::getPayloadJson).toList());
+        assertEquals(messages, restored.modelMessages(system, restored.summary(), "current", "Add tests"));
+        verify(model, times(1)).complete(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {701, 1300}) // Reduced but misses the target; or grows beyond the original.
+    void rejectedCompactionDoesNotReplaceHistoryAndCannotRepeatAfterRestart(long tooLarge) {
+        originalTokens = 1000;
+        candidateTokens = 1000;
+        compactedTokens = tooLarge;
+        when(model.complete(any())).thenReturn(
+                new ModelResponse("ordinary", "Still detailed", List.of(), ModelUsage.unknown(), ModelFinishReason.STOP),
+                new ModelResponse("compact", "Compact checkpoint", List.of(), ModelUsage.unknown(), ModelFinishReason.STOP));
+        assertThrows(ContextAssembler.PreparationException.class,
+                () -> assembler.assemble(request, compactionBudget, usage, context));
+        assertNull(latest("CONTEXT_SUMMARY_CREATED"));
+        assertFalse(service.load("session").control().compactionArmed());
+        assertThrows(ContextAssembler.PreparationException.class,
+                () -> assembler(service.load("session").control()).assemble(nextRequest(), compactionBudget, usage, context));
+        verify(model, times(2)).complete(any());
+        assertTrue(service.load("session").messages().toString().contains("Old detailed investigation"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void compactionGatewayFailureOrTruncationIsRecordedWithoutReplacingTheOldSummary(boolean truncated) {
+        originalTokens = 1000;
+        candidateTokens = 1000;
+        doAnswer(call -> {
+            ModelRequest input = call.getArgument(0);
+            if (!input.requestId().contains(":compact:")) {
+                return new ModelResponse("ordinary", "Still detailed", List.of(), ModelUsage.unknown(), ModelFinishReason.STOP);
+            }
+            if (truncated) return new ModelResponse("cut", "Cut-off checkpoint", List.of(), ModelUsage.unknown(), ModelFinishReason.LENGTH);
+            throw new ModelGatewayException(ModelGatewayErrorCode.TIMEOUT, "Timed out", true, null);
+        }).when(model).complete(any());
+        assertThrows(ContextAssembler.PreparationException.class,
+                () -> assembler.assemble(request, compactionBudget, usage, context));
+        assertTrue(latest("CONTEXT_SUMMARY_RESULT").getPayloadJson().contains("FAILED_"));
+        assertNull(latest("CONTEXT_SUMMARY_CREATED"));
+        assertThrows(ContextAssembler.PreparationException.class,
+                () -> assembler(service.load("session").control()).assemble(nextRequest(), compactionBudget, usage, context));
+        verify(model, times(2)).complete(any());
+    }
+
+    @Test
+    void protectedTailCannotBeSilentlyRemovedToReachTheCompactionTarget() {
+        originalTokens = 1000;
+        protectedTokens = 700;
+        var previous = new ContextSummary("previous", "session", null, 3, "Previous durable summary");
+        add("CONTEXT_SUMMARY_CREATED", "current", "run", previous);
+        assertThrows(ContextAssembler.PreparationException.class,
+                () -> assembler.assemble(request, compactionBudget, usage, context));
+        assertEquals(previous, service.load("session").summary());
+        assertTrue(latest("CONTEXT_SUMMARY_RESULT").getPayloadJson().contains("PROTECTED_CONTEXT_TOO_LARGE"));
+        verifyNoInteractions(model);
+    }
+
+    @Test
+    void newCommittedMessagesDuringCompactionRemainVisible() {
+        originalTokens = 1000;
+        candidateTokens = 1000;
+        doAnswer(call -> {
+            ModelRequest input = call.getArgument(0);
+            boolean compact = input.requestId().contains(":compact:");
+            if (compact) user("next", "Keep traditional loops; do not use lambda");
+            return new ModelResponse("r", compact ? "Compact checkpoint" : "Still detailed",
+                    List.of(), ModelUsage.unknown(), ModelFinishReason.STOP);
+        }).when(model).complete(any());
+        var result = assembler.assemble(request, compactionBudget, usage, context);
+        assertEquals("Keep traditional loops; do not use lambda", result.get(result.size() - 1).content());
+        assertEquals(history.size(), assembler.throughSessionSequence());
+        verify(model, times(2)).complete(any());
+    }
+
+    @Test
+    void aLargeAppendDuringCompactionIsRetainedButCannotStartAnUnboundedThirdModelAttempt() {
+        originalTokens = 1000;
+        candidateTokens = 1000;
+        doAnswer(call -> {
+            ModelRequest input = call.getArgument(0);
+            boolean compact = input.requestId().contains(":compact:");
+            if (compact) user("next", "Large concurrent task");
+            return new ModelResponse("r", compact ? "Compact checkpoint" : "Still detailed",
+                    List.of(), ModelUsage.unknown(), ModelFinishReason.STOP);
+        }).when(model).complete(any());
+        doReturn(new ContextUsage.Measurement("model", "a".repeat(64), "b".repeat(64), 10, 1000, 100, "LOCAL_ESTIMATE"))
+                .when(usage).measure(argThat(input -> input.messages().toString().contains("Large concurrent task")));
+        assertThrows(ContextAssembler.PreparationException.class,
+                () -> assembler.assemble(request, compactionBudget, usage, context));
+        var latest = service.load("session");
+        assertEquals("Compact checkpoint", latest.summary().content());
+        assertTrue(latest.messages().toString().contains("Large concurrent task"));
+        var nextRequest = new ModelRequest("model", latest.modelMessages(system, latest.summary(), "current", "Add tests"),
+                List.of(), 100, null, "after-large-append");
+        assertThrows(ContextAssembler.PreparationException.class,
+                () -> assembler(latest.control()).assemble(nextRequest, compactionBudget, usage, context));
+        verify(model, times(2)).complete(any());
+    }
+
+    @Test
+    void lostLeaseDuringCompactionCannotPublishItsCandidate() {
+        originalTokens = 1000;
+        candidateTokens = 1000;
+        doAnswer(call -> {
+            ModelRequest input = call.getArgument(0);
+            boolean compact = input.requestId().contains(":compact:");
+            if (compact) execution.markLeaseLost();
+            return new ModelResponse("r", compact ? "Compact checkpoint" : "Still detailed",
+                    List.of(), ModelUsage.unknown(), ModelFinishReason.STOP);
+        }).when(model).complete(any());
+        assertThrows(AgentExecutionControl.LeaseLostException.class,
+                () -> assembler.assemble(request, compactionBudget, usage, context));
+        assertNull(latest("CONTEXT_SUMMARY_CREATED"));
+        assertEquals(1, history.stream().filter(row -> row.getStepType().equals("CONTEXT_SUMMARY_RESULT")).count());
     }
 
     private ContextAssembler assembler(SessionContextService.SummaryControl control) {

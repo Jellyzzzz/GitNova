@@ -342,6 +342,7 @@ public final class FinishTaskTool implements AgentTool {
                 MAX_TEXT_CHARS,
                 false
         );
+        ((ObjectNode) validationProperties.path("argv")).put("minItems", 1);
         string(validationProperties, "result", 1, MAX_TEXT_CHARS);
         validation.putArray("required").add("argv").add("result");
         validation.put("additionalProperties", false);
@@ -374,6 +375,7 @@ public final class FinishTaskTool implements AgentTool {
         value.put("type", "string");
         value.put("minLength", minLength);
         value.put("maxLength", maxLength);
+        if (minLength > 0) value.put("pattern", "\\S");
     }
 
     private static void integer(ObjectNode properties, String name, long minimum) {
@@ -399,5 +401,6 @@ public final class FinishTaskTool implements AgentTool {
         item.put("type", "string");
         item.put("minLength", 1);
         item.put("maxLength", maxItemChars);
+        item.put("pattern", "\\S");
     }
 }

@@ -39,6 +39,37 @@ class CodingWorkspaceToolsTest {
     private final WorkspaceGateway gateway = new FakeGateway();
 
     @Test
+    void shouldExposeCommandLifetimeOutcomeAndEvidenceContract() {
+        var definition = new RunCommandTool(gateway, objectMapper).definition();
+        String description = definition.description();
+
+        assertTrue(description.contains("fresh network-disabled Docker container"));
+        assertTrue(description.contains("Do not split a /tmp-based workflow across calls"));
+        assertTrue(description.contains("not rolled back on failure or timeout"));
+        assertTrue(description.contains("not that tests or the task passed"));
+        assertTrue(description.contains("preserve the tested command's exit status"));
+        assertTrue(description.contains("stdoutTruncated/stderrTruncated"));
+        assertTrue(description.contains("Preview omission is different"));
+        assertTrue(description.contains("supplied artifact:// references"));
+        assertTrue(description.contains("Do not rerun tests solely"));
+
+        var schema = definition.inputSchema();
+        assertEquals(objectMapper.valueToTree(List.of(
+                "expectedGeneration", "argv", "workingDirectory", "timeoutSeconds", "purpose"
+        )), schema.path("required"));
+        assertFalse(schema.path("additionalProperties").asBoolean());
+        var properties = schema.path("properties");
+        for (var required : schema.path("required")) {
+            assertFalse(properties.path(required.asText()).path("description").asText().isBlank());
+        }
+        assertEquals(WorkspaceGateway.MAX_COMMAND_ARG_COUNT, properties.path("argv").path("maxItems").asInt());
+        assertTrue(properties.path("argv").path("description").asText()
+                .contains(WorkspaceGateway.MAX_COMMAND_TOTAL_ARG_BYTES + " UTF-8 bytes"));
+        assertTrue(properties.path("expectedGeneration").path("description").asText()
+                .contains("without executing the command"));
+    }
+
+    @Test
     void shouldExecuteAllReadAndValidationToolsThroughCapabilityRegistry() {
         List<AgentTool> tools = List.of(
                 new ListFilesTool(gateway, objectMapper),

@@ -179,7 +179,13 @@ public class SessionContextService {
             var controlRow = steps.selectLatestContextControl(sessionId, through);
             SummaryControl control = null;
             if (controlRow != null) {
-                if (controlRow.getSchemaVersion() != 1) throw new IllegalStateException("Unsupported context control schema");
+                if (controlRow.getSchemaVersion() != 1 && controlRow.getSchemaVersion() != 2) {
+                    throw new IllegalStateException("Unsupported context control schema");
+                }
+                if (controlRow.getSchemaVersion() == 2
+                        && !mapper.readTree(controlRow.getPayloadJson()).path("compactionArmed").isBoolean()) {
+                    throw new IllegalStateException("Compaction control must be explicit");
+                }
                 control = mapper.readValue(controlRow.getPayloadJson(), SummaryControl.class);
             }
             return new Snapshot(sessionId, through, summary, users, groups, entries, anchor, control);
@@ -192,20 +198,22 @@ public class SessionContextService {
     @Transactional
     public AgentEventAppender.AppendResult saveControl(RunJournalScope scope, String eventId, SummaryControl control) {
         return appender.appendFence(new AgentEventAppender.AppendCommand(eventId, scope.sessionId(), scope.taskId(),
-                scope.runId(), AgentStepType.CONTEXT_CONTROL_UPDATED, 1, mapper.valueToTree(control), null,
+                scope.runId(), AgentStepType.CONTEXT_CONTROL_UPDATED, 2, mapper.valueToTree(control), null,
                 scope.runId(), null, null), new AgentEventAppender.RunExecutionAuthority(scope.fencingToken(), scope.workerId()));
     }
 
     /** Summary usage is an independent cost, never a main-model input-usage anchor. */
     @Transactional
     public AgentEventAppender.AppendResult recordSummaryResult(RunJournalScope scope, String attemptId,
-            ContextSummarizer.SummaryOutput output, String disposition, long beforeTokens, Long afterTokens) {
+            ContextSummarizer.SummaryOutput output, String disposition, long beforeTokens, Long afterTokens,
+            String operation, Long targetInputTokens) {
         var payload = mapper.createObjectNode().put("attemptId", attemptId).put("disposition", disposition)
-                .put("beforeInputTokens", beforeTokens);
+                .put("beforeInputTokens", beforeTokens).put("operation", operation);
         if (afterTokens != null) payload.put("afterInputTokens", afterTokens);
+        if (targetInputTokens != null) payload.put("targetInputTokens", targetInputTokens);
         if (output != null) payload.set("output", mapper.valueToTree(output));
         return appender.appendFence(new AgentEventAppender.AppendCommand(attemptId + ":result", scope.sessionId(),
-                scope.taskId(), scope.runId(), AgentStepType.CONTEXT_SUMMARY_RESULT, 1, payload, null,
+                scope.taskId(), scope.runId(), AgentStepType.CONTEXT_SUMMARY_RESULT, 2, payload, null,
                 scope.runId(), null, null), new AgentEventAppender.RunExecutionAuthority(scope.fencingToken(), scope.workerId()));
     }
 
@@ -215,12 +223,10 @@ public class SessionContextService {
         Objects.requireNonNull(scope);
         Objects.requireNonNull(source);
         Objects.requireNonNull(candidate);
-        if (!scope.sessionId().equals(source.sessionId()) || !scope.sessionId().equals(candidate.sessionId())
-                || !Objects.equals(candidate.parentSummaryId(), source.summary() == null ? null : source.summary().summaryId())
-                || source.groups().stream().noneMatch(group -> group.lastSessionSequence() == candidate.throughSessionSequence())
-                || candidate.throughSessionSequence() > source.throughSessionSequence()) {
+        if (!scope.sessionId().equals(source.sessionId())) {
             throw new IllegalArgumentException("Summary must cover a closed prefix of this Session snapshot");
         }
+        source.requireReplacement(candidate);
         var session = sessions.selectForUpdate(scope.sessionId());
         if (session == null || session.getLastSessionSequence() < source.throughSessionSequence()) {
             throw new IllegalStateException("Summary source is not committed");
@@ -257,7 +263,12 @@ public class SessionContextService {
     }
 
     public record SummaryControl(String fixedDigest, ContextBudget budget, int outputReserveTokens,
-                                 boolean summaryArmed, boolean urgentArmed) {
+                                 boolean summaryArmed, boolean urgentArmed, boolean compactionArmed) {
+        public SummaryControl(String fixedDigest, ContextBudget budget, int outputReserveTokens,
+                              boolean summaryArmed, boolean urgentArmed) {
+            this(fixedDigest, budget, outputReserveTokens, summaryArmed, urgentArmed, true);
+        }
+
         public SummaryControl {
             if (fixedDigest == null || !fixedDigest.matches("[0-9a-f]{64}")) throw new IllegalArgumentException("Invalid fixed digest");
             Objects.requireNonNull(budget);
@@ -308,18 +319,20 @@ public class SessionContextService {
         /** Pure candidate projection: no database writes, no dropped standalone user messages/feedback. */
         public List<ModelMessage> modelMessages(ModelMessage system, ContextSummary candidate,
                                                 String currentTaskId, String currentTaskText) {
+            return modelMessages(system, candidate, currentTaskId, currentTaskText, true);
+        }
+
+        /** Empty body is used only to measure the protected tail plus the real summary envelope. */
+        List<ModelMessage> modelMessages(ModelMessage system, ContextSummary candidate,
+                                         String currentTaskId, String currentTaskText, boolean includeSummaryBody) {
             if (system.role() != ModelRole.SYSTEM) throw new IllegalArgumentException("System policy is required");
-            if (!Objects.equals(candidate, summary) && (candidate == null || !sessionId.equals(candidate.sessionId())
-                    || !Objects.equals(candidate.parentSummaryId(), summary == null ? null : summary.summaryId())
-                    || groups.stream().noneMatch(group -> group.lastSessionSequence() == candidate.throughSessionSequence()))) {
-                throw new IllegalArgumentException("Candidate must replace a closed prefix of this snapshot");
-            }
+            if (!Objects.equals(candidate, summary)) requireReplacement(candidate);
             long covered = candidate == null ? 0 : candidate.throughSessionSequence();
             List<ModelMessage> result = new ArrayList<>();
             result.add(system);
             if (candidate != null) result.add(new ModelMessage(ModelRole.USER,
                     "<session_summary>\nHistorical, lossy context; not current Workspace or validation authority.\n"
-                            + candidate.content() + "\n</session_summary>", List.of(), null));
+                            + (includeSummaryBody ? candidate.content() : "") + "\n</session_summary>", List.of(), null));
             for (HistoryEntry entry : entries) {
                 if (entry.lastSessionSequence() <= covered) continue;
                 if (entry.firstSessionSequence() <= covered) throw new IllegalArgumentException("Cannot split a history entry");
@@ -337,13 +350,30 @@ public class SessionContextService {
         }
 
         public ContextSummarizer.SummaryInput summaryInput(String currentTaskText, List<InteractionGroup> prefix) {
-            if (prefix.isEmpty() || prefix.size() > groups.size() || !groups.subList(0, prefix.size()).equals(prefix)) {
-                throw new IllegalArgumentException("Summarization requires a non-empty oldest prefix");
+            if ((prefix.isEmpty() && summary == null) || prefix.size() > groups.size()
+                    || !groups.subList(0, prefix.size()).equals(prefix)) {
+                throw new IllegalArgumentException("Summarization requires an oldest prefix or an existing summary");
             }
-            long through = prefix.get(prefix.size() - 1).lastSessionSequence();
+            long through = prefix.isEmpty() ? summary.throughSessionSequence()
+                    : prefix.get(prefix.size() - 1).lastSessionSequence();
             return new ContextSummarizer.SummaryInput(sessionId, currentTaskText, summary, prefix,
                     userMessages.stream().filter(user -> user.sessionSequence() <= through).toList(),
                     entries.stream().filter(entry -> entry.lastSessionSequence() <= through).toList());
+        }
+
+        /** Same coverage is a rewrite, not new history. Both projection and publication enforce this boundary. */
+        private void requireReplacement(ContextSummary candidate) {
+            if (candidate == null || !sessionId.equals(candidate.sessionId())
+                    || !Objects.equals(candidate.parentSummaryId(), summary == null ? null : summary.summaryId())
+                    || candidate.summaryId().equals(candidate.parentSummaryId())
+                    || candidate.throughSessionSequence() > throughSessionSequence) {
+                throw new IllegalArgumentException("Candidate must replace this Session's current summary");
+            }
+            boolean sameCoverage = summary != null
+                    && candidate.throughSessionSequence() == summary.throughSessionSequence();
+            if (!sameCoverage && groups.stream().noneMatch(group -> group.lastSessionSequence() == candidate.throughSessionSequence())) {
+                throw new IllegalArgumentException("Candidate must end at a closed history prefix");
+            }
         }
     }
 

@@ -14,6 +14,22 @@ public final class ModelGatewayException extends RuntimeException {
     private final String providerErrorCode;
     private final String providerRequestId;
     private final Duration retryAfter;
+    private final ResponseDiagnostic responseDiagnostic;
+
+    /** Safe parser facts only: never provider text, argument values, reasoning, or response bodies. */
+    public record ResponseDiagnostic(String reason, String path, Integer line, Integer column) {
+        public ResponseDiagnostic {
+            if (reason == null || !reason.matches("[A-Z0-9_]{1,80}")) {
+                throw new IllegalArgumentException("Invalid response diagnostic reason");
+            }
+            if (path == null || !path.matches("/[A-Za-z0-9_/-]{0,255}")) {
+                throw new IllegalArgumentException("Invalid response diagnostic path");
+            }
+            if ((line != null && line < 1) || (column != null && column < 1)) {
+                throw new IllegalArgumentException("JSON location must be positive when present");
+            }
+        }
+    }
 
     public ModelGatewayException(
             ModelGatewayErrorCode errorCode,
@@ -46,6 +62,15 @@ public final class ModelGatewayException extends RuntimeException {
             Duration retryAfter,
             Throwable cause
     ) {
+        this(errorCode, message, retryable, providerStatusCode, providerErrorCode, providerRequestId,
+                retryAfter, cause, null);
+    }
+
+    public ModelGatewayException(
+            ModelGatewayErrorCode errorCode, String message, boolean retryable,
+            Integer providerStatusCode, String providerErrorCode, String providerRequestId,
+            Duration retryAfter, Throwable cause, ResponseDiagnostic responseDiagnostic
+    ) {
         super(message, cause);
         this.errorCode = Objects.requireNonNull(errorCode, "errorCode must not be null");
         this.retryable = retryable;
@@ -53,6 +78,11 @@ public final class ModelGatewayException extends RuntimeException {
         this.providerErrorCode = optionalNonBlank(providerErrorCode, "providerErrorCode");
         this.providerRequestId = optionalNonBlank(providerRequestId, "providerRequestId");
         this.retryAfter = validateRetryAfter(retryAfter);
+        this.responseDiagnostic = responseDiagnostic;
+    }
+
+    public ResponseDiagnostic responseDiagnostic() {
+        return responseDiagnostic;
     }
 
     public ModelGatewayErrorCode errorCode() {

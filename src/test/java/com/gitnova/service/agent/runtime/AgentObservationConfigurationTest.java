@@ -126,6 +126,11 @@ class AgentObservationConfigurationTest {
         assertFalse(disabled.context().summaryEnabled());
         assertFalse(disabled.observation().externalizationEnabled());
         assertEquals(2048, disabled.observation().maxInlineTokens());
+        environment.withProperty("gitnova.agent.runtime.context.compact-target-ratio", "0.5");
+        var compacting = Binder.get(environment).bind("gitnova.agent.runtime", AgentRuntimeProperties.class).get();
+        assertEquals(.5, compacting.context().compactTargetRatio());
+        environment.withProperty("gitnova.agent.runtime.context.compact-target-ratio", "0.7");
+        assertThrows(BindException.class, () -> Binder.get(environment).bind("gitnova.agent.runtime", AgentRuntimeProperties.class));
     }
 
     @Test

@@ -1,5 +1,9 @@
 package com.gitnova.service.agent.execution;
 
+import com.gitnova.service.session.AgentSession;
+import com.gitnova.service.agent.runtime.AgentAnswer;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -19,6 +23,9 @@ public interface AgentTaskRunStore {
     TerminalResult terminateRun(TerminalCommand command);
 
     Optional<AgentTask> findTask(String taskId);
+
+    /** Final model text is read from its committed MODEL_RESPONSE, not reconstructed from a draft. */
+    Optional<AgentAnswer> findAnswer(String sessionId, String taskId);
 
     Optional<AgentRun> findRun(String runId);
 
@@ -148,8 +155,17 @@ public interface AgentTaskRunStore {
             String workerId,
             long fencingToken,
             TerminalOutcome outcome,
-            String terminationReason
+            String terminationReason,
+            String answerModelCallId
     ) {
+        /** Historical Run terminal transitions did not carry a model answer. */
+        public TerminalCommand(String runEventId, String taskEventId, String sessionId,
+                               String taskId, String runId, String workerId, long fencingToken,
+                               TerminalOutcome outcome, String terminationReason) {
+            this(runEventId, taskEventId, sessionId, taskId, runId, workerId,
+                    fencingToken, outcome, terminationReason, null);
+        }
+
         public TerminalCommand {
             validateOwnedRunCommand(runEventId, sessionId, taskId, runId);
             requireNonBlank(taskEventId, "taskEventId");
@@ -157,6 +173,14 @@ public interface AgentTaskRunStore {
             requirePositive(fencingToken, "fencingToken");
             Objects.requireNonNull(outcome, "outcome must not be null");
             requireNonBlank(terminationReason, "terminationReason");
+            if (answerModelCallId != null) {
+                requireNonBlank(answerModelCallId, "answerModelCallId");
+                if (outcome != TerminalOutcome.COMPLETED || !"ANSWER_DELIVERED".equals(terminationReason)) {
+                    throw new IllegalArgumentException("Only a delivered answer may reference a Model Call");
+                }
+            } else if ("ANSWER_DELIVERED".equals(terminationReason)) {
+                throw new IllegalArgumentException("Delivered answer requires its source Model Call");
+            }
         }
     }
 

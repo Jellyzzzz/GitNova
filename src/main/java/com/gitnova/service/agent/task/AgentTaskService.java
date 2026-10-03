@@ -6,13 +6,16 @@ import com.gitnova.service.agent.context.ContextBudget;
 import com.gitnova.service.agent.execution.AgentExecutionPersistenceException;
 import com.gitnova.service.agent.execution.AgentTaskRequest;
 import com.gitnova.service.agent.execution.AgentTaskRunStore;
+import com.gitnova.service.agent.execution.AgentTask;
 import com.gitnova.service.agent.execution.CreateTaskCommand;
 import com.gitnova.service.agent.runtime.AgentCapabilityPolicy;
 import com.gitnova.service.agent.runtime.AgentExecutionConfig;
 import com.gitnova.service.agent.runtime.AgentRuntimePolicy;
+import com.gitnova.service.agent.runtime.AgentAnswer;
 import com.gitnova.service.agent.runtime.ToolSetSnap;
 import com.gitnova.service.agent.tool.ToolRegistry;
 import com.gitnova.service.agent.tool.ToolSetSnapFactory;
+import com.gitnova.service.agent.tools.FinishTaskTool;
 import com.gitnova.service.session.AgentSession;
 import com.gitnova.service.session.AgentSessionService;
 import com.gitnova.storage.RepoKey;
@@ -20,6 +23,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class AgentTaskService {
@@ -54,7 +58,10 @@ public class AgentTaskService {
         AgentTaskRequest request=new AgentTaskRequest(message);
 
         AgentCapabilityPolicy capabilities=AgentCapabilityPolicy.cloudAgent();
-        List<ToolDefinition>definitions=toolRegistry.definitions(capabilities);
+        // Keep the registered legacy tool for frozen Runs, but never advertise it to new Tasks.
+        List<ToolDefinition>definitions=toolRegistry.definitions(capabilities).stream()
+                .filter(definition -> !FinishTaskTool.NAME.equals(definition.name()))
+                .toList();
         ToolSetSnap toolSet=toolSetSnapFactory.create(definitions);
 
         AgentExecutionConfig config=new AgentExecutionConfig(policy,capabilities.granted(),toolSet,CONTEXT_POLICY_VERSION,observationPolicy,contextBudget);
@@ -62,4 +69,20 @@ public class AgentTaskService {
         CreateTaskCommand command=CreateTaskCommand.prepare(idempotencyKey,sessionId,actorId,request,config);
         return agentTaskRunStore.createTaskWithInitialRun(command);
     }
+
+    public TaskView find(RepoKey repoKey, String sessionId, long actorId, String taskId) {
+        AgentSession session = sessionService.require(sessionId);
+        if (!session.repoKey().equals(repoKey) || session.createdByActorId() != actorId) {
+            throw new AgentExecutionPersistenceException(
+                    AgentExecutionPersistenceException.Code.STATE_CONFLICT,
+                    "Session is not available for the current Task scope");
+        }
+        AgentTask task = agentTaskRunStore.findTask(taskId)
+                .filter(found -> sessionId.equals(found.sessionId()))
+                .orElseThrow(() -> new AgentExecutionPersistenceException(
+                        AgentExecutionPersistenceException.Code.UNKNOWN_TASK, "Unknown Task"));
+        return new TaskView(task, agentTaskRunStore.findAnswer(sessionId, taskId));
+    }
+
+    public record TaskView(AgentTask task, Optional<AgentAnswer> answer) {}
 }

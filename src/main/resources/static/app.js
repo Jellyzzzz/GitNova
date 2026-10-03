@@ -1,8 +1,10 @@
 import { request } from './api.js';
 
 const $ = id => document.getElementById(id);
-const state = { repos: [], repo: null, authVersion: 0, repoVersion: 0, listVersion: 0 };
+const state = { repos: [], repo: null, authVersion: 0, repoVersion: 0, listVersion: 0, conversation: null, taskTimer: null };
 const statusLabels = { ACTIVE: '可用', PROVISIONING: '创建中', CLOSING: '关闭中', CLOSED: '已关闭', FAILED: '创建失败' };
+const settledTaskStatuses = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'WAITING_USER']);
+const taskStatusLabels = { ACTIVE: '排队 / 执行中', COMPLETED: '已返回', FAILED: '执行失败', CANCELLED: '已取消', WAITING_USER: '需要用户介入' };
 
 function element(tag, text, className = '') {
   const node = document.createElement(tag);
@@ -33,12 +35,15 @@ function date(value) {
 }
 
 function logout(reason = '') {
+  clearTimeout(state.taskTimer);
+  state.conversation = null;
   state.authVersion++;
   state.repoVersion++;
   state.listVersion++;
   state.repos = [];
   state.repo = null;
   for (const key of ['gitnova.token', 'gitnova.username', 'gitnova.pendingSessions']) sessionStorage.removeItem(key);
+  for (const key of Object.keys(sessionStorage)) if (key.startsWith('gitnova.tasks.')) sessionStorage.removeItem(key);
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   $('workspace-view').hidden = true;
   $('login-view').hidden = false;
@@ -144,6 +149,7 @@ function renderSessions(sessions) {
     empty.append(element('h2', '开始你的第一个 Session'), element('p', '先将本地代码推送到仓库，再创建一个独立工作区。'));
     list.append(empty);
   }
+  const repo = { id: state.repo.id, name: state.repo.name };
   for (const session of sessions) {
     const card = element('article', '', 'session-card');
     const top = element('div', '', 'session-top');
@@ -157,7 +163,11 @@ function renderSessions(sessions) {
       field.append(element('dt', label), element('dd', value || '—'));
       fields.append(field);
     }
-    card.append(top, fields);
+    const open = element('button', '进入 Session →', 'button');
+    open.type = 'button';
+    open.disabled = session.status !== 'ACTIVE';
+    open.addEventListener('click', () => openTaskConversation(repo, session));
+    card.append(top, fields, open);
     list.append(card);
   }
 }
@@ -260,5 +270,150 @@ $('copy-push').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText($('push-command').textContent); message('notice', 'CLI 参数已复制；请在本地仓库使用现有 CLI 启动命令执行。'); }
   catch { message('notice', '浏览器不允许访问剪贴板，请手动选择并复制参数。', 'error'); }
 });
+
+function openTaskConversation(repo, session) {
+  clearTimeout(state.taskTimer);
+  const view = {
+    repoId: repo.id, sessionId: session.sessionId, authVersion: state.authVersion,
+    storageKey: `gitnova.tasks.${sessionStorage.getItem('gitnova.username')}.${repo.id}.${session.sessionId}`,
+    entries: [], submitting: false, polling: false
+  };
+  state.conversation = view;
+  message('task-error');
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(view.storageKey) || '[]');
+    if (!Array.isArray(saved) || saved.some(entry => !entry || typeof entry.key !== 'string'
+      || typeof entry.message !== 'string' || (entry.taskId != null && typeof entry.taskId !== 'string'))) {
+      throw new Error('Invalid task references');
+    }
+    // Only request identities are cached. Answers and lifecycle state are read from the server again.
+    view.entries = saved;
+  } catch {
+    message('task-error', '本标签页的任务引用无法读取，请勿盲目重复提交。');
+    view.storageUnavailable = true;
+  }
+  $('task-dialog-title').textContent = `${repo.name} · Session`;
+  $('task-session-meta').textContent = `Session ${session.sessionId} · Workspace ${session.workspaceId}`;
+  $('task-message').value = view.entries.find(entry => !entry.taskId)?.message || '';
+  renderTaskConversation(view);
+  $('task-dialog').showModal();
+  pollTaskConversation(view);
+}
+
+function saveTaskReferences(view) {
+  try {
+    sessionStorage.setItem(view.storageKey, JSON.stringify(view.entries.map(({ key, message, taskId, runId }) =>
+      ({ key, message, taskId, runId }))));
+    return true;
+  } catch {
+    view.storageUnavailable = true;
+    message('task-error', '浏览器无法保存请求标识。请保留当前窗口与 Task ID，避免重复提交。');
+    return false;
+  }
+}
+
+function renderTaskConversation(view) {
+  if (state.conversation !== view) return;
+  const list = $('task-messages');
+  list.replaceChildren();
+  if (!view.entries.length) list.append(element('p', '在这里描述一个任务。Agent 将读取当前 Workspace，并返回执行结果。', 'empty muted'));
+  for (const entry of view.entries) {
+    const card = element('article', '', 'task-exchange');
+    const header = element('div', '', 'task-exchange-header');
+    header.append(element('strong', '你'), element('span', taskStatusLabels[entry.status]
+      || (entry.taskId ? '查询中' : '提交待确认'), `badge ${entry.status === 'COMPLETED' ? 'status-active' : ''}`));
+    card.append(header, element('p', entry.message, 'task-user-message'));
+    if (entry.taskId) card.append(element('p', `Task ${entry.taskId}${entry.runId ? ` · Run ${entry.runId}` : ''}`, 'small muted task-meta'));
+    if (entry.answer) {
+      card.append(element('strong', 'GitNova'), element('pre', entry.answer, 'task-answer'));
+    } else if (settledTaskStatuses.has(entry.status)) {
+      card.append(element('p', entry.status === 'WAITING_USER'
+        ? '本次执行需要用户介入，尚无最终回答。自动恢复入口暂未接入。'
+        : '服务端尚未返回最终 answer，不能将状态标记当作任务验收结果。', 'small muted'));
+    }
+    if (entry.terminalReason) card.append(element('p', `结束原因：${entry.terminalReason}`, 'small muted'));
+    list.append(card);
+  }
+  const pending = view.entries.find(entry => !entry.taskId);
+  const active = view.entries.some(entry => entry.taskId && !settledTaskStatuses.has(entry.status));
+  $('task-form').dataset.busy = String(view.submitting);
+  $('task-message').readOnly = Boolean(pending) || active || view.submitting || view.storageUnavailable;
+  $('send-task').disabled = view.submitting || active || view.storageUnavailable;
+  $('send-task').textContent = view.submitting ? '正在提交…' : pending ? '重试原请求' : '发送任务';
+  $('refresh-task').disabled = view.polling || view.submitting || !view.entries.some(entry => entry.taskId);
+  $('task-progress').textContent = active ? '任务已提交，正在读取服务端状态…'
+    : pending ? '提交结果尚未确认。重试会沿用同一幂等键，不创建第二个逻辑任务。'
+    : view.entries.length ? '回答来自已持久化的模型输出；正常结束不等于独立验收通过。' : '准备就绪';
+}
+
+async function pollTaskConversation(view, refreshAll = false) {
+  if (state.conversation !== view || !$('task-dialog').open || view.polling) return;
+  clearTimeout(state.taskTimer);
+  view.polling = true;
+  renderTaskConversation(view);
+  let failed = false;
+  try {
+    for (const entry of view.entries) {
+      if (!entry.taskId || (!refreshAll && settledTaskStatuses.has(entry.status))) continue;
+      const detail = await request(`/api/repos/${encodeURIComponent(view.repoId)}/agent/sessions/${encodeURIComponent(view.sessionId)}/tasks/${encodeURIComponent(entry.taskId)}`);
+      if (state.conversation !== view || state.authVersion !== view.authVersion) return;
+      entry.status = detail.status;
+      entry.answer = detail.answer?.content || '';
+      entry.terminalReason = detail.terminalReason;
+    }
+  } catch (error) {
+    failed = true;
+    if (state.conversation === view) message('task-error', `${error.message} 查询失败不会取消任务；请点击「刷新状态」。`);
+  } finally {
+    view.polling = false;
+    renderTaskConversation(view);
+  }
+  if (!failed && state.conversation === view && $('task-dialog').open
+    && view.entries.some(entry => entry.taskId && !settledTaskStatuses.has(entry.status))) {
+    state.taskTimer = setTimeout(() => pollTaskConversation(view), 2500);
+  }
+}
+
+$('task-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const view = state.conversation;
+  if (!view || view.submitting || view.storageUnavailable
+    || view.entries.some(entry => entry.taskId && !settledTaskStatuses.has(entry.status))) return;
+  let entry = view.entries.find(item => !item.taskId);
+  if (!entry) {
+    const text = $('task-message').value.trim();
+    if (!text) return;
+    entry = { key: crypto.randomUUID(), message: text };
+    view.entries.push(entry);
+    if (!saveTaskReferences(view)) { renderTaskConversation(view); return; }
+  }
+  view.submitting = true;
+  message('task-error');
+  renderTaskConversation(view);
+  try {
+    const created = await request(`/api/repos/${encodeURIComponent(view.repoId)}/agent/sessions/${encodeURIComponent(view.sessionId)}/tasks`, {
+      method: 'POST', body: { message: entry.message }, key: entry.key
+    });
+    if (state.authVersion !== view.authVersion) return;
+    entry.taskId = created.taskId;
+    entry.runId = created.initialRunId;
+    // Fetch authoritative lifecycle and answer, even when an idempotent retry returns a completed Task.
+    entry.status = undefined;
+    saveTaskReferences(view);
+    if (state.conversation === view) $('task-message').value = '';
+  } catch (error) {
+    if (state.conversation === view) message('task-error', `${error.message} 已保留原文和幂等键，可重试原请求。`);
+  } finally {
+    view.submitting = false;
+    renderTaskConversation(view);
+  }
+  if (entry.taskId) pollTaskConversation(view);
+});
+
+$('refresh-task').addEventListener('click', () => {
+  message('task-error');
+  if (state.conversation) pollTaskConversation(state.conversation, true);
+});
+$('task-dialog').addEventListener('close', () => { clearTimeout(state.taskTimer); });
 
 if (sessionStorage.getItem('gitnova.token')) showWorkspace();

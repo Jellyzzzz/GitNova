@@ -4,6 +4,7 @@ import com.gitnova.gitobject.GitObjectId;
 import com.gitnova.service.agent.runtime.AgentCapability;
 import com.gitnova.service.agent.runtime.AgentExecutionConfig;
 import com.gitnova.service.agent.runtime.AgentRunResult;
+import com.gitnova.service.agent.runtime.AgentAnswer;
 import com.gitnova.service.agent.runtime.AgentRunStatus;
 import com.gitnova.service.agent.runtime.AgentRuntime;
 import com.gitnova.service.agent.runtime.AgentTerminationReason;
@@ -13,6 +14,7 @@ import com.gitnova.service.session.AgentSession;
 import com.gitnova.service.session.AgentSessionStore;
 import com.gitnova.storage.RepoKey;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.scheduling.TaskScheduler;
 
 import java.time.Duration;
@@ -30,8 +32,36 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class DefaultDurableRunExecutorTest {
+
+    @Test
+    void deliveredAnswerPassesItsModelCallIdentityToTerminalTransaction() {
+        AgentTaskRunStore taskRunStore = mock(AgentTaskRunStore.class);
+        AgentSessionStore sessionStore = mock(AgentSessionStore.class);
+        AgentRuntime runtime = mock(AgentRuntime.class);
+        TaskScheduler scheduler = mock(TaskScheduler.class);
+        ScheduledFuture<?> heartbeatFuture = mock(ScheduledFuture.class);
+        AgentRun run = runningRun();
+        when(taskRunStore.findRun(run.runId())).thenReturn(Optional.of(run));
+        when(taskRunStore.findTask(run.taskId())).thenReturn(Optional.of(activeTask()));
+        when(sessionStore.findById(run.sessionId())).thenReturn(Optional.of(activeSession()));
+        when(scheduler.scheduleAtFixedRate(any(Runnable.class), eq(Duration.ofSeconds(10))))
+                .thenAnswer(invocation -> heartbeatFuture);
+        when(runtime.run(any(), any(), any(), anyLong())).thenReturn(new AgentRunResult(
+                AgentRunStatus.COMPLETED, AgentTerminationReason.ANSWER_DELIVERED, null, null,
+                2, 1, 1, List.of(), new AgentAnswer("The change is ready.", "run-1:turn1:call2")));
+
+        new DefaultDurableRunExecutor(taskRunStore, sessionStore, runtime, scheduler)
+                .execute(run.runId(), "worker-a", 3L);
+
+        ArgumentCaptor<AgentTaskRunStore.TerminalCommand> terminal =
+                ArgumentCaptor.forClass(AgentTaskRunStore.TerminalCommand.class);
+        verify(taskRunStore).terminateRun(terminal.capture());
+        assertEquals("run-1:turn1:call2", terminal.getValue().answerModelCallId());
+        assertEquals(AgentTaskRunStore.TerminalOutcome.COMPLETED, terminal.getValue().outcome());
+    }
 
     @Test
     void shouldStopWithoutTerminalTransitionWhenHeartbeatConfirmsLeaseLoss() {

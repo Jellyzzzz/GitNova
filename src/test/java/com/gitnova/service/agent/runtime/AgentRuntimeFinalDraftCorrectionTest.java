@@ -100,7 +100,7 @@ class AgentRuntimeFinalDraftCorrectionTest {
     }
 
     @Test
-    void shouldRejectMixedTerminalCallsWithoutExecutingEitherTool() {
+    void shouldRejectUnadvertisedToolBeforeExecutingEitherCall() {
         ToolCall finish = finishCall("call-finish", validFinish(0));
         ToolCall other = new ToolCall(
                 "call-other",
@@ -123,7 +123,7 @@ class AgentRuntimeFinalDraftCorrectionTest {
         AgentRunResult result = runtime(gateway, 1, 0).run(context());
 
         assertEquals(AgentRunStatus.COMPLETED, result.status());
-        assertEquals(ProtocolDeviation.MIXED_TERMINAL_TOOL_CALLS, result.lastProtocolDeviation());
+        assertEquals(ProtocolDeviation.TOOL_NOT_AVAILABLE, result.lastProtocolDeviation());
         assertEquals(3, result.toolCallCount());
         assertEquals(1, result.successfulToolCallCount());
     }

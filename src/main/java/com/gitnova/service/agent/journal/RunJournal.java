@@ -2,6 +2,7 @@ package com.gitnova.service.agent.journal;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
+import com.gitnova.service.agent.model.ModelGatewayException;
 import com.gitnova.storage.artifact.ArtifactRef;
 
 import java.util.List;
@@ -19,6 +20,10 @@ public interface RunJournal {
     AgentEventAppender.AppendResult appendModelResponse(
             RunJournalScope scope,
             ModelResponsePayload payload
+    );
+
+    AgentEventAppender.AppendResult appendModelCallFailed(
+            RunJournalScope scope, String modelCallId, ModelGatewayException failure
     );
 
     AgentEventAppender.AppendResult appendToolResult(

@@ -46,6 +46,12 @@ public record ModelResponsePayload(
         return new ModelResponsePayload(modelCallId,response.responseId(),response.text(),response.toolCalls(),response.usage(),response.finishReason(),response.reasoningContent());
     }
 
+    public static String eventId(String runId, String modelCallId) {
+        requireNonBlank(runId, "runId");
+        requireNonBlank(modelCallId, "modelCallId");
+        return "run:" + runId + ":model-call:" + modelCallId + ":response";
+    }
+
     private static void requireNonBlank(String value,String field){
         Objects.requireNonNull(value,field+"must not be null");
         if(value.isBlank()) throw new IllegalArgumentException(field+"must not be blank");

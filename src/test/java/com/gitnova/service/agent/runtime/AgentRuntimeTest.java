@@ -56,7 +56,9 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 class AgentRuntimeTest {
 
@@ -64,6 +66,95 @@ class AgentRuntimeTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private AgentExecutionConfig executionConfig;
+
+    @Test
+    void shouldDeliverNaturalFinalTextWithoutCompletionTool() {
+        RecordingTool read = new RecordingTool(definition("readContext"),
+                ToolResult.success(objectMapper.createObjectNode().put("fact", "current workspace")));
+        FakeModelGateway gateway = new FakeModelGateway()
+                .enqueueResponse(toolResponse("read", call("read-1", "readContext",
+                        objectMapper.createObjectNode()), ModelUsage.unknown()))
+                .enqueueResponse(new ModelResponse("answer", "I inspected the current workspace; no files changed.",
+                        List.of(), ModelUsage.unknown(), ModelFinishReason.STOP));
+        AgentRuntime runtime = runtime(gateway, new InspectingWorkspace(0, List.of()), List.of(read));
+
+        AgentRunResult result = runtime.run(context("Explain the current workspace"));
+
+        assertEquals(AgentRunStatus.COMPLETED, result.status());
+        assertEquals(AgentTerminationReason.ANSWER_DELIVERED, result.terminationReason());
+        assertEquals("I inspected the current workspace; no files changed.", result.answer().content());
+        assertEquals(gateway.receivedRequests().get(1).requestId(), result.answer().modelCallId());
+        assertNull(result.completionOutcome());
+        assertEquals(List.of("readContext"), gateway.receivedRequests().get(0).tools().stream()
+                .map(ToolDefinition::name).toList());
+        assertEquals(1, read.invocationCount);
+        assertEquals(2, result.modelCallCount());
+        assertEquals(1, result.toolCallCount());
+    }
+
+    @Test
+    void shouldNotDeliverEmptyOrReasoningOnlyStop() {
+        FakeModelGateway gateway = new FakeModelGateway().enqueueResponse(new ModelResponse(
+                "empty", "  ", List.of(), ModelUsage.unknown(), ModelFinishReason.STOP,
+                "internal reasoning is not a user-facing answer"));
+        RecordingTool read = new RecordingTool(definition("readContext"),
+                ToolResult.success(objectMapper.createObjectNode()));
+
+        AgentRunResult result = runtime(gateway, new InspectingWorkspace(0, List.of()), List.of(read))
+                .run(context("Explain the current workspace"));
+
+        assertEquals(AgentRunStatus.FAILED, result.status());
+        assertEquals(AgentTerminationReason.INVALID_MODEL_PROTOCOL, result.terminationReason());
+        assertNull(result.answer());
+    }
+
+    @Test
+    void shouldRejectUnadvertisedLegacyFinishToolWithoutExecutingIt() {
+        RecordingTool read = new RecordingTool(definition("readContext"),
+                ToolResult.success(objectMapper.createObjectNode()));
+        FakeModelGateway gateway = new FakeModelGateway()
+                .enqueueResponse(toolResponse("guessed", call("finish-1", FinishTaskTool.NAME,
+                        finishArguments(0, List.of(), null)), ModelUsage.unknown()))
+                .enqueueResponse(new ModelResponse("answer", "No changes were needed.", List.of(),
+                        ModelUsage.unknown(), ModelFinishReason.STOP));
+        AgentRuntime runtime = runtime(gateway, new InspectingWorkspace(0, List.of()), List.of(read));
+
+        AgentRunResult result = runtime.run(context("Inspect only"));
+
+        assertEquals(AgentTerminationReason.ANSWER_DELIVERED, result.terminationReason());
+        assertEquals(ProtocolDeviation.TOOL_NOT_AVAILABLE, result.lastProtocolDeviation());
+        assertEquals(0, read.invocationCount);
+        ModelMessage rejection = gateway.receivedRequests().get(1).messages().stream()
+                .filter(message -> message.role() == ModelRole.TOOL).findFirst().orElseThrow();
+        assertEquals("finish-1", rejection.toolCallId());
+        assertTrue(rejection.content().contains("TOOL_NOT_AVAILABLE"));
+    }
+
+    @Test
+    void shouldReconsiderFinalAnswerWhenWorkspaceChangesDuringModelCall() {
+        WorkspaceGateway workspace = mock(WorkspaceGateway.class);
+        when(workspace.refreshWorkspace(any())).thenReturn(
+                new WorkspaceGateway.WorkspaceRefresh(0, 0, false),
+                new WorkspaceGateway.WorkspaceRefresh(0, 1, true),
+                new WorkspaceGateway.WorkspaceRefresh(1, 1, false),
+                new WorkspaceGateway.WorkspaceRefresh(1, 1, false));
+        FakeModelGateway gateway = new FakeModelGateway()
+                .enqueueResponse(new ModelResponse("stale", "The file is unchanged.", List.of(),
+                        ModelUsage.unknown(), ModelFinishReason.STOP))
+                .enqueueResponse(new ModelResponse("current", "The Workspace changed; I have not verified it.",
+                        List.of(), ModelUsage.unknown(), ModelFinishReason.STOP));
+        RecordingTool read = new RecordingTool(definition("readContext"),
+                ToolResult.success(objectMapper.createObjectNode()));
+
+        AgentRunResult result = runtime(gateway, workspace, List.of(read))
+                .run(context("Inspect the current file"));
+
+        assertEquals("The Workspace changed; I have not verified it.", result.answer().content());
+        assertEquals(2, result.modelCallCount());
+        assertTrue(gateway.receivedRequests().get(1).messages().stream()
+                .anyMatch(message -> message.content() != null
+                        && message.content().contains("authoritative at generation 1")));
+    }
 
     @Test
     void shouldCompleteReadOnlyTaskThroughToolObservationAndCanonicalInspection() throws Exception {
@@ -277,7 +368,7 @@ class AgentRuntimeTest {
         var failure = new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,
                 "secret-in-provider-message", false, 200, "secret-in-provider-code", "secret-in-provider-header",
                 null, new IllegalArgumentException("secret-in-parser-cause"));
-        var gateway = new FakeModelGateway().enqueueFailure(failure);
+        var gateway = new FakeModelGateway().enqueueFailure(failure).enqueueFailure(failure);
         var runtime = runtime(gateway, new InspectingWorkspace(0, List.of()), List.of(new FinishTaskTool(objectMapper)));
         Logger logger = (Logger) LoggerFactory.getLogger(AgentRuntime.class);
         var logs = new ListAppender<ILoggingEvent>();

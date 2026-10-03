@@ -286,6 +286,38 @@ class AgentExecutionConfigCodecTest {
         assertThrows(IllegalArgumentException.class, () -> codec.decode(json.toString()));
     }
 
+    @Test
+    void freezesCompactionTargetWithoutChangingOlderContractsOrInjectingModelControls() throws Exception {
+        var old = standardConfig();
+        for (boolean thinking : List.of(false, true)) {
+            var policy = thinking ? new AgentRuntimePolicy("test-model", 40, 80, 2, 3, 32768, null,
+                    new ModelThinking("enabled", "max"), new ModelThinking("enabled", "high")) : old.policy();
+            var configured = new AgentExecutionConfig(policy, old.capabilities(), old.toolSet(), old.contextPolicyVersion(),
+                    new ObservationPolicy(4096, 1024), new com.gitnova.service.agent.context.ContextBudget(128000, 2000, .8, .9, 4, true, .6));
+            var encoded = codec.encode(configured);
+            var json = (ObjectNode) objectMapper.readTree(encoded.json());
+            assertEquals(7, json.path("schemaVersion").asInt());
+            assertEquals(.6, json.at("/contextBudget/compactTargetRatio").asDouble());
+            assertEquals(configured, codec.decode(encoded.json()));
+            assertEquals(encoded, codec.encode(codec.decode(encoded.json())));
+            json.withObject("/contextBudget").put("compactTargetRatio", .7);
+            assertNotEquals(encoded.digest(), codec.encode(codec.decode(json.toString())).digest());
+            json.withObject("/contextBudget").put("compactTargetRatio", .8);
+            assertThrows(IllegalArgumentException.class, () -> codec.decode(json.toString()));
+            json.withObject("/contextBudget").remove("compactTargetRatio");
+            assertThrows(IllegalArgumentException.class, () -> codec.decode(json.toString()));
+            json.withObject("/contextBudget").put("compactTargetRatio", .6);
+            json.put("schemaVersion", thinking ? 6 : 3);
+            assertThrows(IllegalArgumentException.class, () -> codec.decode(json.toString()));
+        }
+        var legacy = new AgentExecutionConfig(old.policy(), old.capabilities(), old.toolSet(), old.contextPolicyVersion(),
+                new ObservationPolicy(4096, 1024), new com.gitnova.service.agent.context.ContextBudget(128000, 2000, .8, .9, 4));
+        var encoded = codec.encode(legacy);
+        assertFalse(objectMapper.readTree(encoded.json()).path("contextBudget").has("compactTargetRatio"));
+        assertNull(codec.decode(encoded.json()).contextBudget().compactTargetRatio());
+        assertEquals(encoded, codec.encode(codec.decode(encoded.json())));
+    }
+
     private AgentExecutionConfig standardConfig() {
         return config(
                 policy(20, 50),

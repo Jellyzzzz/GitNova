@@ -6,7 +6,15 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 /** Immutable budget configuration; request measurements are never stored here. */
 public record ContextBudget(long contextWindowTokens, long safetyMarginTokens,
                             double summaryTriggerRatio, double compactTriggerRatio, int keepRecentGroups,
-                            @DefaultValue("true") boolean summaryEnabled) {
+                            @DefaultValue("true") boolean summaryEnabled,
+                            Double compactTargetRatio) {
+    /** Missing target preserves older frozen contracts; live configuration opts in explicitly. */
+    public ContextBudget(long contextWindowTokens, long safetyMarginTokens,
+                         double summaryTriggerRatio, double compactTriggerRatio, int keepRecentGroups,
+                         boolean summaryEnabled) {
+        this(contextWindowTokens, safetyMarginTokens, summaryTriggerRatio, compactTriggerRatio,
+                keepRecentGroups, summaryEnabled, null);
+    }
     public ContextBudget(long contextWindowTokens, long safetyMarginTokens,
                          double summaryTriggerRatio, double compactTriggerRatio, int keepRecentGroups) {
         this(contextWindowTokens, safetyMarginTokens, summaryTriggerRatio, compactTriggerRatio, keepRecentGroups, true);
@@ -30,6 +38,10 @@ public record ContextBudget(long contextWindowTokens, long safetyMarginTokens,
             throw new IllegalArgumentException("Trigger ratios must satisfy 0 < summary < compact < 1");
         }
         if (keepRecentGroups <= 0) throw new IllegalArgumentException("keepRecentGroups must be positive");
+        if (compactTargetRatio != null && (!Double.isFinite(compactTargetRatio)
+                || compactTargetRatio <= 0 || compactTargetRatio >= summaryTriggerRatio)) {
+            throw new IllegalArgumentException("Compaction target must satisfy 0 < target < summary trigger");
+        }
     }
 
     /** estimatedInputTokens includes fixedTokens; output reserve comes from the current request policy. */

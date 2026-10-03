@@ -12,6 +12,8 @@ import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.model.ModelFinishReason;
 import com.gitnova.service.agent.model.ModelResponse;
 import com.gitnova.service.agent.model.ModelUsage;
+import com.gitnova.service.agent.model.ModelGatewayErrorCode;
+import com.gitnova.service.agent.model.ModelGatewayException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -191,6 +193,30 @@ class DefaultRunJournalTest {
                 IllegalArgumentException.class,
                 () -> journal.appendHarnessFeedback(SCOPE, payload, " ")
         );
+    }
+
+    @Test
+    void parseFailureHasStableIdentityAndCorrectionReferencesThatFailure() {
+        var failure = new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE, "secret-provider-body", false,
+                200, "secret-code", "secret-header", null, new IllegalArgumentException("secret-cause"),
+                new ModelGatewayException.ResponseDiagnostic("TOOL_ARGUMENTS_JSON_INVALID",
+                        "/choices/0/message/tool_calls/0/function/arguments", 1, 4267));
+        journal.appendModelCallFailed(SCOPE, "model-1", failure);
+        journal.appendHarnessFeedback(SCOPE, new HarnessFeedbackPayload("feedback-1",
+                HarnessFeedbackKind.MODEL_RESPONSE_CORRECTION, "Regenerate valid JSON"),
+                "run:run-1:model-call:model-1:failed");
+
+        var commands = ArgumentCaptor.forClass(AgentEventAppender.AppendCommand.class);
+        org.mockito.Mockito.verify(appender, org.mockito.Mockito.times(2)).appendFence(commands.capture(), any());
+        var failed = commands.getAllValues().get(0);
+        var feedback = commands.getAllValues().get(1);
+        assertEquals(AgentStepType.MODEL_CALL_FAILED, failed.stepType());
+        assertEquals("run:run-1:model-call:model-1:started", failed.causationEventId());
+        assertEquals("run:run-1:model-call:model-1:failed", failed.eventId());
+        assertEquals(failed.eventId(), feedback.causationEventId());
+        assertEquals(4267, failed.persistedPayload().at("/responseDiagnostic/column").asInt());
+        assertEquals("MODEL_RESPONSE_CORRECTION", feedback.persistedPayload().path("kind").asText());
+        assertEquals(false, failed.persistedPayload().toString().contains("secret-"));
     }
 
     @Test

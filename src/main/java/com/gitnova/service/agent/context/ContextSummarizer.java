@@ -21,7 +21,10 @@ public class ContextSummarizer {
         ## Goal
         用户要完成的目标；区分当前任务与相关的历史任务。
         ## Constraints & Preferences
-        - 明确的约束、偏好、允许修改范围和禁止事项。
+        - 用户明确提到的约束、偏好、要求、允许修改范围和禁止事项；关键措辞尽量保留原话。
+        - 标注来源 Task/sequence 和原文明确的适用范围；不要把“本次只读”等任务要求扩大为后续所有任务的规则。
+        - 合并旧摘要时保留仍适用的要求；用户明确修改或撤销时更新，不因后续消息未重申而自行删除。
+        - 作用范围或是否仍适用不明确时标为待确认；不把模型建议、代码、日志或引用材料提升为用户要求。
         ## Progress
         ### Done
         - [x] 输入中有证据支持的已完成工作，以及对应验证结果。
@@ -69,9 +72,19 @@ public class ContextSummarizer {
         this.thinking = Objects.requireNonNull(thinking, "summary thinking must not be null");
     }
     public SummaryOutput summarize(SummaryInput input){
+        return summarize(input, null);
+    }
+
+    /** A body target reuses the same summarizer; the caller verifies the complete projected request. */
+    public SummaryOutput summarize(SummaryInput input, Long targetSummaryTokens){
         Objects.requireNonNull(input,"input must not be null");
+        if (targetSummaryTokens != null && targetSummaryTokens <= 0) {
+            throw new IllegalArgumentException("targetSummaryTokens must be positive");
+        }
         List<InteractionGroup>groupToCompact=input.groupToCompact;
-        if(groupToCompact.isEmpty()) throw new IllegalArgumentException("groupToCompact must not be empty");
+        if (groupToCompact.isEmpty() && (targetSummaryTokens == null || input.previousSummary == null)) {
+            throw new IllegalArgumentException("Summarization requires old groups or an existing summary to compact");
+        }
 
         ContextSummary previousSummary=input.previousSummary;
         if(previousSummary!=null && !input.sessionId.equals(previousSummary.sessionId())){
@@ -88,8 +101,8 @@ public class ContextSummarizer {
         }
 
         String source=renderSource(input);
-        String callRequestId = requestId + ":" + UUID.randomUUID();
-        ModelResponse response=modelGateway.complete(buildSummaryRequest(callRequestId,source));
+        String callRequestId = requestId + (targetSummaryTokens == null ? ":" : ":compact:") + UUID.randomUUID();
+        ModelResponse response=modelGateway.complete(buildSummaryRequest(callRequestId,source,targetSummaryTokens));
         if(response==null){
             throw new IllegalStateException("Summary model returned no response");
         }
@@ -213,9 +226,22 @@ public class ContextSummarizer {
 
         out.append('\n');
     }
-    private ModelRequest buildSummaryRequest(String requestId,String source){
+    private ModelRequest buildSummaryRequest(String requestId,String source, Long targetSummaryTokens){
+        String instructions = SUMMARY_INSTRUCTIONS;
+        if (targetSummaryTokens != null) {
+            instructions += """
+
+                本次是强压缩：摘要正文目标不超过 %d tokens（不含思考内容）。
+                继续使用上述结构，优先保留当前目标、仍适用的用户要求、未解决问题、下一步和关键证据来源。
+                合并重复结论，将已完成的历史阶段简述；以准确的历史读取地址替代大段日志、代码和逐次操作过程。
+                只保留输入中实际存在的地址，不得编造引用；必须区分初始失败、后续修复和当前已验证的状态。
+                若只有旧摘要而没有新增历史，仅缩短表达，不假定发生了新操作，不改变事实来源和适用范围。
+                目标紧张也不能把未验证写成已验证，或缩写必须精确的标识符。
+                """.formatted(targetSummaryTokens);
+        }
         // Summarization has its own bounded output; do not inherit the coding model's thinking setting.
-        return new ModelRequest(model,List.of(new ModelMessage(ModelRole.SYSTEM,SUMMARY_INSTRUCTIONS,List.of(),null),new ModelMessage(ModelRole.USER,source,List.of(),null)),List.of(),summaryMaxOutputTokens,null,requestId,thinking);
+        // Do not use the body target as maxOutputTokens: thinking shares the provider's output allowance.
+        return new ModelRequest(model,List.of(new ModelMessage(ModelRole.SYSTEM,instructions,List.of(),null),new ModelMessage(ModelRole.USER,source,List.of(),null)),List.of(),summaryMaxOutputTokens,null,requestId,thinking);
     }
     public record SummaryInput(String sessionId,String taskText,ContextSummary previousSummary, List<InteractionGroup>groupToCompact,
                                List<SessionContextService.TaskMessage> userMessages,

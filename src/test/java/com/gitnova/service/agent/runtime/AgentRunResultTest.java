@@ -15,6 +15,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class AgentRunResultTest {
 
     @Test
+    void shouldTreatNaturalAnswerAsDeliveryWithoutClaimingIndependentAcceptance() {
+        AgentAnswer answer = new AgentAnswer("Implemented the change; tests were not run.", "call-2");
+        AgentRunResult result = new AgentRunResult(AgentRunStatus.COMPLETED,
+                AgentTerminationReason.ANSWER_DELIVERED, null, null,
+                2, 1, 1, List.of(ModelUsage.unknown()), answer);
+
+        assertEquals(answer, result.answer());
+        assertEquals(null, result.completionOutcome());
+        assertThrows(IllegalArgumentException.class, () -> new AgentRunResult(
+                AgentRunStatus.FAILED, AgentTerminationReason.ANSWER_DELIVERED, null, null,
+                1, 0, 0, List.of(), answer));
+    }
+
+    @Test
     void shouldRepresentPartialRunBySuccessfulToolObservationsWithoutACompletion() {
         AgentRunResult result = new AgentRunResult(
                 AgentRunStatus.PARTIAL,

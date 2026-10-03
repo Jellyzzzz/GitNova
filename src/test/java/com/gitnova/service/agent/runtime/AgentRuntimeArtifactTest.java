@@ -182,8 +182,9 @@ class AgentRuntimeArtifactTest {
         verify(command, never()).execute(any(), any());
     }
 
-    @Test
-    void summarizesBeforeMainCallAndKeepsCompactProjectionForFollowingTurns() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void summarizesBeforeMainCallAndKeepsCompactProjectionForFollowingTurns(boolean requiresCompaction) {
         var contexts = mock(SessionContextService.class);
         var published = new AtomicReference<ContextSummary>();
         String oldText = "historical analysis ".repeat(5000);
@@ -203,7 +204,8 @@ class AgentRuntimeArtifactTest {
                 published.get() == null ? List.of(oldGroup, recentGroup) : List.of(recentGroup),
                 published.get() == null ? entries : entries.subList(2, 4), null, null));
         when(contexts.saveControl(any(), anyString(), any())).thenAnswer(call -> commit("context-control"));
-        when(contexts.recordSummaryResult(any(), anyString(), any(), anyString(), anyLong(), any())).thenAnswer(call -> commit("summary-result"));
+        when(contexts.recordSummaryResult(any(), anyString(), any(), anyString(), anyLong(), any(), anyString(), any()))
+                .thenAnswer(call -> commit("summary-result"));
         when(contexts.publishSummary(any(), any(), any())).thenAnswer(call -> {
             published.set(call.getArgument(2));
             return commit("summary-published");
@@ -212,7 +214,9 @@ class AgentRuntimeArtifactTest {
         var config = context.executionConfig();
         context = new AgentExecutionContext(context.sessionId(), context.context(), context.actorId(), context.taskText(),
                 context.workspace(), context.executionPermit(), new AgentExecutionConfig(config.policy(), config.capabilities(),
-                config.toolSet(), config.contextPolicyVersion(), config.observationPolicy(), new ContextBudget(18000, 1000, .55, .85, 1)));
+                config.toolSet(), config.contextPolicyVersion(), config.observationPolicy(), requiresCompaction
+                        ? new ContextBudget(18000, 1000, .55, .75, 1, true, .4)
+                        : new ContextBudget(18000, 1000, .55, .85, 1)));
         runtime = new AgentRuntime(model, prompt, new MessageFactory(mapper), registry, workspace, inspector,
                 AgentTestExecutionConfigs.resolver(registry), journal, new CanonicalJsonCodec(mapper), store, preview,
                 contexts, new TokenEstimator());
@@ -222,6 +226,10 @@ class AgentRuntimeArtifactTest {
             if (request.requestId().startsWith("run:summary:")) {
                 summaryRequests.add(request);
                 events.add("summary-model");
+                if (requiresCompaction && !request.requestId().contains(":compact:")) {
+                    return new ModelResponse("cut", "Incomplete checkpoint", List.of(),
+                            new ModelUsage(10000, 4096, 14096), ModelFinishReason.LENGTH);
+                }
                 return new ModelResponse("s", "Keep public APIs; investigation complete.", List.of(),
                         new ModelUsage(10000, 30, 10030), ModelFinishReason.STOP);
             }
@@ -236,7 +244,11 @@ class AgentRuntimeArtifactTest {
         var result = run();
         assertEquals(AgentRunStatus.COMPLETED, result.status());
         assertEquals(2, result.modelCallCount());
-        assertEquals(1, summaryRequests.size());
+        assertEquals(requiresCompaction ? 2 : 1, summaryRequests.size());
+        if (requiresCompaction) {
+            assertTrue(summaryRequests.get(1).messages().get(0).content().contains("强压缩"));
+            assertEquals(config.policy().maxOutputTokens(), summaryRequests.get(1).maxOutputTokens());
+        }
         assertEquals(2, requests.size());
         assertTrue(events.indexOf("summary-published") < events.indexOf("started"));
         var intents = ArgumentCaptor.forClass(ModelCallStartedPayload.class);

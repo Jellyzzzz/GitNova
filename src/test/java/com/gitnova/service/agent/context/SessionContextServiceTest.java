@@ -128,6 +128,33 @@ class SessionContextServiceTest {
     }
 
     @Test
+    void rejectedResponseKeepsCorrectionButCreatesNoUnresolvedToolGroup() {
+        user("task-a", "Inspect without changes");
+        add("MODEL_RESPONSE", "task-a", "run-a", response("read-1", "readFile"));
+        add("TOOL_RESULT", "task-a", "run-a", new ToolResultPayload("model-1", "read-1", "readFile",
+                ToolResult.success(mapper.createObjectNode().put("text", "accepted evidence"))));
+        add("MODEL_CALL_FAILED", "task-a", "run-a", mapper.createObjectNode()
+                .put("modelCallId", "model-2").put("errorCode", "INVALID_RESPONSE"));
+        add("HARNESS_FEEDBACK", "task-a", "run-a", new HarnessFeedbackPayload("correction-1",
+                HarnessFeedbackKind.MODEL_RESPONSE_CORRECTION, "Response rejected; no tools executed; regenerate JSON"));
+        add("MODEL_RESPONSE", "task-a", "run-a", response("finish-1", "finishTask"));
+        add("TOOL_RESULT", "task-a", "run-a", new ToolResultPayload("model-1", "finish-1", "finishTask",
+                ToolResult.success(mapper.createObjectNode())));
+        user("task-b", "Continue with the accepted evidence");
+
+        var snapshot = service.load("session");
+        var messages = snapshot.modelMessages(new AssembledPrompt("p", "System"), "task-b", "Continue with the accepted evidence");
+
+        assertEquals(2, snapshot.groups().size());
+        assertTrue(snapshot.groups().stream().allMatch(InteractionGroup::closed));
+        assertEquals(List.of(ModelRole.SYSTEM, ModelRole.USER, ModelRole.ASSISTANT, ModelRole.TOOL,
+                        ModelRole.USER, ModelRole.ASSISTANT, ModelRole.TOOL, ModelRole.USER),
+                messages.stream().map(ModelMessage::role).toList());
+        assertTrue(messages.get(4).content().contains("regenerate JSON"));
+        assertEquals(8, snapshot.throughSessionSequence());
+    }
+
+    @Test
     void shouldPageCommittedHistoryAndNeverReadAnotherSession() {
         for (int i = 0; i < 260; i++) add("RUN_QUEUED", "task-a", "run-a", mapper.createObjectNode());
         user("task-b", "Current task");
@@ -223,6 +250,79 @@ class SessionContextServiceTest {
         assertThrows(IllegalStateException.class, () -> service.publishSummary(scope, source,
                 new ContextSummary("s", "session", null, 3, "Summary")));
         assertNull(service.load("session").summary());
+    }
+
+    @Test
+    void sameCoverageCompactionUsesANewIdentityAndKeepsRecentThinkingAndToolResults() {
+        user("task-a", "Old task");
+        add("MODEL_RESPONSE", "task-a", "run-a", new ModelResponsePayload("old", "old", "Old answer", List.of(),
+                ModelUsage.unknown(), ModelFinishReason.STOP));
+        var previous = new ContextSummary("previous", "session", null, 2, "Lengthy old checkpoint");
+        var previousRow = add("CONTEXT_SUMMARY_CREATED", "task-a", "run-a", previous);
+        user("task-b", "Only use traditional loops");
+        add("MODEL_RESPONSE", "task-b", "run-b", new ModelResponsePayload("model-1", "r", null,
+                List.of(new ToolCall("recent-call", "readFile", mapper.createObjectNode())), ModelUsage.unknown(),
+                ModelFinishReason.TOOL_CALLS, "  exact original reasoning\n")).setSchemaVersion(2);
+        add("TOOL_RESULT", "task-b", "run-b", new ToolResultPayload("model-1", "recent-call", "readFile",
+                ToolResult.success(mapper.createObjectNode().put("text", "Recent exact content"))));
+        when(steps.selectLatestContextSummary(eq("session"), anyLong())).thenReturn(previousRow);
+        var source = service.load("session");
+        var input = source.summaryInput("Only use traditional loops", List.of());
+        assertEquals(previous, input.previousSummary());
+        assertTrue(input.history().isEmpty());
+
+        var candidate = new ContextSummary("shorter", "session", "previous", 2, "Compact checkpoint");
+        var system = new ModelMessage(ModelRole.SYSTEM, "Trusted policy", List.of(), null);
+        var visible = source.modelMessages(system, candidate, "task-b", "Only use traditional loops");
+        assertEquals(List.of(ModelRole.SYSTEM, ModelRole.USER, ModelRole.USER, ModelRole.ASSISTANT, ModelRole.TOOL),
+                visible.stream().map(ModelMessage::role).toList());
+        assertEquals("  exact original reasoning\n", visible.get(3).reasoningContent());
+        assertEquals("recent-call", visible.get(3).toolCalls().get(0).id());
+        assertEquals("recent-call", visible.get(4).toolCallId());
+        assertTrue(visible.get(4).content().contains("Recent exact content"));
+        var shell = source.modelMessages(system, candidate, "task-b", "Only use traditional loops", false);
+        assertEquals(visible.subList(2, 5), shell.subList(2, 5));
+        assertFalse(shell.toString().contains("Compact checkpoint"));
+
+        var session = new AgentSessionEntity();
+        session.setLastSessionSequence(6L);
+        when(sessions.selectForUpdate("session")).thenReturn(session);
+        var result = new AgentEventAppender.AppendResult(7, 7, 1L, false);
+        when(appender.appendFence(any(), any())).thenReturn(result);
+        assertSame(result, service.publishSummary(scope, source, candidate));
+        var command = ArgumentCaptor.forClass(AgentEventAppender.AppendCommand.class);
+        verify(appender).appendFence(command.capture(), eq(new AgentEventAppender.RunExecutionAuthority(7, "worker")));
+        assertEquals(2, command.getValue().persistedPayload().path("throughSessionSequence").asLong());
+        assertEquals(6, history.size()); // Source rows were not touched by candidate projection or publication.
+
+        for (var invalid : List.of(
+                new ContextSummary("bad", "session", "wrong-parent", 2, "Invalid"),
+                new ContextSummary("bad", "session", "previous", 1, "Regresses coverage"),
+                new ContextSummary("bad", "session", "previous", 5, "Splits recent tool group"),
+                new ContextSummary("previous", "session", "previous", 2, "Reuses identity"))) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> source.modelMessages(system, invalid, "task-b", "Only use traditional loops"));
+            assertThrows(IllegalArgumentException.class, () -> service.publishSummary(scope, source, invalid));
+        }
+        var competing = add("CONTEXT_SUMMARY_CREATED", "task-b", "run-b",
+                new ContextSummary("competing", "session", "previous", 2, "Other worker summary"));
+        session.setLastSessionSequence(7L);
+        when(steps.selectLatestContextSummary(eq("session"), anyLong())).thenReturn(competing);
+        assertThrows(IllegalStateException.class, () -> service.publishSummary(scope, source, candidate));
+    }
+
+    @Test
+    void readsOldContextControlAndRequiresExplicitCompactionAttemptStateInNewSchema() {
+        var budget = new ContextBudget(1200, 0, .8, .9, 1);
+        var old = mapper.valueToTree(new SessionContextService.SummaryControl("a".repeat(64), budget, 100, false, false));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) old).remove("compactionArmed");
+        var row = add("CONTEXT_CONTROL_UPDATED", "task-a", "run-a", old);
+        when(steps.selectLatestContextControl(eq("session"), anyLong())).thenReturn(row);
+        assertFalse(service.load("session").control().summaryArmed());
+        assertFalse(service.load("session").control().compactionArmed());
+        assertNull(service.load("session").control().budget().compactTargetRatio());
+        row.setSchemaVersion(2);
+        assertThrows(IllegalStateException.class, () -> service.load("session"));
     }
 
     @Test

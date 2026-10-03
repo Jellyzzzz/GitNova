@@ -15,6 +15,7 @@ import com.gitnova.service.agent.context.ContextSummarizer;
 import com.gitnova.service.agent.context.TokenEstimator;
 import com.gitnova.service.agent.model.MessageFactory;
 import com.gitnova.service.agent.model.ModelGateway;
+import com.gitnova.service.agent.model.ModelGatewayErrorCode;
 import com.gitnova.service.agent.model.ModelGatewayException;
 import com.gitnova.service.agent.model.ModelMessage;
 import com.gitnova.service.agent.model.ModelRequest;
@@ -53,8 +54,9 @@ import java.io.IOException;
  * Provider-neutral universal Agent loop.
  *
  * <p>The Runtime owns model/tool protocol, budgets, correction, trusted execution context,
- * validation evidence, and terminal inspection. It does not contain Review-specific planning or
- * verification.</p>
+ * validation evidence, and final-answer delivery. The completion inspector remains only for
+ * frozen Runs that still advertise finishTask. This Runtime does not verify arbitrary claims
+ * in the model's final text.</p>
  */
 public final class AgentRuntime {
 
@@ -233,7 +235,16 @@ public final class AgentRuntime {
                         executionConfig.toolSet(),
                         capabilities
                 );
+        // A frozen legacy Run may still require finishTask. New Tasks no longer expose it.
+        boolean legacyFinishProtocol = toolDefinitions.stream()
+                .anyMatch(definition -> FinishTaskTool.NAME.equals(definition.name()));
         AssembledPrompt prompt = promptAssembler.assemble(context.context());
+        if (legacyFinishProtocol) {
+            prompt = new AssembledPrompt(prompt.version(), prompt.systemText()
+                    + "\nFor this frozen legacy Run only, the instruction not to call a completion tool does not apply. "
+                    + "finishTask is the required terminal tool. "
+                    + "Call it alone when you are done; its arguments are checked by the legacy completion inspector.");
+        }
         RunState state = RunState.start(
                 messageFactory.initialMessages(prompt, context.taskText())
         );
@@ -242,16 +253,6 @@ public final class AgentRuntime {
         if (journal != null && journal.hasModelHistory(scope)) {
             // Context inheritance is not crash reconciliation: never re-execute a partially attempted Run.
             return terminate(state, AgentTerminationReason.RECOVERY_CONTEXT_REQUIRED);
-        }
-        boolean finishTaskAvailable = false;
-        for (ToolDefinition definition : toolDefinitions) {
-            if (FinishTaskTool.NAME.equals(definition.name())) {
-                finishTaskAvailable = true;
-                break;
-            }
-        }
-        if (!finishTaskAvailable) {
-            throw new IllegalStateException("finishTask must be registered and authorized");
         }
         if (observationPolicy != null && (journal == null || artifactStore == null
                 || toolDefinitions.stream().noneMatch(definition -> ReadArtifactTool.NAME.equals(definition.name())
@@ -335,7 +336,7 @@ public final class AgentRuntime {
                     }
                     if (state.contextAssembler.attemptedSummary()
                             && assessment.useRatio() >= executionConfig.contextBudget().compactTriggerRatio()) {
-                        throw new ContextAssembler.PreparationException("Workspace refresh added context requiring stronger compaction");
+                        throw new ContextAssembler.PreparationException("Workspace refresh exceeded the threshold after bounded context preparation");
                     }
                 } catch (ContextAssembler.PreparationException | IllegalArgumentException | ArithmeticException exception) {
                     logger.error("Context budget cannot accommodate request: runId={}, failureType={}",
@@ -361,10 +362,37 @@ public final class AgentRuntime {
                 response = modelGateway.complete(request);
             } catch (ModelGatewayException exception) {
                 // Do not log exception messages, bodies, credentials or untrusted provider headers.
-                logger.warn("Model gateway failed: runId={}, requestId={}, errorCode={}, httpStatus={}, retryable={}, retryAfter={}, causeType={}",
+                logger.warn("Model gateway failed: runId={}, requestId={}, errorCode={}, httpStatus={}, retryable={}, retryAfter={}, causeType={}, responseDiagnostic={}",
                         context.context().runId(), request.requestId(), exception.errorCode(), exception.providerStatusCode(),
                         exception.retryable(), exception.retryAfter(),
-                        exception.getCause() == null ? "none" : exception.getCause().getClass().getSimpleName());
+                        exception.getCause() == null ? "none" : exception.getCause().getClass().getSimpleName(),
+                        exception.responseDiagnostic());
+                executionControl.requireLease();
+                if (journal != null) state.committed(journal.appendModelCallFailed(scope, state.modelCallId, exception));
+                // A rejected response has no accepted transcript or executable tool calls. Keep its cost unknown.
+                state.modelUsages.add(ModelUsage.unknown());
+                if (exception.errorCode() == ModelGatewayErrorCode.INVALID_RESPONSE) {
+                    state.lastProtocolDeviation = ProtocolDeviation.INVALID_MODEL_RESPONSE;
+                    if (state.protocolCorrectionCount < policy.maxProtocolCorrections()
+                            && state.modelCallCount < policy.maxModelCalls()) {
+                        state.protocolCorrectionCount++;
+                        var diagnostic = exception.responseDiagnostic();
+                        String location = diagnostic == null ? "reason=INVALID_RESPONSE"
+                                : "reason=" + diagnostic.reason() + ", path=" + diagnostic.path()
+                                + (diagnostic.line() == null ? "" : ", line=" + diagnostic.line())
+                                + (diagnostic.column() == null ? "" : ", column=" + diagnostic.column());
+                        appendFeedback(state, HarnessFeedbackKind.MODEL_RESPONSE_CORRECTION,
+                                "The previous model response could not be parsed or validated: " + location + ". "
+                                        + "The entire response was rejected; NO tool from that response was executed. "
+                                        + "Regenerate the intended next response using the advertised tool definitions. "
+                                        + "Each tool call must have complete JSON object arguments with double-quoted keys, "
+                                        + "properly escaped strings, and no trailing commas or extra text. "
+                                        + "Previously accepted tool results remain valid history; do not replay completed "
+                                        + "operations merely because this later response was rejected.");
+                        state.turn++;
+                        continue;
+                    }
+                }
                 return terminate(state, AgentTerminationReason.MODEL_GATEWAY_FAILURE);
             }
             executionControl.requireLease();
@@ -387,7 +415,9 @@ public final class AgentRuntime {
                         response.toolCalls(),
                         policy
                 );
-                case STOP -> handleStopWithoutFinish(state, policy);
+                case STOP -> legacyFinishProtocol
+                        ? handleStopWithoutFinish(state, policy)
+                        : handleNaturalStop(context, state, response);
                 case LENGTH -> Optional.of(terminate(
                         state,
                         AgentTerminationReason.MODEL_OUTPUT_LENGTH
@@ -495,6 +525,21 @@ public final class AgentRuntime {
             ));
         }
 
+        Set<String> available = Set.copyOf(context.executionConfig().toolSet().enabledDefinitionNames());
+        if (toolCalls.stream().anyMatch(call -> !available.contains(call.name()))) {
+            state.lastProtocolDeviation = ProtocolDeviation.TOOL_NOT_AVAILABLE;
+            ToolResult rejection = ToolResult.error(ToolStatus.INVALID_ARGUMENT,
+                    "TOOL_NOT_AVAILABLE", "A requested tool is not in this Run's advertised tool set. "
+                            + "Use only advertised tools, or return a final assistant answer.", false);
+            for (ToolCall call : toolCalls) {
+                state.toolCallCount++;
+                if (!appendToolObservation(context, state, call, rejection)) {
+                    return Optional.of(terminate(state, AgentTerminationReason.CONTEXT_PREPARATION_FAILURE));
+                }
+            }
+            return consumeProtocolCorrectionOrTerminate(state, policy);
+        }
+
         long terminalCount = toolCalls.stream()
                 .filter(call -> toolRegistry.isTerminal(call.name()))
                 .count();
@@ -521,7 +566,8 @@ public final class AgentRuntime {
                     context,
                     state,
                     terminalCall,
-                    policy
+                    policy,
+                    refresh.generationAfter()
             );
             executionControl.requireLease();
             if (finish.isEmpty()) {
@@ -551,7 +597,12 @@ public final class AgentRuntime {
             if (refresh.changed()) {
                 latestDrift = refresh;
             }
-            if (!executeOrdinaryTool(state, context, toolCall)) {
+            if (!executeOrdinaryTool(
+                    state,
+                    context,
+                    toolCall,
+                    refresh.generationAfter()
+            )) {
                 return Optional.of(terminate(state, AgentTerminationReason.CONTEXT_PREPARATION_FAILURE));
             }
             executionControl.requireLease();
@@ -602,6 +653,23 @@ public final class AgentRuntime {
         return Optional.empty();
     }
 
+    private Optional<AgentRunResult> handleNaturalStop(
+            AgentExecutionContext context, RunState state, ModelResponse response
+    ) {
+        if (response.text() == null || response.text().isBlank()) {
+            return Optional.of(terminate(state, AgentTerminationReason.INVALID_MODEL_PROTOCOL));
+        }
+        WorkspaceGateway.WorkspaceRefresh refresh = synchronizeWorkspace(context, state);
+        if (refresh == null) {
+            return Optional.of(terminate(state, AgentTerminationReason.WORKSPACE_SYNC_FAILURE));
+        }
+        if (refresh.changed()) {
+            appendWorkspaceDriftFeedback(state, refresh);
+            return Optional.empty();
+        }
+        return Optional.of(completeAnswer(state, response.text()));
+    }
+
     private Optional<AgentRunResult> rejectMixedTerminalCalls(
             AgentExecutionContext context,
             RunState state,
@@ -612,7 +680,7 @@ public final class AgentRuntime {
         ToolResult rejection = ToolResult.error(
                 ToolStatus.INVALID_ARGUMENT,
                 "TERMINAL_TOOL_MUST_BE_EXCLUSIVE",
-                "Call finishTask alone after all other tool work is complete",
+                "A terminal tool must be called alone",
                 false
         );
         for (ToolCall toolCall : toolCalls) {
@@ -634,7 +702,7 @@ public final class AgentRuntime {
         ToolResult rejection = ToolResult.error(
                 ToolStatus.INVALID_ARGUMENT,
                 "UNSUPPORTED_TERMINAL_TOOL",
-                "finishTask is the only terminal tool supported by this Runtime",
+                "This terminal tool is not supported by this Runtime",
                 false
         );
         if (!appendToolObservation(context, state, toolCall, rejection)) {
@@ -661,12 +729,14 @@ public final class AgentRuntime {
     private boolean executeOrdinaryTool(
             RunState state,
             AgentExecutionContext context,
-            ToolCall call
+            ToolCall call,
+            long observedWorkspaceGeneration
     ) {
         ToolExecutionContext execution = new ToolExecutionContext(
                 context,
                 state.turn,
-                call.id()
+                call.id(),
+                observedWorkspaceGeneration
         );
         state.toolCallCount++;
         ToolResult result = toolRegistry.execute(execution, call.name(), call.arguments());
@@ -733,12 +803,14 @@ public final class AgentRuntime {
             AgentExecutionContext context,
             RunState state,
             ToolCall call,
-            AgentRuntimePolicy policy
+            AgentRuntimePolicy policy,
+            long observedWorkspaceGeneration
     ) {
         ToolExecutionContext execution = new ToolExecutionContext(
                 context,
                 state.turn,
-                call.id()
+                call.id(),
+                observedWorkspaceGeneration
         );
         state.toolCallCount++;
         ToolResult result = toolRegistry.execute(execution, call.name(), call.arguments());
@@ -861,6 +933,8 @@ public final class AgentRuntime {
             String cause = null;
             if (kind == HarnessFeedbackKind.COMPLETION_CORRECTION) {
                 cause = "run:" + state.journalScope.runId() + ":tool-call:" + state.terminalCallId + ":result";
+            } else if (state.modelCallId != null && kind == HarnessFeedbackKind.MODEL_RESPONSE_CORRECTION) {
+                cause = "run:" + state.journalScope.runId() + ":model-call:" + state.modelCallId + ":failed";
             } else if (state.modelCallId != null && kind == HarnessFeedbackKind.PROTOCOL_CORRECTION) {
                 cause = "run:" + state.journalScope.runId() + ":model-call:" + state.modelCallId + ":response";
             }
@@ -883,6 +957,20 @@ public final class AgentRuntime {
                 state.toolCallCount,
                 state.successfulToolCallCount,
                 List.copyOf(state.modelUsages)
+        );
+    }
+
+    private AgentRunResult completeAnswer(RunState state, String content) {
+        return new AgentRunResult(
+                AgentRunStatus.COMPLETED,
+                AgentTerminationReason.ANSWER_DELIVERED,
+                null,
+                state.lastProtocolDeviation,
+                state.modelCallCount,
+                state.toolCallCount,
+                state.successfulToolCallCount,
+                List.copyOf(state.modelUsages),
+                new AgentAnswer(content, state.modelCallId)
         );
     }
 

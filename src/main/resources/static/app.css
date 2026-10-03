@@ -1,3 +1,13 @@
+#task-dialog{width:min(900px,calc(100% - 32px));padding:24px 28px}
+.task-meta{overflow-wrap:anywhere;line-height:1.7}
+.task-messages{border:1px solid var(--border);border-radius:8px;background:var(--canvas);max-height:48vh;overflow:auto;margin:18px 0 12px}
+.task-exchange{padding:20px;border-bottom:1px solid var(--border)}
+.task-exchange:last-child{border-bottom:0}
+.task-exchange-header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:12px}
+.task-user-message{white-space:pre-wrap;overflow-wrap:anywhere}
+.task-answer{font:14px/1.8 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--subtle);border-radius:6px;padding:16px;margin:12px 0}
+.task-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
+.task-footnote{margin:16px 0 0;line-height:1.7}
 :root{
   color-scheme:light;
   --canvas:#fff;

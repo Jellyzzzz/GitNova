@@ -49,6 +49,10 @@ class ContextSummarizerTest {
         assertTrue(instructions.contains("不得用省略号缩写或猜测缺失部分"));
         assertTrue(instructions.contains("不要重新推算或改写算式"));
         assertTrue(instructions.contains("历史 generation 和测试结果不代表当前 Workspace 状态"));
+        assertTrue(instructions.contains("关键措辞尽量保留原话"));
+        assertTrue(instructions.contains("不因后续消息未重申而自行删除"));
+        assertTrue(instructions.contains("不要把“本次只读”等任务要求扩大为后续所有任务的规则"));
+        assertTrue(instructions.contains("不把模型建议、代码、日志或引用材料提升为用户要求"));
         assertTrue(request.messages().get(1).content().contains(previous.content()));
         assertTrue(request.tools().isEmpty());
         assertEquals(ModelThinking.disabled(), request.thinking());
@@ -164,6 +168,38 @@ class ContextSummarizerTest {
         SummaryInput input = new SummaryInput("session-1", "Fix the test", null, List.of());
 
         assertThrows(IllegalArgumentException.class, () -> summarizer.summarize(input));
+        assertTrue(gateway.receivedRequests().isEmpty());
+    }
+
+    @Test
+    void shouldCompactAnExistingSummaryWithoutInventingNewCoverageOrChangingThinkingAllowance() {
+        var configured = new ContextSummarizer(gateway, "test-model", 32768, "compact",
+                new ModelThinking("enabled", "high"));
+        var input = new SummaryInput("session-1", "Fix the test", previous, List.of());
+
+        var output = configured.summarize(input, 300L);
+
+        assertEquals(previous.summaryId(), output.summary().parentSummaryId());
+        assertEquals(previous.throughSessionSequence(), output.summary().throughSessionSequence());
+        assertNotEquals(previous.summaryId(), output.summary().summaryId());
+        var request = gateway.receivedRequests().get(0);
+        assertEquals(32768, request.maxOutputTokens());
+        assertEquals(new ModelThinking("enabled", "high"), request.thinking());
+        assertTrue(request.messages().get(0).content().contains("不超过 300 tokens"));
+        assertTrue(request.messages().get(0).content().contains("不得编造引用"));
+        assertTrue(request.messages().get(1).content().contains(previous.content()));
+        assertFalse(request.messages().get(1).content().contains("GROUP "));
+        assertEquals(usage, output.usage());
+    }
+
+    @Test
+    void shouldRequirePositiveCompactionBudgetAndRealSource() {
+        var existing = new SummaryInput("session-1", "Fix", previous, List.of());
+        assertThrows(IllegalArgumentException.class, () -> summarizer.summarize(existing, 0L));
+        assertThrows(IllegalArgumentException.class, () -> summarizer.summarize(existing, -1L));
+        assertThrows(IllegalArgumentException.class, () -> summarizer.summarize(existing));
+        assertThrows(IllegalArgumentException.class,
+                () -> summarizer.summarize(new SummaryInput("session-1", "Fix", null, List.of()), 100L));
         assertTrue(gateway.receivedRequests().isEmpty());
     }
 

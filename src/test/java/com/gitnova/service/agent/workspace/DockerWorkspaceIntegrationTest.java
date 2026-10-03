@@ -72,6 +72,35 @@ class DockerWorkspaceIntegrationTest {
     }
 
     @Test
+    void separateCallsPreserveWorkspaceButDiscardTemporaryFilesAndShellState() throws Exception {
+        Path root = temporary.toRealPath();
+        var executor = executor();
+        var first = executor.execute(root, root, List.of("sh", "-ec", """
+                printf 'workspace evidence' > retained.txt
+                printf 'temporary probe' > /tmp/gitnova-probe.txt
+                export GITNOVA_PROBE_STATE=first-call
+                cd /tmp
+                test "$(cat gitnova-probe.txt)" = 'temporary probe'
+                """), Duration.ofSeconds(10));
+
+        assertEquals(0, first.exitCode(), first.stderr());
+        assertFalse(first.timedOut());
+        assertFalse(Files.exists(WorkspaceCommandExecutor.pendingCommandFile(root)));
+
+        var second = executor.execute(root, root, List.of("sh", "-ec", """
+                test "$PWD" = /workspace
+                test -z "${GITNOVA_PROBE_STATE:-}"
+                test ! -e /tmp/gitnova-probe.txt
+                cat retained.txt
+                """), Duration.ofSeconds(10));
+
+        assertEquals(0, second.exitCode(), second.stderr());
+        assertFalse(second.timedOut());
+        assertEquals("workspace evidence", second.stdout());
+        assertFalse(Files.exists(WorkspaceCommandExecutor.pendingCommandFile(root)));
+    }
+
+    @Test
     void timeoutKillsBackgroundDescendantsAndPreservesAlreadyWrittenFiles() throws Exception {
         Path root = temporary.toRealPath();
         var result = executor().execute(root, root, List.of("sh", "-c",

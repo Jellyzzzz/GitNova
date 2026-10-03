@@ -1,5 +1,8 @@
 package com.gitnova.service.agent.tools;
 
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.gitnova.service.agent.tool.ToolExecutionContext;
 import com.gitnova.service.agent.tool.ToolResult;
 import com.gitnova.service.agent.tool.ToolStatus;
 import com.gitnova.service.agent.workspace.WorkspaceOperationException;
@@ -44,5 +47,20 @@ final class WorkspaceToolResults {
                 message,
                 false
         );
+    }
+
+    static ToolResult invalid(ToolExecutionContext execution, String code, String path,
+                              String message, long actualBytes, long limitBytes) {
+        ObjectNode payload = JsonNodeFactory.instance.objectNode();
+        payload.put("stage", "ARGUMENT_VALIDATION");
+        payload.put("executionState", "NOT_STARTED");
+        payload.put("nextAction", "Shorten or split the indicated command argument before retrying");
+        payload.putArray("violations").addObject().put("path", path).put("code", code)
+                .put("message", message).put("actualBytes", actualBytes).put("limitBytes", limitBytes);
+        if (execution.observedWorkspaceGeneration() != null) {
+            payload.putObject("workspaceState").put("observedGeneration", execution.observedWorkspaceGeneration())
+                    .put("source", "PRE_DISPATCH_REFRESH");
+        }
+        return ToolResult.error(ToolStatus.INVALID_ARGUMENT, payload, code, message, false);
     }
 }

@@ -19,6 +19,15 @@ class ContextBudgetTest {
     }
 
     @Test
+    void strongCompactionTargetMustLeaveSpaceBeforeTheNextSummaryTrigger() {
+        assertNull(budget.compactTargetRatio()); // Legacy contracts do not acquire new behavior.
+        assertEquals(.6, new ContextBudget(100, 5, .8, .9, 4, true, .6).compactTargetRatio());
+        for (double invalid : new double[]{0, -1, .8, .9, 1, Double.NaN, Double.POSITIVE_INFINITY}) {
+            assertThrows(IllegalArgumentException.class, () -> new ContextBudget(100, 5, .8, .9, 4, true, invalid));
+        }
+    }
+
+    @Test
     void shouldSubtractFixedTokensFromBothDynamicCapacityAndUsage() {
         assertEquals(new ContextBudget.Assessment(75, 60, 48, 0.8),
                 budget.assess(63, 15, 20));

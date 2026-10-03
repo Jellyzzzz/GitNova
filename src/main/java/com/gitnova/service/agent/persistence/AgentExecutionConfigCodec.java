@@ -23,7 +23,7 @@ import java.util.Set;
 /** Stable wire-format codec for the complete Frozen Execution Contract. */
 @Component
 public final class AgentExecutionConfigCodec {
-    private static final int SCHEMA_VERSION = 6;
+    private static final int SCHEMA_VERSION = 7;
 
     private final CanonicalJsonCodec canonicalJson;
     private final ObjectMapper objectMapper;
@@ -52,7 +52,8 @@ public final class AgentExecutionConfigCodec {
         if (controlled && config.contextBudget() == null) {
             throw invalid("Independent context controls require an explicit context budget");
         }
-        int version = config.policy().summaryThinking() != null ? SCHEMA_VERSION : config.policy().thinking() != null ? 5 : controlled ? 4 : config.contextBudget() != null ? 3
+        boolean compaction = config.contextBudget() != null && config.contextBudget().compactTargetRatio() != null;
+        int version = compaction ? SCHEMA_VERSION : config.policy().summaryThinking() != null ? 6 : config.policy().thinking() != null ? 5 : controlled ? 4 : config.contextBudget() != null ? 3
                 : config.observationPolicy() == null ? 1 : 2;
         root.put("schemaVersion", version);
         encodePolicy(root.putObject("policy"), config.policy());
@@ -85,6 +86,7 @@ public final class AgentExecutionConfigCodec {
         if (config.contextBudget() != null) {
             ObjectNode budgetNode = objectMapper.valueToTree(config.contextBudget());
             if (version < 4) budgetNode.remove("summaryEnabled");
+            if (version < 7) budgetNode.remove("compactTargetRatio");
             root.set("contextBudget", budgetNode);
         }
         return canonicalJson.encode(root);
@@ -150,14 +152,24 @@ public final class AgentExecutionConfigCodec {
                 if (!node.path("summaryTriggerRatio").isNumber() || !node.path("compactTriggerRatio").isNumber()) {
                     throw invalid("Context trigger ratios must be explicit numbers");
                 }
+                if (schemaVersion >= 7 && !node.path("compactTargetRatio").isNumber()) {
+                    throw invalid("Compaction target must be an explicit number");
+                }
+                if (schemaVersion < 7 && node.has("compactTargetRatio")) {
+                    throw invalid("compactTargetRatio requires execution config schemaVersion 7");
+                }
                 contextBudget = new ContextBudget(node.get("contextWindowTokens").longValue(),
                         node.get("safetyMarginTokens").longValue(),
                         node.get("summaryTriggerRatio").doubleValue(),
                         node.get("compactTriggerRatio").doubleValue(),
                         requireInt(node, "keepRecentGroups"),
-                        schemaVersion < 4 || node.get("summaryEnabled").booleanValue());
+                        schemaVersion < 4 || node.get("summaryEnabled").booleanValue(),
+                        schemaVersion >= 7 ? node.get("compactTargetRatio").doubleValue() : null);
             } else if (root.has("contextBudget")) {
                 throw invalid("contextBudget requires execution config schemaVersion 3");
+            }
+            if (schemaVersion >= 7 && contextBudget == null) {
+                throw invalid("Compaction requires an explicit context budget");
             }
             return new AgentExecutionConfig(
                     policy,
@@ -204,7 +216,7 @@ public final class AgentExecutionConfigCodec {
 
     private AgentRuntimePolicy decodePolicy(ObjectNode node, int schemaVersion) {
         ModelThinking thinking = null;
-        if (schemaVersion >= 5) {
+        if (schemaVersion >= 5 && (schemaVersion < 7 || node.has("thinking"))) {
             ObjectNode control = requireObject(node.get("thinking"), "policy.thinking");
             JsonNode effort = requirePresent(control, "effort");
             if (!effort.isNull() && !effort.isTextual()) throw invalid("thinking effort must be text or null");
@@ -218,7 +230,7 @@ public final class AgentExecutionConfigCodec {
             throw invalid("thinking requires execution config schemaVersion 5");
         }
         ModelThinking summaryThinking = null;
-        if (schemaVersion >= 6) {
+        if (schemaVersion >= 6 && (schemaVersion < 7 || node.has("summaryThinking"))) {
             ObjectNode control = requireObject(node.get("summaryThinking"), "policy.summaryThinking");
             JsonNode effort = requirePresent(control, "effort");
             if (!effort.isNull() && !effort.isTextual()) throw invalid("summary thinking effort must be text or null");

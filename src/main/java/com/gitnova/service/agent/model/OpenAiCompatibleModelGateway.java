@@ -23,6 +23,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 
@@ -121,7 +122,7 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
                     throw new ModelGatewayException(failure.errorCode(), failure.getMessage(), failure.retryable(),
                             httpResponse.code(), failure.providerErrorCode(),
                             firstNonBlank(httpResponse.header("x-request-id"), httpResponse.header("x-ds-trace-id")),
-                            failure.retryAfter(), failure.getCause());
+                            failure.retryAfter(), failure.getCause(), failure.responseDiagnostic());
                 } catch (IOException | IllegalArgumentException failure) {
                     ModelGatewayErrorCode code;
                     if (failure instanceof InterruptedIOException) {
@@ -134,7 +135,9 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
                     throw new ModelGatewayException(code, "Model provider response could not be consumed",
                             code != ModelGatewayErrorCode.INVALID_RESPONSE, httpResponse.code(), null,
                             firstNonBlank(httpResponse.header("x-request-id"), httpResponse.header("x-ds-trace-id")),
-                            null, failure);
+                            null, failure, code == ModelGatewayErrorCode.INVALID_RESPONSE
+                                    ? new ModelGatewayException.ResponseDiagnostic("RESPONSE_DECODING_FAILED", "/", null, null)
+                                    : null);
                 }
             }
 
@@ -276,50 +279,72 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
 
     private ModelResponse parseSuccessfulResponse(Response response)
             throws IOException {
-        // 1. body 不得为空；objectMapper.readTree(body.string())
-        String body=response.body()==null?null:response.body().string();
-        if(body==null||body.isBlank()) throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,"Model provider returned an empty response body",false,null);
-        // 2. 读取 root.id
-        JsonNode root=objectMapper.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(body);
-        if(root==null||!root.isObject()) throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,"Response body must be a JSON object",false,null);
-        String responseId=root.path("id").asText(null);
-        if(responseId==null||responseId.isBlank()) throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,"Response is missing a valid id",false,null);
-        // 3. 验证 choices 是非空数组，取 choices[0]
-        JsonNode choices=root.path("choices");
-        if(!choices.isArray()||choices.isEmpty()) throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,"choices must be a non-empty array",false,null);
-        JsonNode choice=choices.get(0);
-        // 4. 读取 message.content
-        JsonNode contentNode=choice.path("message").path("content");
-        String text=contentNode.isTextual()?contentNode.asText():null;
+        String body = response.body() == null ? null : response.body().string();
+        if (body == null || body.isBlank()) {
+            throw invalidResponse("EMPTY_RESPONSE_BODY", "/", "Model provider returned an empty response body", null);
+        }
+        JsonNode root;
+        try {
+            root = objectMapper.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(body);
+        } catch (JsonProcessingException failure) {
+            throw invalidResponse("RESPONSE_JSON_INVALID", "/", "Response body is not valid JSON", failure);
+        }
+        if (root == null || !root.isObject()) {
+            throw invalidResponse("RESPONSE_ROOT_NOT_OBJECT", "/", "Response body must be a JSON object", null);
+        }
+        JsonNode id = root.path("id");
+        if (!id.isTextual() || id.textValue().isBlank()) {
+            throw invalidResponse("RESPONSE_ID_INVALID", "/id", "Response id must be a non-blank string", null);
+        }
+        String responseId = id.textValue();
+        JsonNode choices = root.path("choices");
+        if (!choices.isArray() || choices.isEmpty()) {
+            throw invalidResponse("CHOICES_INVALID", "/choices", "choices must be a non-empty array", null);
+        }
+        JsonNode choice = choices.get(0);
+        if (!choice.isObject()) {
+            throw invalidResponse("CHOICE_NOT_OBJECT", "/choices/0", "choice must be an object", null);
+        }
+        JsonNode finish = choice.path("finish_reason");
+        if (!finish.isTextual() || finish.textValue().isBlank()) {
+            throw invalidResponse("FINISH_REASON_INVALID", "/choices/0/finish_reason", "finish_reason must be a non-blank string", null);
+        }
+        // Resource exhaustion and truncation are provider outcomes, not malformed tool arguments.
+        ModelFinishReason finishReason = mapFinishReason(finish.textValue());
+        JsonNode message = choice.path("message");
+        if (!message.isObject()) {
+            throw invalidResponse("MESSAGE_NOT_OBJECT", "/choices/0/message", "message must be an object", null);
+        }
+        JsonNode contentNode = message.path("content");
+        if (!contentNode.isMissingNode() && !contentNode.isNull() && !contentNode.isTextual()) {
+            throw invalidResponse("CONTENT_TYPE_INVALID", "/choices/0/message/content", "content must be a string or null", null);
+        }
+        String text = contentNode.isTextual() ? contentNode.textValue() : null;
         // Protocol continuation data: preserve exactly, including whitespace and empty strings.
-        JsonNode reasoningNode = choice.path("message").path("reasoning_content");
+        JsonNode reasoningNode = message.path("reasoning_content");
         if (!reasoningNode.isMissingNode() && !reasoningNode.isNull() && !reasoningNode.isTextual()) {
-            throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,
-                    "reasoning_content must be a string or null", false, null);
+            throw invalidResponse("REASONING_CONTENT_TYPE_INVALID", "/choices/0/message/reasoning_content",
+                    "reasoning_content must be a string or null", null);
         }
         String reasoningContent = reasoningNode.isTextual() ? reasoningNode.textValue() : null;
-        // 5. Interpret termination before parsing potentially unfinished tool arguments.
-        ModelFinishReason finishReason=mapFinishReason(choice.path("finish_reason").asText(null));
         List<ToolCall> toolCalls = finishReason == ModelFinishReason.LENGTH || finishReason == ModelFinishReason.CONTENT_FILTER
-                ? List.of() : parseToolCalls(choice.path("message").path("tool_calls"));
-        // 7. 读取 usage
-        ModelUsage usage=parseUsage(root.path("usage"));
+                ? List.of() : parseToolCalls(message.path("tool_calls"));
+        ModelUsage usage = parseUsage(root.path("usage"));
         if (finishReason == ModelFinishReason.STOP
                 && toolCalls.isEmpty()
                 && (text == null || text.isBlank())) {
-            throw new ModelGatewayException(
-                    ModelGatewayErrorCode.INVALID_RESPONSE,
-                    "STOP response must contain assistant text when it has no tool calls",
-                    false,
-                    null
-            );
+            throw invalidResponse("EMPTY_STOP_RESPONSE", "/choices/0/message/content",
+                    "STOP response must contain assistant text when it has no tool calls", null);
         }
-        // 8. 构造 ModelResponse
-        try {
-            return new ModelResponse(responseId, text, toolCalls, usage, finishReason, reasoningContent);
-        }catch(IllegalArgumentException e){
-            throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,"Response violates model invariants",false,e);
+        if (finishReason == ModelFinishReason.TOOL_CALLS && toolCalls.isEmpty()) {
+            throw invalidResponse("TOOL_CALLS_MISSING", "/choices/0/message/tool_calls",
+                    "TOOL_CALLS finish reason requires at least one tool call", null);
         }
+        if (finishReason != ModelFinishReason.TOOL_CALLS && !toolCalls.isEmpty()) {
+            throw invalidResponse("TOOL_CALLS_FINISH_REASON_MISMATCH", "/choices/0/finish_reason",
+                    "Tool calls require TOOL_CALLS as the finish reason", null);
+        }
+        return new ModelResponse(responseId, text, toolCalls, usage, finishReason, reasoningContent);
     }
 
     private ModelGatewayException toGatewayFailure(Response response)
@@ -360,33 +385,52 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
     }
     private List<ToolCall>parseToolCalls(JsonNode toolCallsNode){
         if(toolCallsNode.isMissingNode()|| toolCallsNode.isNull()) return List.of();
-        if(!toolCallsNode.isArray()) throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,"toolCallsNode must be an array",false,null);
+        if (!toolCallsNode.isArray()) throw invalidResponse("TOOL_CALLS_NOT_ARRAY",
+                "/choices/0/message/tool_calls", "tool_calls must be an array", null);
         ArrayNode array=(ArrayNode) toolCallsNode;
         List<ToolCall> result=new ArrayList<>();
+        HashSet<String> ids = new HashSet<>();
         for(int i=0;i<array.size();i++){
-            result.add(toToolCall(array.get(i)));
+            String path = "/choices/0/message/tool_calls/" + i;
+            ToolCall call = toToolCall(array.get(i), path);
+            if (!ids.add(call.id())) throw invalidResponse("DUPLICATE_TOOL_CALL_ID", path + "/id",
+                    "tool call ids must be unique within a response", null);
+            result.add(call);
         }
         return result;
     }
-    private  ToolCall toToolCall(JsonNode element){
-        String id=element.path("id").asText(null);
-        String name=element.path("function").path("name").asText(null);
+    private ToolCall toToolCall(JsonNode element, String path){
+        if (!element.isObject()) throw invalidResponse("TOOL_CALL_NOT_OBJECT", path, "tool call must be an object", null);
+        JsonNode idNode = element.path("id");
+        if (!idNode.isTextual() || idNode.textValue().isBlank()) {
+            throw invalidResponse("TOOL_CALL_ID_INVALID", path + "/id", "tool call id must be a non-blank string", null);
+        }
+        if (!element.path("function").isObject()) {
+            throw invalidResponse("TOOL_FUNCTION_NOT_OBJECT", path + "/function", "function must be an object", null);
+        }
+        JsonNode nameNode = element.path("function").path("name");
+        if (!nameNode.isTextual() || nameNode.textValue().isBlank()) {
+            throw invalidResponse("TOOL_NAME_INVALID", path + "/function/name", "tool name must be a non-blank string", null);
+        }
         JsonNode argumentsNode=element.path("function").path("arguments");
         String argumentsText=argumentsNode.isTextual()?argumentsNode.textValue():null;
 
-        if(id==null||id.isBlank()||name==null||name.isBlank()) throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,"tool call is missing id or function name",false,null);
-        if(argumentsText==null||argumentsText.isBlank()) throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,"tool call arguments must be a non-blank JSON string",false,null);
+        if (argumentsText == null || argumentsText.isBlank()) throw invalidResponse("TOOL_ARGUMENTS_STRING_INVALID",
+                path + "/function/arguments", "tool call arguments must be a non-blank JSON string", null);
 
         JsonNode arguments;
         try{
             arguments=objectMapper.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(argumentsText);
         }catch(JsonProcessingException e){
-            throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,"tool call arguments are not valid JSON",false,null);
+            throw invalidResponse("TOOL_ARGUMENTS_JSON_INVALID", path + "/function/arguments",
+                    "tool call arguments are not valid JSON", e);
         }
-        return new ToolCall(id,name,arguments);
+        // Shape/field mistakes in valid JSON belong to ToolRegistry so the model gets an Observation.
+        return new ToolCall(idNode.textValue(), nameNode.textValue(), arguments);
     }
     private static ModelFinishReason mapFinishReason(String finishReason){
-        if(finishReason==null||finishReason.isBlank()) throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,"finishReason must not be null",false,null);
+        if(finishReason==null||finishReason.isBlank()) throw invalidResponse("FINISH_REASON_INVALID",
+                "/choices/0/finish_reason", "finishReason must not be null", null);
         return switch (finishReason) {
             case "stop" -> ModelFinishReason.STOP;
             case "tool_calls" -> ModelFinishReason.TOOL_CALLS;
@@ -399,17 +443,29 @@ public class OpenAiCompatibleModelGateway implements ModelGateway{
         };
     }
     private static ModelUsage parseUsage(JsonNode usageNode){
-        if(!usageNode.isObject()){
-            return ModelUsage.unknown();
-        }
-        return new ModelUsage(nullableInt(usageNode.path("prompt_tokens")),nullableInt(usageNode.path("completion_tokens")),nullableInt(usageNode.path("total_tokens")));
+        if (usageNode.isMissingNode() || usageNode.isNull()) return ModelUsage.unknown();
+        if (!usageNode.isObject()) throw invalidResponse("USAGE_NOT_OBJECT", "/usage", "usage must be an object or null", null);
+        return new ModelUsage(nullableInt(usageNode.path("prompt_tokens"), "/usage/prompt_tokens"),
+                nullableInt(usageNode.path("completion_tokens"), "/usage/completion_tokens"),
+                nullableInt(usageNode.path("total_tokens"), "/usage/total_tokens"));
     }
-    private static Integer nullableInt(JsonNode node){
+    private static Integer nullableInt(JsonNode node, String path){
         if(node.isMissingNode()||node.isNull()) return null;
         if(!node.isIntegralNumber()||!node.canConvertToInt()||node.intValue()<0){
-            throw new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE,"Token usage must be a non-negative integer within range",false,null);
+            throw invalidResponse("USAGE_VALUE_INVALID", path, "Token usage must be a non-negative integer within range", null);
         }
         return node.intValue();
+    }
+
+    private static ModelGatewayException invalidResponse(String reason, String path, String message,
+                                                         JsonProcessingException failure) {
+        var location = failure == null ? null : failure.getLocation();
+        Integer line = location != null && location.getLineNr() > 0 ? location.getLineNr() : null;
+        Integer column = location != null && location.getColumnNr() > 0 ? location.getColumnNr() : null;
+        // Parser exceptions can retain the raw source. Persist/log only this bounded diagnostic.
+        return new ModelGatewayException(ModelGatewayErrorCode.INVALID_RESPONSE, message, false,
+                null, null, null, null, null,
+                new ModelGatewayException.ResponseDiagnostic(reason, path, line, column));
     }
 
     private String readLimitedBody(ResponseBody body)throws IOException{

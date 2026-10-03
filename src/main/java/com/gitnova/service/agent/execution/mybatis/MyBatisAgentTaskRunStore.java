@@ -5,10 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gitnova.entity.agent.AgentRunEntity;
 import com.gitnova.entity.agent.AgentSessionEntity;
+import com.gitnova.entity.agent.AgentStepEntity;
 import com.gitnova.entity.agent.AgentTaskEntity;
 import com.gitnova.entity.agent.AgentWorkspaceEntity;
 import com.gitnova.mapper.agent.AgentRunMapper;
 import com.gitnova.mapper.agent.AgentSessionMapper;
+import com.gitnova.mapper.agent.AgentStepMapper;
 import com.gitnova.mapper.agent.AgentTaskMapper;
 import com.gitnova.mapper.agent.AgentWorkspaceMapper;
 import com.gitnova.service.agent.dispatch.RunDispatchReason;
@@ -17,13 +19,16 @@ import com.gitnova.service.agent.execution.AgentRun;
 import com.gitnova.service.agent.execution.AgentTask;
 import com.gitnova.service.agent.execution.AgentTaskRequest;
 import com.gitnova.service.agent.execution.AgentTaskRunStore;
+import com.gitnova.service.agent.runtime.AgentAnswer;
 import com.gitnova.service.agent.execution.CreateTaskCommand;
+import com.gitnova.service.agent.journal.ModelResponsePayload;
 import com.gitnova.service.agent.persistence.AgentEventAppender;
 import com.gitnova.service.agent.persistence.AgentExecutionConfigCodec;
 import com.gitnova.service.agent.persistence.AgentOutboxWriter;
 import com.gitnova.service.agent.persistence.AgentStepType;
 import com.gitnova.service.agent.persistence.CanonicalJsonCodec;
 import com.gitnova.service.agent.runtime.AgentExecutionConfig;
+import com.gitnova.service.agent.model.ModelFinishReason;
 import com.gitnova.service.session.AgentSession;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +49,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
     private final AgentSessionMapper sessionMapper;
     private final AgentTaskMapper taskMapper;
     private final AgentRunMapper runMapper;
+    private final AgentStepMapper stepMapper;
     private final AgentWorkspaceMapper workspaceMapper;
     private final AgentEventAppender eventAppender;
     private final AgentOutboxWriter outboxWriter;
@@ -55,6 +61,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
             AgentSessionMapper sessionMapper,
             AgentTaskMapper taskMapper,
             AgentRunMapper runMapper,
+            AgentStepMapper stepMapper,
             AgentWorkspaceMapper workspaceMapper,
             AgentEventAppender eventAppender,
             AgentOutboxWriter outboxWriter,
@@ -65,6 +72,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
         this.sessionMapper = Objects.requireNonNull(sessionMapper, "sessionMapper must not be null");
         this.taskMapper = Objects.requireNonNull(taskMapper, "taskMapper must not be null");
         this.runMapper = Objects.requireNonNull(runMapper, "runMapper must not be null");
+        this.stepMapper = Objects.requireNonNull(stepMapper, "stepMapper must not be null");
         this.workspaceMapper = Objects.requireNonNull(workspaceMapper, "workspaceMapper must not be null");
         this.eventAppender = Objects.requireNonNull(eventAppender, "eventAppender must not be null");
         this.outboxWriter = Objects.requireNonNull(outboxWriter, "outboxWriter must not be null");
@@ -74,6 +82,23 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 "executionConfigCodec must not be null"
         );
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<AgentAnswer> findAnswer(String sessionId, String taskId) {
+        AgentStepEntity source = stepMapper.selectCompletedAnswer(sessionId, taskId);
+        if (source == null) return Optional.empty();
+        try {
+            ModelResponsePayload response = objectMapper.readValue(source.getPayloadJson(), ModelResponsePayload.class);
+            if (response.finishReason() != ModelFinishReason.STOP || response.text() == null
+                    || response.text().isBlank() || !response.toolCalls().isEmpty()) {
+                throw failure(Code.PERSISTENCE_FAILURE, "Committed answer has an invalid model response");
+            }
+            return Optional.of(new AgentAnswer(response.text(), response.modelCallId()));
+        } catch (JsonProcessingException | IllegalArgumentException exception) {
+            throw failure(Code.PERSISTENCE_FAILURE, "Committed answer is unreadable");
+        }
     }
 
     @Override
@@ -418,6 +443,29 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
         }
         AgentWorkspaceEntity workspace = requireLockedReadyWorkspace(command.sessionId());
 
+        String answerEventId = null;
+        if (command.answerModelCallId() != null) {
+            answerEventId = ModelResponsePayload.eventId(command.runId(), command.answerModelCallId());
+            AgentStepEntity response = stepMapper.selectByEventId(answerEventId);
+            if (response == null || !command.sessionId().equals(response.getSessionId())
+                    || !command.taskId().equals(response.getTaskId())
+                    || !command.runId().equals(response.getRunId())
+                    || !AgentStepType.MODEL_RESPONSE.name().equals(response.getStepType())) {
+                throw failure(Code.STATE_CONFLICT, "Final answer must reference a committed Model Response in this Run");
+            }
+            try {
+                ModelResponsePayload payload = objectMapper.readValue(response.getPayloadJson(), ModelResponsePayload.class);
+                if (!command.answerModelCallId().equals(payload.modelCallId())
+                        || payload.finishReason() != ModelFinishReason.STOP
+                        || payload.text() == null || payload.text().isBlank()
+                        || !payload.toolCalls().isEmpty()) {
+                    throw failure(Code.STATE_CONFLICT, "Final answer requires a non-empty STOP response without tool calls");
+                }
+            } catch (JsonProcessingException | IllegalArgumentException exception) {
+                throw failure(Code.STATE_CONFLICT, "Committed final Model Response is unreadable");
+            }
+        }
+
         AgentRun.Status runStatus = AgentRun.Status.valueOf(command.outcome().name());
         AgentTask.Status taskStatus = switch (command.outcome()) {
             case COMPLETED -> AgentTask.Status.COMPLETED;
@@ -522,6 +570,7 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
         runPayload.put("runId", command.runId());
         runPayload.put("taskStatusAfter", taskStatus.name());
         runPayload.put("terminationReason", command.terminationReason());
+        if (answerEventId != null) runPayload.put("answerEventId", answerEventId);
         appendRunEvent(
                 command.runEventId(),
                 command.sessionId(),
@@ -529,13 +578,14 @@ public class MyBatisAgentTaskRunStore implements AgentTaskRunStore {
                 command.runId(),
                 runStepType,
                 runPayload,
-                null,
+                answerEventId,
                 workspace
         );
 
         ObjectNode taskPayload = canonicalJson.objectNode();
         taskPayload.put("runId", command.runId());
         taskPayload.put("status", taskStatus.name());
+        if (answerEventId != null) taskPayload.put("answerEventId", answerEventId);
         appendTaskEvent(
                 command.taskEventId(),
                 command.sessionId(),

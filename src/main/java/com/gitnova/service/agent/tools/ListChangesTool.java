@@ -34,7 +34,7 @@ import java.util.TreeSet;
  *
  * 帮助 Agent 快速了解本次 commit 的范围，决定是否需要深入查看某些文件。
  */
-@Component
+
 public class ListChangesTool implements AgentTool {
 
     private final GitObjectReader gitObjectReader;

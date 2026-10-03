@@ -2,6 +2,8 @@ package com.gitnova.service.agent.runtime;
 
 /** The final reason a Run stopped, not an intermediate model protocol event. */
 public enum AgentTerminationReason {
+    ANSWER_DELIVERED,
+    /** Historical finishTask Runs retain their original termination reason. */
     FINISH_SUCCEEDED,
     INVALID_COMPLETION_DRAFT,
     MODEL_OUTPUT_LENGTH,
