@@ -169,6 +169,8 @@ def main():
     assert config["observationPolicy"].get("externalizationEnabled", True) == switches["externalization"]
     for key in ("contextWindowTokens", "safetyMarginTokens", "summaryTriggerRatio", "compactTriggerRatio", "keepRecentGroups"):
         assert config["contextBudget"][key] == switches.get(key, desired["experiment"].get(key)), key
+    if "compactTargetRatio" in desired["experiment"]:
+        assert config["contextBudget"].get("compactTargetRatio") == desired["experiment"]["compactTargetRatio"], "compactTargetRatio"
     for key in ("maxInlineTokens", "maxPreviewTokens"):
         assert config["observationPolicy"][key] == desired["experiment"][key], key
     for key in ("maxOutputTokens", "maxModelCalls", "maxToolCalls"):

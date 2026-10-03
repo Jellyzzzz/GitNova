@@ -1,0 +1,161 @@
+{
+  "name": "backend-repair-suite",
+  "kind": "synthetic-seeded-defect",
+  "repetitions": 3,
+  "javaRelease": 21,
+  "tasks": [
+    {
+      "id": "stockroom-01", "repo": "stockroom", "title": "预留边界与失败无副作用",
+      "request": "库存恰好够用时预留失败，而且非法数量的处理不稳定。修复 reserve：合法正数量可恰好耗尽库存；非法或不足时不修改库存、不产生可重放记录。保持现有 API，跑测试并说明验证结果。",
+      "starter": [
+        {"file":"ReservationService.java", "before":"ttl <= 0 || quantity <= 0", "after":"ttl <= 0"},
+        {"file":"ReservationService.java", "before":"quantity > available", "after":"quantity >= available"}
+      ],
+      "partialFix": [{"file":"ReservationService.java", "before":"ttl <= 0 || quantity <= 0", "after":"ttl <= 0"}],
+      "partialFixMeaning": "只修正恰好够用，仍允许非正数量"
+    },
+    {
+      "id":"stockroom-02", "repo":"stockroom", "title":"预留重试的完整请求身份",
+      "request":"相同 requestId 重试时，有时把不同 SKU 或数量的请求当成了成功重试。修复请求身份校验：sku、quantity、ttl 一致才复用首次结果，now 改变不应导致冲突。所有冲突必须在修改库存之前拒绝。保持其他预留/到期行为。",
+      "starter":[{"file":"ReservationService.java", "before":"!previous.sku.equals(sku) || previous.quantity != quantity || previous.ttl != ttl", "after":"false"}],
+      "partialFix":[{"file":"ReservationService.java", "before":"!previous.sku.equals(sku) || previous.quantity != quantity || previous.ttl != ttl", "after":"previous.quantity != quantity"}],
+      "partialFixMeaning":"仅检查数量，漏掉 SKU 和 ttl 冲突"
+    },
+    {
+      "id":"stockroom-03", "repo":"stockroom", "title":"过期扫描的边界与幂等释放",
+      "request":"到期扫描存在库存重复回补和边界延迟问题。修复 expire：到 expiresAt 就到期，每个预留只释放一次，多次扫描必须稳定；返回本次真正释放的数量。不要依赖清空整个历史表来规避重试。",
+      "starter":[{"file":"ReservationService.java", "before":"reservation.active() && now >= reservation.expiresAt", "after":"now > reservation.expiresAt"}],
+      "partialFix":[{"file":"ReservationService.java", "before":"reservation.active() && now >= reservation.expiresAt", "after":"now >= reservation.expiresAt"}],
+      "partialFixMeaning":"修正边界但仍然重复释放旧预留"
+    },
+    {
+      "id":"stockroom-04", "repo":"stockroom", "title":"仓库间调拨失败丢库存",
+      "request":"目标仓库满了或没有该 SKU 时，调拨会失败，但源库存已经减少。修复调拨的 prepare/apply 顺序，保证未知 SKU、超限、非法数量等失败无副作用，成功前后库存总量守恒。不要通过吞掉异常伪造成功。",
+      "starter":[{"file":"TransferService.java", "before":"int to = Math.addExact(target.available(sku), quantity);\n        if (to > Inventory.MAX) throw new IllegalArgumentException(\"target full\");\n        source.set(sku, from - quantity);", "after":"source.set(sku, from - quantity);\n        int to = Math.addExact(target.available(sku), quantity);\n        if (to > Inventory.MAX) throw new IllegalArgumentException(\"target full\");"}],
+      "partialFix":[{"file":"TransferService.java", "before":"target.available(sku)", "after":"target.snapshot().getOrDefault(sku, 0)"}],
+      "partialFixMeaning":"容量预检查已修，但未知目标 SKU 仍在源扣减后失败"
+    },
+    {
+      "id":"stockroom-05", "repo":"stockroom", "title":"CSV 整批补货原子性",
+      "request":"CSV 后部有坏数据时，前面几行已经入库。修复整批补货：先验证完整批次，再修改库存；重复 SKU、未知 SKU、非正数量、格式错误或库存超限均应整批拒绝。保留空行与注释支持。",
+      "starter":[{"file":"RestockService.java", "before":"planned.put(row.sku(), updated);", "after":"inventory.set(row.sku(), updated);\n            planned.put(row.sku(), updated);"}],
+      "partialFix":[
+        {"file":"RestockService.java", "before":"Map<String, Integer> planned =", "after":"for (StockCsv.Row row : new StockCsv().parse(csv)) {\n            if (row.quantity() <= 0) throw new IllegalArgumentException(\"invalid quantity\");\n        }\n        Map<String, Integer> planned ="},
+        {"file":"RestockService.java", "before":"planned.put(row.sku(), updated);", "after":"inventory.set(row.sku(), updated);\n            planned.put(row.sku(), updated);"}
+      ],
+      "partialFixMeaning":"只预检查数量，重复/未知 SKU 仍可导致部分写入"
+    },
+    {
+      "id":"eventstats-01", "repo":"eventstats", "title":"跨时区事件归一化",
+      "request":"同一时刻的事件用不同时区编码后被统计到了不同时间窗口。修复 ISO_OFFSET_DATE_TIME 到 epoch milliseconds 的解析，保留毫秒精度，兼容正负和非整小时时区。不要重写统计契约。",
+      "starter":[{"file":"EventParser.java", "before":"OffsetDateTime.parse(fields[2].trim()).toInstant()", "after":"OffsetDateTime.parse(fields[2].trim()).toLocalDateTime().toInstant(java.time.ZoneOffset.UTC)"}],
+      "partialFix":[{"file":"EventParser.java", "before":"OffsetDateTime.parse(fields[2].trim()).toInstant()", "after":"OffsetDateTime.parse(fields[2].trim()).toLocalDateTime().toInstant(java.time.ZoneOffset.ofHours(OffsetDateTime.parse(fields[2].trim()).getOffset().getTotalSeconds() / 3600))"}],
+      "partialFixMeaning":"兼容整小时偏移但丢掉半小时/45 分钟偏移"
+    },
+    {
+      "id":"eventstats-02", "repo":"eventstats", "title":"多租户去重键冲突",
+      "request":"不同租户使用相同 eventId 时会互相覆盖或被拒绝。修复去重键的隔离与重试冲突检查：同租户同 ID 的完全相同事件只接收一次，不同时间/金额应冲突；不同租户互不影响。键编码不能产生拼接歧义。",
+      "starter":[{"file":"EventStore.java", "before":"new Key(event.tenant(), event.id())", "after":"new Key(\"\", event.id())"}],
+      "partialFix":[{"file":"EventStore.java", "before":"new Key(event.tenant(), event.id())", "after":"new Key(event.tenant() + event.id(), \"\")"}],
+      "partialFixMeaning":"使用无分隔拼接键引入另一类冲突"
+    },
+    {
+      "id":"eventstats-03", "repo":"eventstats", "title":"负 epoch 与半开统计窗口",
+      "request":"导入历史事件后，epoch 0 之前的金额落入了错误窗口。修复窗口对齐：使用向负无穷取整，区间仍为 [start,end)，不能混入其他租户。尤其检查恰好落在负窗口边界的事件。",
+      "starter":[{"file":"WindowAggregator.java", "before":"Math.floorDiv(event.timestamp(), width)", "after":"(event.timestamp() / width)"}],
+      "partialFix":[{"file":"WindowAggregator.java", "before":"Math.floorDiv(event.timestamp(), width)", "after":"(event.timestamp() >= 0 ? event.timestamp() / width : (event.timestamp() - width) / width)"}],
+      "partialFixMeaning":"负数一律减一个窗口，负整倍数再次偏移"
+    },
+    {
+      "id":"eventstats-04", "repo":"eventstats", "title":"Percentile 排名与输入所有权",
+      "request":"P90 在小样本中偏小，调用后原始列表顺序也被改变。按 README 的 nearest-rank 定义修复百分位数计算，支持不可变列表、不修改调用者数据，保持空列表和非法 p 的拒绝行为。",
+      "starter":[
+        {"file":"Percentiles.java", "before":"new ArrayList<>(values)", "after":"values"},
+        {"file":"Percentiles.java", "before":"((long) percentile * sorted.size() + 99) / 100", "after":"Math.max(1, (long) percentile * sorted.size() / 100)"}
+      ],
+      "partialFix":[{"file":"Percentiles.java", "before":"new ArrayList<>(values)", "after":"values"}],
+      "partialFixMeaning":"修正排名但仍原地排序/拒绝不可变输入"
+    },
+    {
+      "id":"eventstats-05", "repo":"eventstats", "title":"相同时间戳的稳定分页",
+      "request":"回查事件时，同一时间戳下的数据会漏页。修复 CursorPager，严格按 (timestamp,tenant,id) 排序和排他 cursor 翻页，反复取完应恰好得到所有事件一次；不能靠只比较时间或只比较 ID 实现。保持 limit 校验。",
+      "starter":[{"file":"CursorPager.java", "before":"ORDER.compare(event, cursor) <= 0", "after":"event.timestamp() <= cursor.timestamp()"}],
+      "partialFix":[{"file":"CursorPager.java", "before":"ORDER.compare(event, cursor) <= 0", "after":"(event.timestamp() < cursor.timestamp() || event.timestamp() == cursor.timestamp() && event.id().compareTo(cursor.id()) <= 0)"}],
+      "partialFixMeaning":"只增加 id 比较，遗漏 tenant 排序维度"
+    },
+    {
+      "id":"bundlesync-01", "repo":"bundlesync", "title":"文件包相对路径校验",
+      "request":"文件包能接受包含 ../ 的路径。修复 PathPolicy 的 POSIX 相对路径契约，拒绝绝对路径、空段、点段、反斜线、NUL、drive 前缀，同时不要误拒绝 a..b 或 Unicode 文件名。不能用静默 normalize 代替拒绝非法输入。",
+      "starter":[{"file":"PathPolicy.java", "before":"part.isEmpty() || part.equals(\".\") || part.equals(\"..\")", "after":"part.isEmpty()"}],
+      "partialFix":[{"file":"PathPolicy.java", "before":"part.isEmpty() || part.equals(\".\") || part.equals(\"..\")", "after":"part.isEmpty() || part.equals(\"..\")"}],
+      "partialFixMeaning":"拒绝 .. 但遗漏 . 段"
+    },
+    {
+      "id":"bundlesync-02", "repo":"bundlesync", "title":"Blob 短读与完整性校验",
+      "request":"通过网络式短读流复制 Blob 时，复制会错误失败或内容不完整。修复复制循环，支持任意合法短读和空文件，校验完整长度及 SHA-256；不能关闭调用者传入的流，不能一次性读完整 Blob 到内存。",
+      "starter":[{"file":"BlobCopy.java", "before":"while ((count = input.read(buffer)) != -1)", "after":"while ((count = input.read(buffer)) == buffer.length)"}],
+      "partialFix":[{"file":"BlobCopy.java", "before":"total != expectedLength || !HexFormat.of().formatHex(digest.digest()).equals(expectedDigest)", "after":"total != expectedLength"}],
+      "partialFixMeaning":"循环修复但忽略完整性摘要"
+    },
+    {
+      "id":"bundlesync-03", "repo":"bundlesync", "title":"增量同步缺失删除操作",
+      "request":"同步到新快照后仍残留旧文件。修复 SyncPlan：对完整前后文件集合求差，输出缺失 DELETE、新增/变化 PUT，不变文件跳过；删除先于写入，各类按路径排序，支持 a 文件变为 a/b 文件。这里只修改规划，不新增执行器。",
+      "starter":[{"file":"SyncPlan.java", "before":"if (!newFiles.containsKey(path)) operations.add(new Operation(\"DELETE\", path));", "after":"// Deleted paths are currently ignored."}],
+      "partialFix":[{"file":"SyncPlan.java", "before":"if (!entry.equals(oldFiles.get(entry.path())))", "after":"if (true)"}],
+      "partialFixMeaning":"补回删除但把所有未变化文件也标为 PUT"
+    },
+    {
+      "id":"bundlesync-04", "repo":"bundlesync", "title":"完整文件树布局的前置检查",
+      "request":"同时包含文件 a 与 a/b 的包被接受了，导致物化到一半才失败。修复 FileLayout，在产生 IO 前验证全部祖先冲突和重复路径，不依赖输入顺序。仅比较排序后的相邻元素不够，注意 a、a-b、a/c。",
+      "starter":[{"file":"FileLayout.java", "before":"if (paths.contains(path.substring(0, slash))) throw new IllegalArgumentException(\"file/directory collision\");", "after":"// Ancestor collision check is missing."}],
+      "partialFix":[{"file":"FileLayout.java", "before":"if (paths.contains(path.substring(0, slash))) throw new IllegalArgumentException(\"file/directory collision\");", "after":"String previous = paths.stream().filter(item -> item.compareTo(path) < 0).max(String::compareTo).orElse(\"\");\n                if (path.startsWith(previous + \"/\")) throw new IllegalArgumentException(\"file/directory collision\");"}],
+      "partialFixMeaning":"只检查字典序的直接前项，漏掉被 a-b 隔开的祖先"
+    },
+    {
+      "id":"bundlesync-05", "repo":"bundlesync", "title":"快照发布失败留下半成品",
+      "request":"第二个 Blob 读取失败时，snapshot 目录已经对外可见。修复快照发布：完整物化到独占 staging 后原子 rename；失败清理仅本次 staging；现有目标必须拒绝且保持原样。此次假定没有并发发布者，不要求断电 fsync 恢复。",
+      "starter":[
+        {"file":"SnapshotPublisher.java", "before":"Path staging = Files.createTempDirectory(parent, \".staging-\");", "after":"Path staging = Files.createDirectories(target);"},
+        {"file":"SnapshotPublisher.java", "before":"return Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);", "after":"return staging;"},
+        {"file":"SnapshotPublisher.java", "before":"if (Files.exists(staging))", "after":"if (false && Files.exists(staging))"}
+      ],
+      "partialFix":[{"file":"SnapshotPublisher.java", "before":"if (Files.exists(staging))", "after":"if (false && Files.exists(staging))"}],
+      "partialFixMeaning":"引入 staging 却不清理失败中间目录"
+    },
+    {
+      "id":"jobqueue-01", "repo":"jobqueue", "title":"就绪任务优先级与稳定顺序",
+      "request":"高优先级任务反而最后执行。修复 ReadySelector：就绪任务 priority 降序，createdAt 升序，最后 id 字典序升序；未来任务和非 QUEUED 任务不能被领取。保持单次选取不修改 Job 状态。",
+      "starter":[{"file":"ReadySelector.java", "before":"Comparator.comparingInt((Job job) -> job.priority).reversed()", "after":"Comparator.comparingInt((Job job) -> job.priority)"}],
+      "partialFix":[{"file":"ReadySelector.java", "before":".thenComparingLong(job -> job.createdAt).thenComparing(job -> job.id)", "after":".thenComparing(job -> job.id).thenComparingLong(job -> job.createdAt)"}],
+      "partialFixMeaning":"优先级修复，但同优先级未按创建时间排序"
+    },
+    {
+      "id":"jobqueue-02", "repo":"jobqueue", "title":"过期 Worker 的完成回调",
+      "request":"旧 Worker 拿着旧 token 仍能完成已被重新领取的 Job。修复 complete 的状态/token/租期联合检查，now 恰好等于 leaseUntil 也必须拒绝。拒绝后状态不变，当前合法 token 在租期内仍可完成。",
+      "starter":[{"file":"LeaseGuard.java", "before":" || token != job.token", "after":""}],
+      "partialFix":[{"file":"LeaseGuard.java", "before":" || now >= job.leaseUntil", "after":""}],
+      "partialFixMeaning":"补 token 却允许租约已过期的完成回调"
+    },
+    {
+      "id":"jobqueue-03", "repo":"jobqueue", "title":"指数重试延迟与饱和运算",
+      "request":"失败多次的任务重试太快。按 base*2^(attempt-1) 修复退避，超过 cap 时饱和到 cap，避免 long 乘法/移位溢出；attempt 可非常大。不要用真实 sleep。",
+      "starter":[{"file":"RetryPolicy.java", "before":"long delay = base;\n        for (int index = 1; index < attempt; index++) {\n            if (delay >= cap || delay > cap / 2) return cap;\n            delay *= 2;\n        }\n        return delay;", "after":"return Math.min(cap, base * attempt);"}],
+      "partialFix":[{"file":"RetryPolicy.java", "before":"long delay = base;\n        for (int index = 1; index < attempt; index++) {\n            if (delay >= cap || delay > cap / 2) return cap;\n            delay *= 2;\n        }\n        return delay;", "after":"return Math.min(cap, base << (attempt - 1));"}],
+      "partialFixMeaning":"移位溢出/移位距离截断导致大 attempt 退避失效"
+    },
+    {
+      "id":"jobqueue-04", "repo":"jobqueue", "title":"超时重试上限及下一次就绪时间",
+      "request":"到达 maxAttempts 的任务仍会再次排队。修复 TimeoutReaper：租期到点处理，达到次数上限转 FAILED，否则按 RetryPolicy 设置 availableAt。重复扫描应幂等，不能复活终态或重复增加 attempts。",
+      "starter":[{"file":"TimeoutReaper.java", "before":"job.attempts >= maxAttempts", "after":"job.attempts > maxAttempts"}],
+      "partialFix":[{"file":"TimeoutReaper.java", "before":"Math.addExact(now, new RetryPolicy().delay(job.attempts, base, cap))", "after":"now"}],
+      "partialFixMeaning":"修好上限但丢失退避，任务立即再次就绪"
+    },
+    {
+      "id":"jobqueue-05", "repo":"jobqueue", "title":"取消操作不能改写终态",
+      "request":"取消一个已经成功的 Job 会把 COMPLETED 改成 CANCELLED。修复取消状态机，只允许 QUEUED/RUNNING 首次取消；终态不变，重复取消返回 false。验证晚到完成回调和超时扫描都不能复活取消任务。",
+      "starter":[{"file":"CancellationService.java", "before":"job.status != Job.Status.QUEUED && job.status != Job.Status.RUNNING", "after":"job.status == Job.Status.CANCELLED"}],
+      "partialFix":[{"file":"CancellationService.java", "before":"job.status != Job.Status.QUEUED && job.status != Job.Status.RUNNING", "after":"job.status == Job.Status.COMPLETED || job.status == Job.Status.FAILED"}],
+      "partialFixMeaning":"保护已完成/失败，但重复取消仍返回成功"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "scenario": "eventstats-session-chain",
+  "repository": "repository",
+  "model": "deepseek-v4-flash",
+  "thinkingMode": "enabled",
+  "reasoningEffort": "max",
+  "summaryThinking": {"mode": "enabled", "effort": "high"},
+  "temperature": 0,
+  "tasks": [
+    {"name": "01-investigate", "file": "tasks/01-investigate.md", "editableFiles": [], "fixedCategories": 0},
+    {"name": "02-timezone", "file": "tasks/02-timezone.md", "editableFiles": ["src/main/java/eventstats/EventParser.java"], "fixedCategories": 1},
+    {"name": "03-dedup", "file": "tasks/03-dedup.md", "editableFiles": ["src/main/java/eventstats/EventStore.java"], "fixedCategories": 2},
+    {"name": "04-window", "file": "tasks/04-window.md", "editableFiles": ["src/main/java/eventstats/WindowAggregator.java"], "fixedCategories": 3},
+    {"name": "05-percentile", "file": "tasks/05-percentile.md", "editableFiles": ["src/main/java/eventstats/Percentiles.java"], "fixedCategories": 4},
+    {"name": "06-cursor", "file": "tasks/06-cursor.md", "editableFiles": ["src/main/java/eventstats/CursorPager.java"], "fixedCategories": 5},
+    {"name": "07-regression", "file": "tasks/07-regression.md", "editableFiles": ["src/test/java/eventstats/RegressionChecks.java"], "fixedCategories": 5},
+    {"name": "08-delivery", "file": "tasks/08-delivery.md", "editableFiles": [], "fixedCategories": 5}
+  ],
+  "experiment": {
+    "contextWindowTokens": 128000,
+    "safetyMarginTokens": 1024,
+    "summaryTriggerRatio": 0.8,
+    "compactTriggerRatio": 0.9,
+    "compactTargetRatio": 0.6,
+    "keepRecentGroups": 2,
+    "maxOutputTokens": 32768,
+    "maxModelCalls": 40,
+    "maxToolCalls": 80,
+    "callTimeoutSeconds": 300,
+    "readTimeoutSeconds": 300,
+    "maxInlineTokens": 4096,
+    "maxPreviewTokens": 1024,
+    "taskWallClockLimitSeconds": 1800
+  },
+  "arms": {"G80": {"externalization": true, "summarization": true}},
+  "protocol": {
+    "sessions": 1,
+    "sequentialTasks": 8,
+    "resetBetweenTasks": false,
+    "stopOnFailedStage": true,
+    "automaticReplay": false,
+    "historyEvidenceReview": "manual-source-check-separate-from-code-acceptance"
+  }
+}
