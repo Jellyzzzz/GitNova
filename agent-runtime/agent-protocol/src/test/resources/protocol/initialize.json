@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "commandId": "11111111-1111-4111-8111-111111111111",
+  "sessionId": "22222222-2222-4222-8222-222222222222",
+  "runnerEpoch": 1,
+  "type": "INITIALIZE",
+  "taskId": null,
+  "attemptId": null,
+  "payload": {
+    "bootstrapId": "11111111-1111-4111-8111-111111111111",
+    "bootstrapSha256": "025ae4e1a047e924acf89630f631a60ac52b2ac4fcfbda0ddc8b9006e4b7e879",
+    "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "publishedHead": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "runtimeConfigDigest": "025ae4e1a047e924acf89630f631a60ac52b2ac4fcfbda0ddc8b9006e4b7e879"
+  },
+  "worklineId": "00000000-0000-4000-8000-000000000003"
+}
