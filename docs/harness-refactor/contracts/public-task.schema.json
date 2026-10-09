@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32000
+    },
+    "expectedWorklineId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "expectedSessionVersion": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "message",
+    "expectedWorklineId",
+    "expectedSessionVersion"
+  ]
+}

@@ -183,12 +183,14 @@ Sandbox sandbox = Sandbox.builder()
     .resource(Map.of("cpu", "1", "memory", "2Gi"))
     .volume(sessionVolume)
     .env("GITNOVA_SESSION_ID", sessionId)
+    .env("GITNOVA_WORKLINE_ID", worklineId)
     .env("GITNOVA_RUNNER_EPOCH", Long.toString(epoch))
     .env("GITNOVA_WORKER_TOKEN", workerToken)
     .env("GITNOVA_MODEL_ENDPOINT", modelProxyEndpoint)
     .env("GITNOVA_MODEL_TOKEN", modelToken)
     .env("GITNOVA_RUNTIME_CONFIG_JSON", spec.runtimeConfigJson())
     .metadata("gitnova.session", sessionId)
+    .metadata("gitnova.workline", worklineId)
     .metadata("gitnova.create", createOperationId)
     .timeout(Duration.ofMinutes(30))
     .readyTimeout(Duration.ofMinutes(2))
@@ -235,7 +237,7 @@ requiredHeaders.forEach(r::header);
 
 不要打印完整endpoint headers（可能有凭据）。下游Worker控制token使用独立header，避免覆盖OpenSandbox需要的认证header。验收中检查管理API key是否被不适当地转发/记录到工作负载；接入层不能因此把平台管理权限暴露给用户代码。
 
-获取端点≠Agent业务ready。先GET `/health/live`；上传固定bootstrap，再POST INITIALIZE；最后GET `/health/ready`核对session/epoch/configDigest/HEAD。SDK默认ping只验证execd，不可以把应用ready设成“请求INITIALIZE前必须IDLE”，否则启动死锁。
+获取端点≠Agent业务ready。先GET `/health/live`；上传固定bootstrap，再POST INITIALIZE；最后GET `/health/ready`核对session/workline/epoch/configDigest/HEAD。SDK默认ping只验证execd，不可以把应用ready设成“请求INITIALIZE前必须IDLE”，否则启动死锁。
 
 ## 6. Bootstrap上传、Task下发与SSE
 
@@ -248,6 +250,10 @@ SSE使用独立Java HTTP client/连接，不设置整个流30秒超时；通过�
 本包 `probes/TransportProbe.java` 是**独立教学探针**：JDK HttpServer接收任务文本、用独立执行器产生SSE，并验证去重和中文原样传输。它不实现真实Agent、不证明OpenSandbox代理已通过，不能复制成生产受理器替代本地日志。
 
 ## 7. Linux进程与目录：可直接照着验收
+
+读取与搜索先复用系统程序，不要求先实现LocalReadTool。镜像模板显式安装bash、coreutils、sed、findutils、ripgrep；进入实际镜像后先执行`command -v bash cat sed find rg`，再验证一个有界读取和搜索。rg是安装的程序，不是Linux内核自动提供的能力。Mac可做纯Java、路径与编辑测试；Linux进程组、/proc与取消仍在Colima/目标Linux验证，不把Mac宿主当作Linux。
+
+模型通过shell工具调用这些程序，仍由LocalShellTool/ProcessSupervisor管理进程、超时、取消和输出预算。专用read_file只在需要稳定行号/分页或单独授予读权限时实现；保留edit_file的精确匹配价值。不需要把这些本地操作改成MCP或Server HTTP请求。
 
 可信入口 `deploy/process-launch.py`：启动后调用setsid、记录pid/pgid/proc starttime，再exec具体argv。Java ProcessBuilder不拼接用户Task；shell工具收到的script通过bash -lc作为单一参数传入。启动器记录在state/processes/<processId>，命令输出由两个并行Reader排空。
 
@@ -431,3 +437,20 @@ java -cp "docs/harness-refactor/probes/opensandbox/target/classes:$(cat docs/har
 CLI入口、代理配置、SDK基线来自固定`release-1.1.0`源码，已在本次重新核对；Windows/WSL网络与资源说明来自Microsoft和Docker官方资料。[D-S01]—[D-S07]链接集中在03第11章。设备分工、16GB WSL初值和先运行单Sandbox是本项目的部署建议，不是对你机器的测量结论。
 
 本轮的配置解析、链接、CLI命令静态检查、目标文件对齐与本地探针证据写在07和audit中。Windows/Mac连通、SDK编译、容器SSE与模型访问、实际内存/磁盘峰值均需由本章实机步骤确认；不能把文档校验PASS写成双机部署已运行。
+
+## 13. 显式平台能力的新增出口（本次修改）
+
+此节不改变双机物理部署。Server→OpenSandbox的地址仍指执行宿主的私网服务；Worker→Model Proxy与Worker→PlatformCapability都指向从Sandbox可达的平台，不出现用户设备概念。
+
+WorkerConfig/LaunchSpec/创建环境env新增：
+
+```text
+GITNOVA_PLATFORM_ENDPOINT=http://<PLATFORM_INTERNAL_HOST>:8080
+GITNOVA_PLATFORM_TOKEN=<Session与epoch范围、用途为平台能力的令牌>
+```
+
+platformEndpoint是平台根URL，客户端追加01规定的/internal/agent路径。双机开发中PLATFORM_INTERNAL_HOST可以是Mac可达地址；正式部署使用平台内部地址。不要用容器localhost或把OpenSandbox API key当能力token。模型出口与平台能力出口分开配置，能够部署到同一Server但不是相同协议。
+
+创建真实Worker的Java适配器显式加入 `.env("GITNOVA_PLATFORM_ENDPOINT", spec.platformEndpoint().toString())` 与 `.env("GITNOVA_PLATFORM_TOKEN", spec.platformToken())`，这两个访问器属于本包ControlTypes.LaunchSpec，不是供应商SDK新增方法。独立OpenSandboxProbe不启动正式Worker，不要求注入真实平台凭据。
+
+应用端联调增加：一次自然STOP不触发Commit；一次report_progress返回202后按原operationId读确定结果；一次create_pull_request不提交dirty工作树。后台回收测试使用CHECKPOINT_SESSION/ACK_CHECKPOINT/STOP_WORKER；不是用户可见的suspend/resume/close。Mac/Windows启动失败是部署检查结果，不伪装成已通过。

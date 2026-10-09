@@ -1,0 +1,1226 @@
+[
+  {
+    "source": "Agent",
+    "sourcePath": "00_从这里开始.md",
+    "targetPath": "00_从这里开始.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "4420534ebbc64a7e8d0f3132918df46b43879df5a69e24d3575dcd87660a2944",
+    "targetSha256": "8552bfa368faae843ef28b69a91dfdb8f43585fbdf97e5c5748b6ce13e1627ec"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "01_总体架构与通信契约.md",
+    "targetPath": "01_总体架构与通信契约.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "abdbf67023cc0fda2b8b6252c3d311c82780e84238fdf6da24083621a9587812",
+    "targetSha256": "f83ed0fbef6f2d54be0bbc542d8721ee2e3fc72291e71c5fa967004854beb107"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "02_逐步手写开发与旧链路退役.md",
+    "targetPath": "02_逐步手写开发与旧链路退役.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "9475a63204bb44f507281cac192cee4432f53d28abc77be957ac24e76b2cf9f9",
+    "targetSha256": "dbada5fef7bb02699bbea8a22cb094585d64cad97361135aecd88c0d4c5b325f"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "03_验收矩阵与资料依据.md",
+    "targetPath": "03_验收矩阵与资料依据.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "6c023b48342e8147770166bfc65b17e74b34a2705b8ef336faf14adba7fdc5d8",
+    "targetSha256": "47992eedd9469d11715e50dc0bdc547ee56172d371ec8ba0c0b22739309a4365"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "04_源码迁移与包文件地图.md",
+    "targetPath": "04_源码迁移与包文件地图.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "bfeb9ab7ebbb8ce743447d311aea84e68f558345647b65d494aea2d31bdef7d9",
+    "targetSha256": "9986215508cf0d9594b30f75632787de9cdb3ca70c0896674d815ec9f441c30b"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "05_接口与数据库契约.md",
+    "targetPath": "05_接口与数据库契约.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "26010ea49d55581fc7a5caad7b63057833a994f54760006be5b5ad97800ee125",
+    "targetSha256": "2906550733f9618c296af753f6fa22a43501d8ff438c4baa078c046aa4ba1682"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "06_OpenSandbox安装接线与联调.md",
+    "targetPath": "06_OpenSandbox安装接线与联调.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "e4a0c1b4adfe2cda9ac3958061eecda96227ff688979b41f63813f69b881317b",
+    "targetSha256": "731fdcda5a912eb7fd6361f72e6796c877c32a2b557e5e99703b4b2cf2f020bb"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "07_补全与再次自检报告.md",
+    "targetPath": "07_补全与再次自检报告.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "9978205ccb61efcb7a589a882895f1d59fc863367b778e32cede37c47f361426",
+    "targetSha256": "9edab8be6311591c2b5583a875221eb79d1c5443e800a761d06cf9a94820250f"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "08_显式发布与透明回收施工单.md",
+    "targetPath": "08_显式发布与透明回收施工单.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "e0b0fab881e622675ef6bc44de0bbc0b8b7f19a4b21ff70298e59a4a0ab8b357",
+    "targetSha256": "a7afda5b21cf28fa0e0473066aa93d3dd14d9f7ae64c61ca3f203f3fbb812cee"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "09_文档修正与开发导航.md",
+    "targetPath": "09_文档修正与开发导航.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "47809cd52026592baae1332fbff824bab0aad4b0f868745a0965e2a83d729a4d",
+    "targetSha256": "e72eba8945099b8698d2bc7950b20ca121ae7af7d4ad39bf3d1065097fa40e18"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "10_OneDev与Gitea代码阅读导航.md",
+    "targetPath": "10_OneDev与Gitea代码阅读导航.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "e216e3594dea13650f653f2dbd876efe73347ea9ebe18c746871ab25318e0b37",
+    "targetSha256": "18549c2cf07f532d369b5b956107f77fab192c350ea846ef0237f96865e1a60e"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "SHA256SUMS.txt",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "57ddae0c6d08c264aaf1a660a13800334d1fe082621fcba888259ac35360d4b7",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/before-latest-logic.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "d8210634cd6cde82360b24b391b761a07b06a6e6f60c671de8a7e30c073625a7",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/closure-change-manifest.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "f58013ef35d9f4a3fcde220cbe9c06a1550f6bdc26644329d701723614670de2",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/closure-check.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "5cdaa9e45500b40f913a4eafe934d5e8e47f7cd14952429d0c747bdda12dfa5a",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/closure-first-check.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "b1fae71c090916e829ace29a7ecf465c647bc0d69742d4474cc5ef9c8b54fa4b",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/closure-input.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "cd95f3990c0d7d19b6967459306c4a5434b61228653d11cde40d11a76d459b19",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/closure-summary.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "f6d24d70b7e103911658a8320b6e107f302c52992ea408244f86422e5294bf03",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/dual-host-changes.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "571dbe87593ac24c9fa927458a07eeb30dd3ff227901e27f1c32cb4faa440283",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/dual-host-check.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "2a80429869cbe717540c682f0efedf009d47171e364999163f674f08477bf7fe",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/history/07_本轮之前报告.txt",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "fa4fa2744acb777bf85d388385a5930b58c3eb4379285b82b7d7a30037aaccae",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/history/首次本轮前_dual-host-check.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "02ca518bfa11894574039164ed70b9381d96a3af6877790fd0e1376d135f454a",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/history/首次本轮前_latest-logic-check.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "07461f7cd1c08f70c93743de53227027536ac2d14c4ed362f2d873aaac5ea54a",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/history/首次本轮前_self-check.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "6aa54fae2c605e877ca9175e0244e1d0d9021facfaf61c33569b5050e2086c4b",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/latest-change-manifest.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "b3ce2cff96a4075d9cfc2df618bb406b0c96066aed0e530559af6ecf0df0de9b",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/latest-logic-check.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "ca1e47341cc694d8087d1eda17e292747decc5a611ca02937c8e6c0ab45a6bc6",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/latest-logic-first-check.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "7718f2b8e65393b7feca262b937ffaa4694bee3118221dcf65e6c21b2b89c7a7",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/repository-read-manifest.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "69ec5f1be5d7b7e8db85e9db412517fab7bbec5a070b7f9269c24975f3eebd83",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/self-check-before-dual-host.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "33f16363bf2ecebd32610d0d1ec0796e5b355598987294831db0aa968f19e3b6",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/self-check.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "f49d114cd7dc6ecbc7480ba7ea4c56d7bfd1ab4c517280d85395e57292ca55b8",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/上一轮双机记录/07_补全与再次自检报告.txt",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "853e6529620a590551413ca4e369b842e696315e9d33a8e5c889497dbe9fb34a",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/上一轮双机记录/dual-host-check.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "a4934992510c85c4e5a5da34c7b0f1a3c2f02d2c7b020e606e3584b9ee0c994a",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/上一轮双机记录/self-check.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "da70f021ce02e67ef9039a5b71ad2da9249c61936510f133155875fca077b577",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "audit/补全自检原报告.md",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "f5062bacb6e06fa109f3ef157b8b9ad5596f4c3376383777b55c71327bbfa277",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "changes/02_相对用户上传.diff",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "269375c14558f09aa9fe99557c2773fdd67608fbc55a5eb294a64829e98d21c8",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "contracts/command.schema.json",
+    "targetPath": "contracts/command.schema.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "1bd97d9a8959da91b095cccad0ba01f298bad13326d96b2e87b88b4adfe79400",
+    "targetSha256": "4683f3320dc5d527928a399622c918f75392642c5ffc9412e4cdee989b096b69"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "contracts/component-methods.md",
+    "targetPath": "contracts/component-methods.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "dc9bbacaf53b73b51899ae7859540af33ae9cd51f304538d87b6a343e48b607d",
+    "targetSha256": "4260392734218b34fbd61631c7c916d56bb787d787ecb22da0b53cdfcfd8dd2a"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "contracts/existing-edits.json",
+    "targetPath": "contracts/existing-edits.json",
+    "status": "UNCHANGED",
+    "sourceSha256": "9dc8890e27ce2b65e54d2ca0027fad4b98a4d132c64c2bfe36343a719388ff50",
+    "targetSha256": "9dc8890e27ce2b65e54d2ca0027fad4b98a4d132c64c2bfe36343a719388ff50"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "contracts/file-plan.json",
+    "targetPath": "contracts/file-plan.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "7137f8cbf03dfa9fea09532740f1bdb6cf82918247ed949fb3ebb5fb64de32ba",
+    "targetSha256": "d27854fd97ad589876b34a59ad41f2988540e5714ae7a31494cc85c1cde7c357"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "contracts/mapper-contracts.md",
+    "targetPath": "contracts/mapper-contracts.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "a1cdbd347e9e8f26319c039847b29b01be9ba6e40545d9cc07b36987e2fdbb61",
+    "targetSha256": "8592994bdb25297d44882cef9cc6cd65c891347941fd256c3f5c203d5b30d887"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "contracts/migration-map.csv",
+    "targetPath": "contracts/migration-map.csv",
+    "status": "UNCHANGED",
+    "sourceSha256": "b3e884912b287b3105b325488a6d29d543c5a88d491dcc20dc6327c3cb290dd6",
+    "targetSha256": "b3e884912b287b3105b325488a6d29d543c5a88d491dcc20dc6327c3cb290dd6"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "contracts/old-source-paths.json",
+    "targetPath": "contracts/old-source-paths.json",
+    "status": "UNCHANGED",
+    "sourceSha256": "f1f71b2499a6e31ea5a369470dffd038153d315ee4344c7b864ce72dda14a3d9",
+    "targetSha256": "f1f71b2499a6e31ea5a369470dffd038153d315ee4344c7b864ce72dda14a3d9"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "contracts/platform-operation.schema.json",
+    "targetPath": "contracts/platform-operation.schema.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "85670eee6ebe9dbdc4ba0436ae73ee000f6c9f6cc33bda7c84a5a1fb9e269e95",
+    "targetSha256": "1d6215480c6506e5f11f93fb05208d2fedd3937eabd382ae4dec3cd4d376567c"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "contracts/sql-field-map.md",
+    "targetPath": "contracts/sql-field-map.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "52652042f35a1b1103c5962aae3dda469952301fb8edfa8752aaad3474ac0727",
+    "targetSha256": "f82ef8a663bc40189c98d0abd1c808c29e8d84f99df369833ecf12dc50df82be"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "deploy/agent-core.pom.xml",
+    "targetPath": "deploy/agent-core.pom.xml",
+    "status": "UNCHANGED",
+    "sourceSha256": "ec2e0855e76d3e51539a8fda2a6a729d66531c43d73a6c19c872e8fea922ca13",
+    "targetSha256": "ec2e0855e76d3e51539a8fda2a6a729d66531c43d73a6c19c872e8fea922ca13"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "deploy/agent-parent.pom.xml",
+    "targetPath": "deploy/agent-parent.pom.xml",
+    "status": "UNCHANGED",
+    "sourceSha256": "bf9ec684e3a9ca402031bd9bedf368949201730ba1cb41ac70a9f4a79a34ede6",
+    "targetSha256": "bf9ec684e3a9ca402031bd9bedf368949201730ba1cb41ac70a9f4a79a34ede6"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "deploy/agent-protocol.pom.xml",
+    "targetPath": "deploy/agent-protocol.pom.xml",
+    "status": "UNCHANGED",
+    "sourceSha256": "daf4002d328f66412e785e75dfc16980b3c5b9a0e2b628f7255fcf043e031c4c",
+    "targetSha256": "daf4002d328f66412e785e75dfc16980b3c5b9a0e2b628f7255fcf043e031c4c"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "deploy/agent-worker.pom.xml",
+    "targetPath": "deploy/agent-worker.pom.xml",
+    "status": "UNCHANGED",
+    "sourceSha256": "170f24ecdab4ec77a812d70384ffdb0bed62b4b2ff6ab3229227d29f45b8adae",
+    "targetSha256": "170f24ecdab4ec77a812d70384ffdb0bed62b4b2ff6ab3229227d29f45b8adae"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "deploy/agent.Dockerfile",
+    "targetPath": "deploy/agent.Dockerfile",
+    "status": "UNCHANGED",
+    "sourceSha256": "4cb10146505299712e9bd8f8e4bed64556125d7841a6d7ebab816932e87d3fe5",
+    "targetSha256": "4cb10146505299712e9bd8f8e4bed64556125d7841a6d7ebab816932e87d3fe5"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "deploy/opensandbox.example.toml",
+    "targetPath": "deploy/opensandbox.example.toml",
+    "status": "UNCHANGED",
+    "sourceSha256": "6e477407b2b842b4ed70d04cb841ed9c078bb0a4f4c8518fa44624ef3f126d94",
+    "targetSha256": "6e477407b2b842b4ed70d04cb841ed9c078bb0a4f4c8518fa44624ef3f126d94"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "deploy/opensandbox.linux.example.toml",
+    "targetPath": "deploy/opensandbox.linux.example.toml",
+    "status": "UNCHANGED",
+    "sourceSha256": "4bba3df343b49387af1a12835232765bb82110c0fd8a3f26301f50929fd348d1",
+    "targetSha256": "4bba3df343b49387af1a12835232765bb82110c0fd8a3f26301f50929fd348d1"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "deploy/opensandbox.windows-wsl.example.toml",
+    "targetPath": "deploy/opensandbox.windows-wsl.example.toml",
+    "status": "UNCHANGED",
+    "sourceSha256": "8ea9b4986b542582aa0b3e464903207da8e506f2f5454c93f3ac299cc3cc8e1a",
+    "targetSha256": "8ea9b4986b542582aa0b3e464903207da8e506f2f5454c93f3ac299cc3cc8e1a"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "deploy/process-launch.py",
+    "targetPath": "deploy/process-launch.py",
+    "status": "UNCHANGED",
+    "sourceSha256": "d33dce499711fc2d73736830e4e7db190cd9e14561858265e4b61dc4a265be03",
+    "targetSha256": "d33dce499711fc2d73736830e4e7db190cd9e14561858265e4b61dc4a265be03"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "deploy/server-dependencies.xml",
+    "targetPath": "deploy/server-dependencies.xml",
+    "status": "UNCHANGED",
+    "sourceSha256": "3803809bba19b6ae5829123d54ac3301bf7bd4b59fa7076d6ed819b7584cd62e",
+    "targetSha256": "3803809bba19b6ae5829123d54ac3301bf7bd4b59fa7076d6ed819b7584cd62e"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "deploy/windows/.wslconfig.example",
+    "targetPath": "deploy/windows/.wslconfig.example",
+    "status": "UNCHANGED",
+    "sourceSha256": "4d59796e46aab8863e02ef5567896b42580255ac52df39d34527ed29166fb4ff",
+    "targetSha256": "4d59796e46aab8863e02ef5567896b42580255ac52df39d34527ed29166fb4ff"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "deploy/worker-entrypoint.sh",
+    "targetPath": "deploy/worker-entrypoint.sh",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "8a06ce179a4b7a269e042d6088b1f73379c4ab5962b0a715683b890a45c55afd",
+    "targetSha256": "76b1819c17c19ef05f7cc0c90bf0abf3e44f3a392d9c3b73f6cc92c244af57ff"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "examples/README.md",
+    "targetPath": "examples/README.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "b821af82b01d323b96132191c23013c14d62ab466b5ce03eba4c542c2628cd45",
+    "targetSha256": "fe5ce28be4084d18ae62dfe90a091ffb8aab9b6c158fa6b7e101218350856289"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "examples/accepted.json",
+    "targetPath": "examples/accepted.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "5f8698829183b16a37c9fb2d840847e1e0c0cba62aeecbf296a31a544ee26e19",
+    "targetSha256": "549e8e005b78667a7b917f89a408a6ffb3212290af665d8bf2c227b3fcc37b8a"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "examples/events.sse",
+    "targetPath": "examples/events.sse",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "790de3e5ee554442fac4032190c95342cd310f533d60ea1fbe68fb68985df353",
+    "targetSha256": "bdc0b32b89795cd974c68e03514936da5a44fc879157cb2bd0b706e1e5e2813b"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "examples/runtime-config.json",
+    "targetPath": "examples/runtime-config.json",
+    "status": "UNCHANGED",
+    "sourceSha256": "ad1e54b15a59bd0a0e2e0296cc2b73b3287b31549257a95a0f1fee6e52f4740a",
+    "targetSha256": "ad1e54b15a59bd0a0e2e0296cc2b73b3287b31549257a95a0f1fee6e52f4740a"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "examples/submit-task.json",
+    "targetPath": "examples/submit-task.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "daf44afe553fcbac4736171bc786feb66ba0aff32d1a96ab313b6acffbf98e68",
+    "targetSha256": "10c86f2803c635151b362f34d845eee63cb7f8ee14ffe418a0228fa18ef1890a"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "fixtures/ack_checkpoint.json",
+    "targetPath": "fixtures/ack_checkpoint.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "7e97c693455988ed3eaaae83a245397714c5ef90b9cd60d099203772cd11448e",
+    "targetSha256": "7cd973309f1925d221cf58cefc10672417d90407e1cd1b5851e9ede65f481d0b"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "fixtures/cancel_task.json",
+    "targetPath": "fixtures/cancel_task.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "9bb860a5f4872012dde7a7f9ab9cbb360a3fcf9a15648dffaa05542d2f36109b",
+    "targetSha256": "fe4e9d005cc6ad7231b2a500d5166765ca41e9ead666f347c7f5ba2ae6829f86"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "fixtures/checkpoint_session.json",
+    "targetPath": "fixtures/checkpoint_session.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "f1cb9b8b0de45139444a44b32244c6cde648516fba89d23a068de7aabc267ffa",
+    "targetSha256": "f1119ff89ccfc6d7ae9181e3b75ddd7e177680ec26be6c22be18b41a16bcac41"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "fixtures/initialize.json",
+    "targetPath": "fixtures/initialize.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "8f0438c54197aa907e61a22b9042d754ba42ffa27106a9ae5b24f34482d17a68",
+    "targetSha256": "b41e3b79b4330a8e5959b00243784d5077c4f3009b8239c21016d8b8bd61b65c"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "fixtures/preview_changes.json",
+    "targetPath": "fixtures/preview_changes.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "aa60dfc27dfbcde8479d55006e2a80fdb8850f03210c2cb0c6059486bb7bc1df",
+    "targetSha256": "6c5f66b16c64b6facc422b9e33396022fb313d3e1ad526c8c0d0030eb572c43a"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "fixtures/steer_task.json",
+    "targetPath": "fixtures/steer_task.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "a3bb52fd24ddd9ad814add1110b6343eb3964e7972ac034634eced149fa67b95",
+    "targetSha256": "501f8dfecfd6180f31603798c5dc6a8c0d6d5ba2c73d88321d51ce0534e288d7"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "fixtures/stop_worker.json",
+    "targetPath": "fixtures/stop_worker.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "25f9242be780f95312c4f57bcf941c4581eb939d9233e29d6e5fc906f18705fa",
+    "targetSha256": "c5635bd2e376f07d364de735ebbec697424dc7715d82c4e5fa30dfcc503df291"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "fixtures/submit_task.json",
+    "targetPath": "fixtures/submit_task.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "74071f3913eef6b35c32b361c38b8ce18efb93225a604006a0b15b27f091e114",
+    "targetSha256": "248878d136d318117e941f3d382dac556f8b5e1ec982ca0902132999549aca5f"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "fixtures-platform/create_pull_request.json",
+    "targetPath": "fixtures-platform/create_pull_request.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "05d555f5a4b5e16d455adc3089ed98cf78c797602018984fced80f1f36142bd9",
+    "targetSha256": "c0513a1f4d14e3dec0c68af9aac2a4593cf9507efd7ff5ad9398bdc34609b2cf"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "fixtures-platform/report_progress.json",
+    "targetPath": "fixtures-platform/report_progress.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "1f22963c7fd08604011a0557dc9c361f40ab32841cb485c9dc45aa72a21fbaf2",
+    "targetSha256": "bf5dda1d6dd57dbf2f2e558b78f3ea35eb56cfd413e6529ae488418d9074c301"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "probes/TransportProbe.java",
+    "targetPath": "probes/TransportProbe.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "b77bddfcf06b14b5bb8c0d16f9f55ca023a2eb1000254250051e58b4d8c7d029",
+    "targetSha256": "b77bddfcf06b14b5bb8c0d16f9f55ca023a2eb1000254250051e58b4d8c7d029"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "probes/opensandbox/pom.xml",
+    "targetPath": "probes/opensandbox/pom.xml",
+    "status": "UNCHANGED",
+    "sourceSha256": "9a30602cfcc42741493cd3fc5dac1abbd414cde0adba9110f11c306d1517a77c",
+    "targetSha256": "9a30602cfcc42741493cd3fc5dac1abbd414cde0adba9110f11c306d1517a77c"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "probes/opensandbox/src/main/java/OpenSandboxProbe.java",
+    "targetPath": "probes/opensandbox/src/main/java/OpenSandboxProbe.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "ecfd38f47c88a3603e6afc3b9f283ca46c8bbf100bd7b21f36f71c1809d43048",
+    "targetSha256": "ecfd38f47c88a3603e6afc3b9f283ca46c8bbf100bd7b21f36f71c1809d43048"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/README.md",
+    "targetPath": "reference/README.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "490cf21d24728df712da1e25013dbeabf41363c7ddf266eacd2d70e80cf2b923",
+    "targetSha256": "e1b3ca55196648242deaeeb259b87dffe987b58f73cb79ace5bc9b6d4f2c3fe4"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/config/RuntimeConfig.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/config/RuntimeConfig.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "db933dec35068fb39f3e8a00f8273180862f23a8df46cf4657f38cc00c3ca459",
+    "targetSha256": "db933dec35068fb39f3e8a00f8273180862f23a8df46cf4657f38cc00c3ca459"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/context/ContextCoordinator.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/context/ContextCoordinator.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "2d5afee61605e74e19b5b2182e429dd27ef802c2971fa9046f1e729397c743d9",
+    "targetSha256": "2d5afee61605e74e19b5b2182e429dd27ef802c2971fa9046f1e729397c743d9"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/context/ContextTypes.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/context/ContextTypes.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "228d1bb84089b4c827ee2b50ed85f265a89587bed0169d2c48baa4862dfb85a2",
+    "targetSha256": "0533ab22a0904df39931233aac4cd4ecabb47b4412a287570d7b7f50d3c00d8d"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/AgentEngine.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/AgentEngine.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "8a024b4c879bad9fb12b2f6df29ad43928e9c1433c6df8f3a4b957ec3c8d3995",
+    "targetSha256": "8a024b4c879bad9fb12b2f6df29ad43928e9c1433c6df8f3a4b957ec3c8d3995"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/AgentOutcome.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/AgentOutcome.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "f051ee78ea94a078b4e2660c5e23869002dba0d250dd52ee13737cc75b2ca4e2",
+    "targetSha256": "f051ee78ea94a078b4e2660c5e23869002dba0d250dd52ee13737cc75b2ca4e2"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/ExecutionControl.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/ExecutionControl.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "431a0459a9f150caf64949a6bbb3dd6436fe5c50ed6aa4eb86604a91a758c500",
+    "targetSha256": "431a0459a9f150caf64949a6bbb3dd6436fe5c50ed6aa4eb86604a91a758c500"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/SessionRuntime.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/SessionRuntime.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "c5b3ed70d34d02b969dec636851e80c4eae9e458b6d211e89f5195f37e85fb00",
+    "targetSha256": "b52766344c35c97c7b53df23eefb9e96ab940917e612f6f13f3502293fffea7c"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/TaskInput.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/TaskInput.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "ff4f8741859cd8161cea88cebf8621c1ed8f1ba6da895348a1c73cc8581f416a",
+    "targetSha256": "812a3ab37fb9d14099b2263d151aafd7039b4dabf5e205494431fcdee262c2cb"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/history/ResultStore.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/history/ResultStore.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "07de7d3ea8fbeac520616e02d5adbd29b2ace9334b5a90fd806d0cc1c37a00cf",
+    "targetSha256": "07de7d3ea8fbeac520616e02d5adbd29b2ace9334b5a90fd806d0cc1c37a00cf"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/history/SessionLog.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/history/SessionLog.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "f8025e3059c1be932f110172269835e6ead358cee9387037b7ba887cf380653f",
+    "targetSha256": "f8025e3059c1be932f110172269835e6ead358cee9387037b7ba887cf380653f"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/model/ModelGateway.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/model/ModelGateway.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "50bd9dbd537dd4d66bed4b9e6aa057d06de84bdf147808646b9abec77b6a4b89",
+    "targetSha256": "50bd9dbd537dd4d66bed4b9e6aa057d06de84bdf147808646b9abec77b6a4b89"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/model/ModelTypes.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/model/ModelTypes.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "6377a750852fb90baced782438a1e91cad7a0f3bb758c695a6b10dbf2984f506",
+    "targetSha256": "6377a750852fb90baced782438a1e91cad7a0f3bb758c695a6b10dbf2984f506"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/platform/PlatformCapabilities.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/platform/PlatformCapabilities.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "ce0f6fa1c7dd81308156583cec88320f8bbff2140b638f7cc504fbe60bf66383",
+    "targetSha256": "ce0f6fa1c7dd81308156583cec88320f8bbff2140b638f7cc504fbe60bf66383"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/process/ProcessSupervisor.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/process/ProcessSupervisor.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "a98901df565ab62194337cea1b8baac84526136cbc955d68c1235bef810f6ebc",
+    "targetSha256": "a98901df565ab62194337cea1b8baac84526136cbc955d68c1235bef810f6ebc"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/tool/AgentTool.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/tool/AgentTool.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "f5898e0592df92c13b4ae46ee5796d732cdd52fd06c4ae35736b849fc5d27411",
+    "targetSha256": "f5898e0592df92c13b4ae46ee5796d732cdd52fd06c4ae35736b849fc5d27411"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/tool/ToolRuntime.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/tool/ToolRuntime.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "8793ab421bea19ef6f0925379b3b502c180611202771f7049b36b8e329af4733",
+    "targetSha256": "8793ab421bea19ef6f0925379b3b502c180611202771f7049b36b8e329af4733"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-core/src/main/java/com/gitnova/agent/core/tool/ToolTypes.java",
+    "targetPath": "reference/agent-core/src/main/java/com/gitnova/agent/core/tool/ToolTypes.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "58037e4107918351ce2ad2d33c90ec4e9c612d1ca669197daa2efd6f8e6b08a1",
+    "targetSha256": "58037e4107918351ce2ad2d33c90ec4e9c612d1ca669197daa2efd6f8e6b08a1"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/AgentCommand.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/AgentCommand.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "d3d2d8eeda8f0504a20915df810d291864ff49b268a7f711fc60833a045eee3b",
+    "targetSha256": "089af798eefbfbc6d5babef7f45a6a4364d08592619187836a8bc3af735168ae"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/CommandReceipt.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/CommandReceipt.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "34ad7724819120039e07f30c169812430f59095831c2209ee259cd06cc54691d",
+    "targetSha256": "7e506433a7051ea4d5812f97bdb2273a7a511d4143b79e4bad0ba2d3bcff4776"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/CommandType.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/CommandType.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "2e449d3553d77d1f6816ad250875c9d566b29aab8fc4a10561e3df2630f8cb38",
+    "targetSha256": "2e449d3553d77d1f6816ad250875c9d566b29aab8fc4a10561e3df2630f8cb38"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/event/AgentEvent.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/event/AgentEvent.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "e913e0cf444927d9c95672b79a87adf82a81f726b414d38baff38548a0d591d7",
+    "targetSha256": "441efa8afbced109bb64edf3cfbcbbd5b3a7d2e3926653071001c08bea443f8f"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/event/EventType.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/event/EventType.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "887727e5219599dd751d5636ee63b4996c33c02b21ea243f9000c603e9802da7",
+    "targetSha256": "7fe49da3a7ec8be72892cf0f48e1f1f20e2658ff4032c309943987c8c599722d"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/platform/PlatformOperation.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/platform/PlatformOperation.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "34d3356d902a66381bea582b90e177173ecbaa17a0fef0026569bec5fcc73ecd",
+    "targetSha256": "584540d43e244daef7124796e5422c110a383395aae245fb45f8c9d07a4c08e4"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/ApiProblem.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/ApiProblem.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "e0efbcf7a989a4bfae3ac80651ae2586b47e3daafe0b55b4b93230845f7e1e70",
+    "targetSha256": "e0efbcf7a989a4bfae3ac80651ae2586b47e3daafe0b55b4b93230845f7e1e70"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/TaskView.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/TaskView.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "96199a1633a389a89627c6f4ed8e583913fc56f3d87aa0c9884040b55d3b6360",
+    "targetSha256": "a772c1ad98428d61b0fc144bf6e2515581a76e72e9ca476065ee2a7d189e96c2"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/WorkerHealth.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/WorkerHealth.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "dac996a8828f73c3b81f3ca4a56a9d700ee92437a12c851cf2fd09f58227b269",
+    "targetSha256": "3d131694eaae72319db68b2096f39b957170d39bee61de3ac7d2abd807fa0e9c"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/snapshot/ExportManifest.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/snapshot/ExportManifest.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "05b4dbdf80f8dc3f26c79adcd0651fb562441bb694e151458f8d7b54f8bb734d",
+    "targetSha256": "494dae15d2801d07139b56e3b4b7a7c3ab1b6f51472212423ddc88fede09ade8"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/transport/WorkerEndpoint.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/transport/WorkerEndpoint.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "e605a14a52038a6691dc5852f8ec72388997d11c462ad0bf88d2e9087c9e6fbd",
+    "targetSha256": "e605a14a52038a6691dc5852f8ec72388997d11c462ad0bf88d2e9087c9e6fbd"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-worker/src/main/java/com/gitnova/agent/worker/control/TaskFinalizer.java",
+    "targetPath": "reference/agent-worker/src/main/java/com/gitnova/agent/worker/control/TaskFinalizer.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "d438afbfb23e0f7a290759d41db44fd710b76ba7cf9e9197d7e4d263f1647573",
+    "targetSha256": "d438afbfb23e0f7a290759d41db44fd710b76ba7cf9e9197d7e4d263f1647573"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/agent-worker/src/main/java/com/gitnova/agent/worker/control/WorkerResources.java",
+    "targetPath": "reference/agent-worker/src/main/java/com/gitnova/agent/worker/control/WorkerResources.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "2f8a9d6ba81d14a310a8aa9b3e060be297195eaab7d0dcaa05b6f63e7b94488b",
+    "targetSha256": "2f8a9d6ba81d14a310a8aa9b3e060be297195eaab7d0dcaa05b6f63e7b94488b"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/server-control/src/main/java/com/gitnova/entity/agent/control/ControlRows.java",
+    "targetPath": "reference/server-control/src/main/java/com/gitnova/entity/agent/control/ControlRows.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "3a4c583f0db2869e633a36e7d4e188398cf9738b8822aaa8b2c90e4fa9e6cd28",
+    "targetSha256": "54ad3dc55e7f6dfecde7a196603ac257c540398c23ddde973d06c85fdf06b6fa"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/server-control/src/main/java/com/gitnova/entity/pullrequest/PullRequestRows.java",
+    "targetPath": "reference/server-control/src/main/java/com/gitnova/entity/pullrequest/PullRequestRows.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "28e69e3c787d5d3b59feb72452cf18f01f41144ce3f41418c72b07d7c2cabd45",
+    "targetSha256": "0be3401da598d8970c3eb0a3e3be507038fffa0a28495826ea60c89f6466618d"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "reference/server-control/src/main/java/com/gitnova/service/agent/control/ControlTypes.java",
+    "targetPath": "reference/server-control/src/main/java/com/gitnova/service/agent/control/ControlTypes.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "e12665343dc8601c5bfbfd0f3f067c3cc3653818853f22228080348af762917f",
+    "targetSha256": "f6d88cc884d748537dd89b531d35d68ac8e7927a949f4b7e6d3b4a834e074e26"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "schema/agent_control.sql",
+    "targetPath": "schema/target.sql.reference",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "9e90305f01da1570d0d66c2abb952db2a24b2cf93ae05708b5b0f05b31c65c98",
+    "targetSha256": "9fbf81c1c6abfe034b8d5c53a6b8b35f5292aeeaa6dd8be1025877ac4be5c9b2"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "scripts/check_closure.py",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "0cf11ee1ce39d5881f2f769cc119b0f2343e97072cba8997a08e3fde7b0fd3e1",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "scripts/check_dual_host_docs.py",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "93240e99aa0d082509b2a3839e6840f9d430388c0bceb61d4dd14b726e28e5d5",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "scripts/check_latest_logic.py",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "c2d1a22467f7f62a938fcbf523fad81ba90ec5ed3580c9625c30608a8acb0e81",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "scripts/install_migration.py",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "7ccea7ab529b309b6a761bf4089b34cb80b93107a20573fe5cca20fbe02fd164",
+    "targetSha256": null
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "scripts/inventory_current.py",
+    "targetPath": "scripts/inventory_current.py",
+    "status": "UNCHANGED",
+    "sourceSha256": "4b590a98ea71c43724d59e6968a24013b16c0f5c220f0be3e6e9871e8798a33f",
+    "targetSha256": "4b590a98ea71c43724d59e6968a24013b16c0f5c220f0be3e6e9871e8798a33f"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "scripts/self_check.py",
+    "targetPath": "scripts/self_check.py",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "35a58756ddef7d5ef0bec268860f0f5479450b37974d093872d77dab9215d9e7",
+    "targetSha256": "222b040a2badfe0c7c88bba742ee8ede5dd4b88d034735c515454b4a5cac3734"
+  },
+  {
+    "source": "Agent",
+    "sourcePath": "scripts/test_process_launcher.py",
+    "targetPath": "scripts/test_process_launcher.py",
+    "status": "UNCHANGED",
+    "sourceSha256": "65322811535575b15bf5699d03314ae4d81acc94646deb663791979652201394",
+    "targetSha256": "65322811535575b15bf5699d03314ae4d81acc94646deb663791979652201394"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "00_从这里开始.md",
+    "targetPath": "00_从这里开始.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "7dc0833b3634d23ebe2571ca4407ea5e2d2d0a9eb1bee6912e6160ef948ecba2",
+    "targetSha256": "8552bfa368faae843ef28b69a91dfdb8f43585fbdf97e5c5748b6ce13e1627ec"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "11_总体架构与范围.md",
+    "targetPath": "11_总体架构与范围.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "09f91a8fd0f7b2263ea37d3745e223dc9de89a509611134856832badfa782488",
+    "targetSha256": "257aba5897a43d7efb2deccd32d6c20994938316c98d5a44bd9f97a2239d494c"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "12_Session连续性与显式同步.md",
+    "targetPath": "12_Session连续性与显式同步.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "058aca38634cb3fdf7e5d2fcca26d76f2666d42dcf86d522f7af4b0b709d3084",
+    "targetSha256": "bbc980b5125a8487f02563f3af689f835434b510a8bdf6a16879304e4d0f434b"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "13_PR与代码讨论_详细施工单.md",
+    "targetPath": "13_PR与代码讨论_详细施工单.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "aa885f32de0cba6d605190b5d512abc472433c5a12cae0a1fb3eede9252870a6",
+    "targetSha256": "9df0eeb0469770ff7571625fd7f72163d1ba004606bd0777a1c254bdad6343e8"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "14_主页与Follow_Star_Watch_详细施工单.md",
+    "targetPath": "14_主页与Follow_Star_Watch_详细施工单.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "80f26382d4779d3d3153723946f117039c486b5dda6fdea0e229ec6824ad724a",
+    "targetSha256": "fa5630d1f369fc3422b51140568368be196574ba41cc115c6862824ba4e6f490"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "15_Outbox_通知与动态_详细施工单.md",
+    "targetPath": "15_Outbox_通知与动态_详细施工单.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "d35cfc4d6be729fbcbdbc5e668bd5aa73af5b0132b2ecfcdee19e5ad39af2bf5",
+    "targetSha256": "04660b2cd85191ee360efc4fe544ba065d5a03665dc9628f457b34cb4a3c0b1e"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "16_字段_接口_事务契约.md",
+    "targetPath": "16_字段_接口_事务契约.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "f075ff0c068fe8ff308aa8738348bb1c398ac8b53590fa371a65413a8912506b",
+    "targetSha256": "96e9c2d7ec26d926768c7d99554bf06b80a45652d3bf7d420f0511e18ea4c4a8"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "17_源码阅读与验收.md",
+    "targetPath": "17_源码阅读与验收.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "3f91aa4eeaa5b4b90f341423ed1b4f5d9dca3bdb08ed2720cac738b2cd984b49",
+    "targetSha256": "a4a67e96c71ddf2fa76c893e616efd97326188abd566b1e4181bb3ae4e320e7c"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "18_时间线与工时.md",
+    "targetPath": "18_时间线与工时.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "5270c54c72628ef6db2f83832d6bb4a0d80aefc21348d31f3a7dff30628bc300",
+    "targetSha256": "03e1de29435915a9f6f753ec53a7b1adb1cce068e3f0f23938217728494b7874"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "19_现有Agent文档逐项衔接.md",
+    "targetPath": "19_现有Agent文档逐项衔接.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "cf73b74d2e106538f791e97d6e1ed1270349fe62c1e4b6fad656ef6cba008ae4",
+    "targetSha256": "a718b1448a248ec0ed977e9134bfccc9b7f5a6087fe87108aa61f4c169ebb781"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "20_从需求到第一项测试.md",
+    "targetPath": "20_从需求到第一项测试.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "a7a5712e7470dd0c5faaa3b770b9a256a15edfb477392ffc06c184fa60f232fe",
+    "targetSha256": "ee8f79be97f7baa7af56e24d2a8b837e74bdd806bb08a2f0c82846fd21ea6ac1"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "SHA256SUMS.txt",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "bda105f6eb4e399b56c4a5c260c4b6e5920af974d68b323341af6dbccbc8bc70",
+    "targetSha256": null
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "agent_integration/README.md",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "889028b96079b921bcfb8a1b34ca5a8622261d8c17759258dd8f04bf1f60eaff",
+    "targetSha256": null
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "agent_integration/reference/com/gitnova/agent/protocol/command/AgentCommand.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/AgentCommand.java",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "d4ae8c8ba5fe041ed8afd9869a693f791a051bc084fdb20626b56e9de73e104a",
+    "targetSha256": "089af798eefbfbc6d5babef7f45a6a4364d08592619187836a8bc3af735168ae"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "agent_integration/reference/com/gitnova/agent/protocol/command/CommandType.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/CommandType.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "2e449d3553d77d1f6816ad250875c9d566b29aab8fc4a10561e3df2630f8cb38",
+    "targetSha256": "2e449d3553d77d1f6816ad250875c9d566b29aab8fc4a10561e3df2630f8cb38"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "agent_integration/reference/com/gitnova/agent/protocol/event/AgentEvent.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/event/AgentEvent.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "441efa8afbced109bb64edf3cfbcbbd5b3a7d2e3926653071001c08bea443f8f",
+    "targetSha256": "441efa8afbced109bb64edf3cfbcbbd5b3a7d2e3926653071001c08bea443f8f"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "agent_integration/reference/com/gitnova/agent/protocol/event/EventType.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/event/EventType.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "7fe49da3a7ec8be72892cf0f48e1f1f20e2658ff4032c309943987c8c599722d",
+    "targetSha256": "7fe49da3a7ec8be72892cf0f48e1f1f20e2658ff4032c309943987c8c599722d"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "agent_integration/reference/com/gitnova/agent/protocol/platform/PlatformOperation.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/platform/PlatformOperation.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "584540d43e244daef7124796e5422c110a383395aae245fb45f8c9d07a4c08e4",
+    "targetSha256": "584540d43e244daef7124796e5422c110a383395aae245fb45f8c9d07a4c08e4"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "agent_integration/reference/com/gitnova/agent/protocol/snapshot/ExportManifest.java",
+    "targetPath": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/snapshot/ExportManifest.java",
+    "status": "UNCHANGED",
+    "sourceSha256": "494dae15d2801d07139b56e3b4b7a7c3ab1b6f51472212423ddc88fede09ade8",
+    "targetSha256": "494dae15d2801d07139b56e3b4b7a7c3ab1b6f51472212423ddc88fede09ade8"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "audit/check_package.py",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "635adfa38f9d79245218213c9a7f5f9971c190c259ee377bd2644b018c0806c7",
+    "targetSha256": null
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "audit/check_results.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "155ed31ec95b8ac6f0c87c380a9b85c7cafc06832e7cdecf1d64ae8f5b8fa881",
+    "targetSha256": null
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "audit/文档检查报告.md",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "8a6817bfcad61387671979fe0802836e74dbfcfa3577582cd1a03cccad5f416c",
+    "targetSha256": null
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "audit/本地基线待填.md",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "c64677666cbfdc1d2ee062821063dd5455ce9ba2a3ed8002dfeb27803c20ca18",
+    "targetSha256": null
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "contracts/acceptance.json",
+    "targetPath": "contracts/acceptance.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "e06f4dcea5f129ab0bdb219d613b01735fcb7b42d563a4c41ff64384d4108a09",
+    "targetSha256": "3419ca74d5911a65d36b01f5d8ec4485a15339a0bb8487392b6db0529973c539"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "contracts/file-map.json",
+    "targetPath": "contracts/file-plan.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "407f343583e4e0290bdc35c6d6ec840aba14ca7487d0aa6fcc8987fe58555298",
+    "targetSha256": "d27854fd97ad589876b34a59ad41f2988540e5714ae7a31494cc85c1cde7c357"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "contracts/sources.json",
+    "targetPath": "contracts/sources.json",
+    "status": "UNCHANGED",
+    "sourceSha256": "e81e00645a62d359fb126c1dcac43ed2147b13701fdeea4358747c37389f9059",
+    "targetSha256": "e81e00645a62d359fb126c1dcac43ed2147b13701fdeea4358747c37389f9059"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "contracts/submit-request.schema.json",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "e8dabe5c31709be9042427c336e646c22f2a5437cf953f4213a749e356344542",
+    "targetSha256": null
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "contracts/sync-request.schema.json",
+    "targetPath": "contracts/sync-request.schema.json",
+    "status": "UNCHANGED",
+    "sourceSha256": "fa3c7fc7b0829d4e0a14c22cd78b2f149f446f9050a4030ac66f4b45290e5745",
+    "targetSha256": "fa3c7fc7b0829d4e0a14c22cd78b2f149f446f9050a4030ac66f4b45290e5745"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "contracts/timeline.json",
+    "targetPath": "contracts/timeline.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "806b0ba6294015914455993d32910d9186118369d4641bd806f0ef555293d902",
+    "targetSha256": "da1cdc1cb30947f0b67f1f0cb8993aca05274044ccca7bb82decba42abf2f09e"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "contracts/文件与方法地图.md",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "28fc8d65f77e888630077df427f11bce5d5add7c57d575f5a8f51d7fcb052a16",
+    "targetSha256": null
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "contracts/目标DDL使用说明.md",
+    "targetPath": null,
+    "status": "REMOVED_OR_CONSOLIDATED",
+    "sourceSha256": "d3ab4430df334d884cb99ad5c91ca7a53d7a8d4cf924c217581d5a8e7928e960",
+    "targetSha256": null
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "contracts/目标表结构.sql.reference",
+    "targetPath": "schema/target.sql.reference",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "401b1c44921682552494a4e1bad1c79e656e04540d2c43072d2a6d31269d4f71",
+    "targetSha256": "9fbf81c1c6abfe034b8d5c53a6b8b35f5292aeeaa6dd8be1025877ac4be5c9b2"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "examples/README.md",
+    "targetPath": "examples/README.md",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "fa521526d9b550958f72000cec4aa4ad7b1a0d1c5df278f5900df986cff02bb5",
+    "targetSha256": "fe5ce28be4084d18ae62dfe90a091ffb8aab9b6c158fa6b7e101218350856289"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "examples/merge-request.json",
+    "targetPath": "examples/merge-request.json",
+    "status": "UNCHANGED",
+    "sourceSha256": "d994d2f3cccaec0663c6defc46f0500e25dce9ead0d61e33e25833749fb5d562",
+    "targetSha256": "d994d2f3cccaec0663c6defc46f0500e25dce9ead0d61e33e25833749fb5d562"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "examples/submit-task.json",
+    "targetPath": "examples/submit-task.json",
+    "status": "UPDATED_OR_MERGED",
+    "sourceSha256": "3762a7c64123c6278d7aeeb8b48fc721682ccfd1931ec981681bb5bb236e468f",
+    "targetSha256": "10c86f2803c635151b362f34d845eee63cb7f8ee14ffe418a0228fa18ef1890a"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "examples/sync-carry.json",
+    "targetPath": "examples/sync-carry.json",
+    "status": "UNCHANGED",
+    "sourceSha256": "fbf2811528c5609f9880760ac2677d28a5899a7c04c432dd0f7c5d76f766adab",
+    "targetSha256": "fbf2811528c5609f9880760ac2677d28a5899a7c04c432dd0f7c5d76f766adab"
+  },
+  {
+    "source": "Collaboration",
+    "sourcePath": "examples/sync-discard.json",
+    "targetPath": "examples/sync-discard.json",
+    "status": "UNCHANGED",
+    "sourceSha256": "361d92282bd4623892ce113b5e76ad0956e2fac69b6681725ea6e58750a3f819",
+    "targetSha256": "361d92282bd4623892ce113b5e76ad0956e2fac69b6681725ea6e58750a3f819"
+  }
+]

@@ -1,0 +1,15 @@
+# 跨工作线Context交接（不是再次跑摘要模型）
+
+复用原始事件和ResultStore，不改其旧eventId/hash。新bootstrap的STATE包含`history/epochs/<oldEpoch>/events.jsonl`及被引用对象；原日志只读，新epoch事件写在当前events目录。`state/context-selection.json`只保存选择边界：schemaVersion=1、sessionId、sourceWorklineId、targetWorklineId、sourceArchiveId、sourceBundleSha256、syncId、targetHead、changePolicy、selectedGroups[{epoch,throughSequence}]、carriedTaskIds、persistentInstructionEventIds。字段都是固定身份/范围，不放新的token或凭空生成的“已验证事实”。
+
+selectedGroups只能来自来源归档实际覆盖，不能选择归档之后的旧事件。persistentInstructionEventIds来自用户明确长期要求的原事件，不让模型自行推测权限。暂时没有明确长期要求则空数组；保存引用与原字节，不能保留一句无来源的假系统指示。
+
+Worker安装完成先构造HistoryIndex，核验每个选择范围和对象存在。prepared ready不运行模型。第一次当前active线的SUBMIT开始前，若本地未记录相同syncId的WORKLINE_SWITCHED，则耐久追加它；重复SUBMIT只返回旧回执，不再追加。Context加入该已记录的环境事实：旧L/新L、固定H、草稿是否移植、旧测试结果只适用于旧树。新Task用户要求与历史长期要求明确分层；history_search可查未进入活动Context的旧事实。
+
+若跨线历史对象丢失，报告缺失并阻止声称完整恢复；不要从空结果推导“以前没做过”。同workline普通恢复不写WORKLINE_SWITCHED；只按已有覆盖恢复/追加RECOVERY_INTERRUPTED（如确有中断）。实际JSON解析与路径验证遵守05及09安装限制。
+
+## Core适配边界
+
+上文的workline/task/epoch选择属于Worker与平台的恢复契约，不把这些业务字段继续传进Core。Worker按已确认的selectedGroups/携带范围构造只读history视图，将获选记录的Entry按固定段顺序提供给Core；Core只认识streamId、sequence、executionId，不自行推断跨工作线可见性。完整origin仍保存在原日志记录中，平台SSE可确定性还原，不丢来源。
+
+当前执行的可信工作线说明由Worker写成HARNESS_FEEDBACK(kind=RUNTIME_CONTEXT)后再供Context使用；它不重写USER原文、不产生权限。摘要coveredThrough只描述已选历史前缀，不能扩大选择范围或将旧Task局部要求升级为当前有效要求。具体Entry/Writer接口以05第2.3—2.6为准。

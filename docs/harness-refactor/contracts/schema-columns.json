@@ -1,0 +1,2657 @@
+{
+  "agent_session": {
+    "javaRow": "com.gitnova.entity.agent.control.ControlRows.SessionRow",
+    "columns": [
+      {
+        "name": "session_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "EXISTING: verify H0 SHOW CREATE TABLE"
+      },
+      {
+        "name": "creation_idempotency_key",
+        "sqlType": "VARCHAR(128)",
+        "nullable": false,
+        "generated": false,
+        "definition": "EXISTING: verify H0 SHOW CREATE TABLE"
+      },
+      {
+        "name": "created_by_actor_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "EXISTING: verify H0 SHOW CREATE TABLE"
+      },
+      {
+        "name": "repo_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "EXISTING: verify H0 SHOW CREATE TABLE"
+      },
+      {
+        "name": "repo_key",
+        "sqlType": "VARCHAR(128)",
+        "nullable": false,
+        "generated": false,
+        "definition": "EXISTING: verify H0 SHOW CREATE TABLE"
+      },
+      {
+        "name": "status",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "EXISTING: verify H0 SHOW CREATE TABLE"
+      },
+      {
+        "name": "version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "EXISTING: verify H0 SHOW CREATE TABLE"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "EXISTING: verify H0 SHOW CREATE TABLE"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "EXISTING: verify H0 SHOW CREATE TABLE"
+      },
+      {
+        "name": "closed_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": true,
+        "generated": false,
+        "definition": "EXISTING: verify H0 SHOW CREATE TABLE"
+      },
+      {
+        "name": "execution_backend",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "execution_backend VARCHAR(24) NOT NULL DEFAULT 'LEGACY_SERVER'"
+      },
+      {
+        "name": "active_task_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "active_task_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "active_workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "active_workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "session_version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "session_version BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "sync_operation_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "sync_operation_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "next_runner_epoch",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "next_runner_epoch BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "current_runner_epoch",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "current_runner_epoch BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "workflow_state",
+        "sqlType": "VARCHAR(16)",
+        "nullable": false,
+        "generated": false,
+        "definition": "workflow_state VARCHAR(16) NOT NULL DEFAULT 'OPEN'"
+      },
+      {
+        "name": "creation_request_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "creation_request_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      }
+    ]
+  },
+  "agent_sandbox_binding": {
+    "javaRow": "com.gitnova.entity.agent.control.ControlRows.BindingRow",
+    "columns": [
+      {
+        "name": "session_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "runner_epoch",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "runner_epoch BIGINT NOT NULL"
+      },
+      {
+        "name": "bootstrap_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "bootstrap_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "bootstrap_sha256",
+        "sqlType": "CHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "bootstrap_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "create_operation_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "create_operation_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "sandbox_id",
+        "sqlType": "VARCHAR(128)",
+        "nullable": true,
+        "generated": false,
+        "definition": "sandbox_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "volume_name",
+        "sqlType": "VARCHAR(128)",
+        "nullable": false,
+        "generated": false,
+        "definition": "volume_name VARCHAR(128) NOT NULL"
+      },
+      {
+        "name": "status",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "status VARCHAR(24) NOT NULL"
+      },
+      {
+        "name": "token_salt",
+        "sqlType": "CHAR(32)",
+        "nullable": false,
+        "generated": false,
+        "definition": "token_salt CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "image_ref",
+        "sqlType": "VARCHAR(512)",
+        "nullable": false,
+        "generated": false,
+        "definition": "image_ref VARCHAR(512) NOT NULL"
+      },
+      {
+        "name": "runtime_config_json",
+        "sqlType": "JSON",
+        "nullable": false,
+        "generated": false,
+        "definition": "runtime_config_json JSON NOT NULL"
+      },
+      {
+        "name": "runtime_config_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "runtime_config_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "last_archived_sequence",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "last_archived_sequence BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "expires_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": true,
+        "generated": false,
+        "definition": "expires_at DATETIME(6) NULL"
+      },
+      {
+        "name": "last_observed_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": true,
+        "generated": false,
+        "definition": "last_observed_at DATETIME(6) NULL"
+      },
+      {
+        "name": "last_used_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "last_used_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "operation_owner",
+        "sqlType": "VARCHAR(128)",
+        "nullable": true,
+        "generated": false,
+        "definition": "operation_owner VARCHAR(128) NULL"
+      },
+      {
+        "name": "operation_until",
+        "sqlType": "DATETIME(6)",
+        "nullable": true,
+        "generated": false,
+        "definition": "operation_until DATETIME(6) NULL"
+      },
+      {
+        "name": "version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "version BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "last_error_code",
+        "sqlType": "VARCHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "last_error_code VARCHAR(64) NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "agent_control_task": {
+    "javaRow": "com.gitnova.entity.agent.control.ControlRows.TaskRow",
+    "columns": [
+      {
+        "name": "task_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "task_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "session_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "idempotency_key",
+        "sqlType": "VARCHAR(128)",
+        "nullable": false,
+        "generated": false,
+        "definition": "idempotency_key VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "actor_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "actor_id BIGINT NOT NULL"
+      },
+      {
+        "name": "message",
+        "sqlType": "LONGTEXT",
+        "nullable": false,
+        "generated": false,
+        "definition": "message LONGTEXT NOT NULL"
+      },
+      {
+        "name": "request_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "request_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "status",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "status VARCHAR(24) NOT NULL"
+      },
+      {
+        "name": "current_attempt_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "current_attempt_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "attempt_number",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "attempt_number BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "answer_event_id",
+        "sqlType": "VARCHAR(160)",
+        "nullable": true,
+        "generated": false,
+        "definition": "answer_event_id VARCHAR(160) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "terminal_reason",
+        "sqlType": "VARCHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "terminal_reason VARCHAR(64) NULL"
+      },
+      {
+        "name": "cancel_requested",
+        "sqlType": "TINYINT(1)",
+        "nullable": false,
+        "generated": false,
+        "definition": "cancel_requested TINYINT(1) NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "version BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "finished_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": true,
+        "generated": false,
+        "definition": "finished_at DATETIME(6) NULL"
+      }
+    ]
+  },
+  "agent_control_attempt": {
+    "javaRow": "com.gitnova.entity.agent.control.ControlRows.AttemptRow",
+    "columns": [
+      {
+        "name": "attempt_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "attempt_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "task_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "task_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "session_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "attempt_number",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "attempt_number BIGINT NOT NULL"
+      },
+      {
+        "name": "runner_epoch",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "runner_epoch BIGINT NOT NULL"
+      },
+      {
+        "name": "status",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "status VARCHAR(24) NOT NULL"
+      },
+      {
+        "name": "expected_published_head",
+        "sqlType": "CHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "expected_published_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "deadline_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "deadline_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "config_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "config_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "answer_event_id",
+        "sqlType": "VARCHAR(160)",
+        "nullable": true,
+        "generated": false,
+        "definition": "answer_event_id VARCHAR(160) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "terminal_reason",
+        "sqlType": "VARCHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "terminal_reason VARCHAR(64) NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "finished_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": true,
+        "generated": false,
+        "definition": "finished_at DATETIME(6) NULL"
+      }
+    ]
+  },
+  "agent_control_command": {
+    "javaRow": "com.gitnova.entity.agent.control.ControlRows.CommandRow",
+    "columns": [
+      {
+        "name": "command_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "command_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "session_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "runner_epoch",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "runner_epoch BIGINT NOT NULL"
+      },
+      {
+        "name": "task_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "task_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "attempt_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "attempt_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "type",
+        "sqlType": "VARCHAR(32)",
+        "nullable": false,
+        "generated": false,
+        "definition": "type VARCHAR(32) NOT NULL"
+      },
+      {
+        "name": "envelope_json",
+        "sqlType": "LONGTEXT",
+        "nullable": false,
+        "generated": false,
+        "definition": "envelope_json LONGTEXT NOT NULL"
+      },
+      {
+        "name": "envelope_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "envelope_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "status",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "status VARCHAR(24) NOT NULL DEFAULT 'PENDING'"
+      },
+      {
+        "name": "receipt_json",
+        "sqlType": "JSON",
+        "nullable": true,
+        "generated": false,
+        "definition": "receipt_json JSON NULL"
+      },
+      {
+        "name": "send_count",
+        "sqlType": "INT",
+        "nullable": false,
+        "generated": false,
+        "definition": "send_count INT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "next_attempt_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "next_attempt_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "last_error_code",
+        "sqlType": "VARCHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "last_error_code VARCHAR(64) NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "agent_event_archive": {
+    "javaRow": "com.gitnova.entity.agent.control.ControlRows.EventRow",
+    "columns": [
+      {
+        "name": "archive_offset",
+        "sqlType": "BIGINT UNSIGNED",
+        "nullable": false,
+        "generated": false,
+        "definition": "archive_offset BIGINT UNSIGNED NOT NULL AUTO_INCREMENT"
+      },
+      {
+        "name": "event_id",
+        "sqlType": "VARCHAR(160)",
+        "nullable": false,
+        "generated": false,
+        "definition": "event_id VARCHAR(160) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "session_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "runner_epoch",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "runner_epoch BIGINT NOT NULL"
+      },
+      {
+        "name": "sequence",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "sequence BIGINT NOT NULL"
+      },
+      {
+        "name": "task_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "task_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "attempt_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "attempt_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "type",
+        "sqlType": "VARCHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "type VARCHAR(40) NOT NULL"
+      },
+      {
+        "name": "event_json",
+        "sqlType": "LONGTEXT",
+        "nullable": false,
+        "generated": false,
+        "definition": "event_json LONGTEXT NOT NULL"
+      },
+      {
+        "name": "event_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "event_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "occurred_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "occurred_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "archived_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "archived_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "agent_snapshot_archive": {
+    "javaRow": "com.gitnova.entity.agent.control.ControlRows.ArchiveRow",
+    "columns": [
+      {
+        "name": "archive_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "archive_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "session_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "export_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "export_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "runner_epoch",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "runner_epoch BIGINT NOT NULL"
+      },
+      {
+        "name": "task_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "task_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "attempt_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "attempt_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "through_sequence",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "through_sequence BIGINT NOT NULL"
+      },
+      {
+        "name": "tree_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "tree_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "state_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "state_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "bundle_sha256",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "bundle_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "bundle_bytes",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "bundle_bytes BIGINT NOT NULL"
+      },
+      {
+        "name": "storage_key",
+        "sqlType": "VARCHAR(512)",
+        "nullable": false,
+        "generated": false,
+        "definition": "storage_key VARCHAR(512) NOT NULL"
+      },
+      {
+        "name": "manifest_json",
+        "sqlType": "JSON",
+        "nullable": false,
+        "generated": false,
+        "definition": "manifest_json JSON NOT NULL"
+      },
+      {
+        "name": "execution_outcome",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "execution_outcome VARCHAR(24) NOT NULL"
+      },
+      {
+        "name": "purpose",
+        "sqlType": "VARCHAR(16)",
+        "nullable": false,
+        "generated": false,
+        "definition": "purpose VARCHAR(16) NOT NULL"
+      },
+      {
+        "name": "status",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "status VARCHAR(24) NOT NULL DEFAULT 'STORED'"
+      },
+      {
+        "name": "confirmed_published_head",
+        "sqlType": "CHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "confirmed_published_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "checkpoint_command_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "checkpoint_command_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "agent_platform_operation": {
+    "javaRow": "com.gitnova.entity.agent.control.ControlRows.PlatformOperationRow",
+    "columns": [
+      {
+        "name": "operation_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "operation_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "session_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "task_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "task_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "attempt_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "attempt_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "runner_epoch",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "runner_epoch BIGINT NOT NULL"
+      },
+      {
+        "name": "tool_call_id",
+        "sqlType": "VARCHAR(256)",
+        "nullable": false,
+        "generated": false,
+        "definition": "tool_call_id VARCHAR(256) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "type",
+        "sqlType": "VARCHAR(32)",
+        "nullable": false,
+        "generated": false,
+        "definition": "type VARCHAR(32) NOT NULL"
+      },
+      {
+        "name": "request_json",
+        "sqlType": "LONGTEXT",
+        "nullable": false,
+        "generated": false,
+        "definition": "request_json LONGTEXT NOT NULL"
+      },
+      {
+        "name": "request_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "request_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "status",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "status VARCHAR(24) NOT NULL DEFAULT 'PENDING'"
+      },
+      {
+        "name": "result_json",
+        "sqlType": "JSON",
+        "nullable": true,
+        "generated": false,
+        "definition": "result_json JSON NULL"
+      },
+      {
+        "name": "error_code",
+        "sqlType": "VARCHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "error_code VARCHAR(64) NULL"
+      },
+      {
+        "name": "attempt_count",
+        "sqlType": "INT",
+        "nullable": false,
+        "generated": false,
+        "definition": "attempt_count INT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "next_attempt_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "next_attempt_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "agent_publication": {
+    "javaRow": "com.gitnova.entity.agent.control.ControlRows.PublicationRow",
+    "columns": [
+      {
+        "name": "operation_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "operation_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "publication_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "publication_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "session_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "export_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "export_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "archive_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "archive_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "task_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "task_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "branch_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "branch_id BIGINT NOT NULL"
+      },
+      {
+        "name": "branch_name",
+        "sqlType": "VARCHAR(100)",
+        "nullable": false,
+        "generated": false,
+        "definition": "branch_name VARCHAR(100) NOT NULL"
+      },
+      {
+        "name": "expected_head",
+        "sqlType": "CHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "expected_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "tree_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "tree_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "message",
+        "sqlType": "TEXT",
+        "nullable": false,
+        "generated": false,
+        "definition": "message TEXT NOT NULL"
+      },
+      {
+        "name": "author_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "author_id BIGINT NOT NULL"
+      },
+      {
+        "name": "commit_epoch_millis",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "commit_epoch_millis BIGINT NOT NULL"
+      },
+      {
+        "name": "result_commit",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "result_commit CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "status",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "status VARCHAR(24) NOT NULL"
+      },
+      {
+        "name": "error_code",
+        "sqlType": "VARCHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "error_code VARCHAR(64) NULL"
+      },
+      {
+        "name": "version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "version BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "agent_workline": {
+    "javaRow": "com.gitnova.entity.agent.control.WorklineRows.WorklineRow",
+    "columns": [
+      {
+        "name": "workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY"
+      },
+      {
+        "name": "session_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "ordinal",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "ordinal BIGINT NOT NULL"
+      },
+      {
+        "name": "repo_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "repo_id BIGINT NOT NULL"
+      },
+      {
+        "name": "base_commit",
+        "sqlType": "CHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "base_commit CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "published_head",
+        "sqlType": "CHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "published_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "source_branch_id",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "source_branch_id BIGINT NULL"
+      },
+      {
+        "name": "source_branch_name",
+        "sqlType": "VARCHAR(100)",
+        "nullable": false,
+        "generated": false,
+        "definition": "source_branch_name VARCHAR(100) NOT NULL"
+      },
+      {
+        "name": "target_branch_id",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "target_branch_id BIGINT NULL"
+      },
+      {
+        "name": "target_branch_name",
+        "sqlType": "VARCHAR(100)",
+        "nullable": false,
+        "generated": false,
+        "definition": "target_branch_name VARCHAR(100) NOT NULL"
+      },
+      {
+        "name": "status",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "status VARCHAR(24) NOT NULL"
+      },
+      {
+        "name": "latest_recovery_archive_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "latest_recovery_archive_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "merged_pr_id",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "merged_pr_id BIGINT NULL"
+      },
+      {
+        "name": "version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "version BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "agent_sync_operation": {
+    "javaRow": "com.gitnova.entity.agent.control.WorklineRows.SyncRow",
+    "columns": [
+      {
+        "name": "sync_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "sync_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY"
+      },
+      {
+        "name": "session_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "actor_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "actor_id BIGINT NOT NULL"
+      },
+      {
+        "name": "request_key",
+        "sqlType": "VARCHAR(128)",
+        "nullable": false,
+        "generated": false,
+        "definition": "request_key VARCHAR(128) NOT NULL"
+      },
+      {
+        "name": "request_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "request_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "old_workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "old_workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "expected_session_version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "expected_session_version BIGINT NOT NULL"
+      },
+      {
+        "name": "target_branch_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "target_branch_id BIGINT NOT NULL"
+      },
+      {
+        "name": "target_head",
+        "sqlType": "CHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "target_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "change_policy",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "change_policy VARCHAR(24) NOT NULL"
+      },
+      {
+        "name": "expected_tree_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "expected_tree_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "old_archive_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "old_archive_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "old_tree_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "old_tree_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "old_published_head",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "old_published_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "old_epoch",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "old_epoch BIGINT NULL"
+      },
+      {
+        "name": "bootstrap_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "bootstrap_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "bootstrap_sha256",
+        "sqlType": "CHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "bootstrap_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "bootstrap_storage_key",
+        "sqlType": "VARCHAR(512)",
+        "nullable": true,
+        "generated": false,
+        "definition": "bootstrap_storage_key VARCHAR(512) NULL"
+      },
+      {
+        "name": "new_workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "new_workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "new_epoch",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "new_epoch BIGINT NULL"
+      },
+      {
+        "name": "state",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "state VARCHAR(24) NOT NULL"
+      },
+      {
+        "name": "error_code",
+        "sqlType": "VARCHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "error_code VARCHAR(64) NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "pull_request": {
+    "javaRow": "com.gitnova.entity.pullrequest.PullRequestRows.PullRequestRow",
+    "columns": [
+      {
+        "name": "id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY"
+      },
+      {
+        "name": "repo_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "repo_id BIGINT NOT NULL"
+      },
+      {
+        "name": "number",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "number BIGINT NOT NULL"
+      },
+      {
+        "name": "author_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "author_id BIGINT NOT NULL"
+      },
+      {
+        "name": "source_branch_id",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "source_branch_id BIGINT NULL"
+      },
+      {
+        "name": "target_branch_id",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "target_branch_id BIGINT NULL"
+      },
+      {
+        "name": "source_branch_name",
+        "sqlType": "VARCHAR(100)",
+        "nullable": false,
+        "generated": false,
+        "definition": "source_branch_name VARCHAR(100) NOT NULL"
+      },
+      {
+        "name": "target_branch_name",
+        "sqlType": "VARCHAR(100)",
+        "nullable": false,
+        "generated": false,
+        "definition": "target_branch_name VARCHAR(100) NOT NULL"
+      },
+      {
+        "name": "title",
+        "sqlType": "VARCHAR(255)",
+        "nullable": false,
+        "generated": false,
+        "definition": "title VARCHAR(255) NOT NULL"
+      },
+      {
+        "name": "body",
+        "sqlType": "TEXT",
+        "nullable": false,
+        "generated": false,
+        "definition": "body TEXT NOT NULL"
+      },
+      {
+        "name": "status",
+        "sqlType": "VARCHAR(16)",
+        "nullable": false,
+        "generated": false,
+        "definition": "status VARCHAR(16) NOT NULL"
+      },
+      {
+        "name": "draft",
+        "sqlType": "BOOLEAN",
+        "nullable": false,
+        "generated": false,
+        "definition": "draft BOOLEAN NOT NULL"
+      },
+      {
+        "name": "version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "version BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "created_repo_sequence",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_repo_sequence BIGINT NOT NULL"
+      },
+      {
+        "name": "closed_repo_sequence",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "closed_repo_sequence BIGINT NULL"
+      },
+      {
+        "name": "merged_repo_sequence",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "merged_repo_sequence BIGINT NULL"
+      },
+      {
+        "name": "closed_source_head",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "closed_source_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "closed_target_head",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "closed_target_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "closed_comparison_base",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "closed_comparison_base CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "source_workline_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "source_workline_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "merged_from_head",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "merged_from_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "merged_target_head",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "merged_target_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "merged_commit",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "merged_commit CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "create_request_key",
+        "sqlType": "VARCHAR(128)",
+        "nullable": false,
+        "generated": false,
+        "definition": "create_request_key VARCHAR(128) NOT NULL"
+      },
+      {
+        "name": "create_request_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "create_request_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "merged_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": true,
+        "generated": false,
+        "definition": "merged_at DATETIME(6) NULL"
+      },
+      {
+        "name": "open_slot",
+        "sqlType": "TINYINT",
+        "nullable": true,
+        "generated": true,
+        "definition": "open_slot TINYINT GENERATED ALWAYS AS (CASE WHEN status='OPEN' THEN 1 ELSE NULL END) STORED"
+      }
+    ]
+  },
+  "pull_request_revision": {
+    "javaRow": "com.gitnova.entity.pullrequest.PullRequestRows.RevisionRow",
+    "columns": [
+      {
+        "name": "id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY"
+      },
+      {
+        "name": "pr_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "pr_id BIGINT NOT NULL"
+      },
+      {
+        "name": "source_branch_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "source_branch_id BIGINT NOT NULL"
+      },
+      {
+        "name": "repo_sequence",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "repo_sequence BIGINT NOT NULL"
+      },
+      {
+        "name": "source_head",
+        "sqlType": "CHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "source_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "target_head_seen",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "target_head_seen CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "comparison_base",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "comparison_base CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "source_event_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "source_event_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "occurred_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "occurred_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "pull_request_comment": {
+    "javaRow": "com.gitnova.entity.pullrequest.PullRequestRows.CommentRow",
+    "columns": [
+      {
+        "name": "id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY"
+      },
+      {
+        "name": "pr_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "pr_id BIGINT NOT NULL"
+      },
+      {
+        "name": "author_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "author_id BIGINT NOT NULL"
+      },
+      {
+        "name": "body",
+        "sqlType": "TEXT",
+        "nullable": false,
+        "generated": false,
+        "definition": "body TEXT NOT NULL"
+      },
+      {
+        "name": "version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "version BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "request_key",
+        "sqlType": "VARCHAR(128)",
+        "nullable": false,
+        "generated": false,
+        "definition": "request_key VARCHAR(128) NOT NULL"
+      },
+      {
+        "name": "request_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "request_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "reply_to",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "reply_to BIGINT NULL"
+      },
+      {
+        "name": "thread_root",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "thread_root BIGINT NULL"
+      },
+      {
+        "name": "resolved",
+        "sqlType": "BOOLEAN",
+        "nullable": false,
+        "generated": false,
+        "definition": "resolved BOOLEAN NOT NULL DEFAULT FALSE"
+      },
+      {
+        "name": "deleted_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": true,
+        "generated": false,
+        "definition": "deleted_at DATETIME(6) NULL"
+      },
+      {
+        "name": "comparison_base",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "comparison_base CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "source_head",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "source_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "path",
+        "sqlType": "VARCHAR(1024)",
+        "nullable": true,
+        "generated": false,
+        "definition": "path VARCHAR(1024) NULL"
+      },
+      {
+        "name": "side",
+        "sqlType": "VARCHAR(5)",
+        "nullable": true,
+        "generated": false,
+        "definition": "side VARCHAR(5) NULL"
+      },
+      {
+        "name": "start_line",
+        "sqlType": "INT",
+        "nullable": true,
+        "generated": false,
+        "definition": "start_line INT NULL"
+      },
+      {
+        "name": "end_line",
+        "sqlType": "INT",
+        "nullable": true,
+        "generated": false,
+        "definition": "end_line INT NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "pull_request_merge": {
+    "javaRow": "com.gitnova.entity.pullrequest.PullRequestRows.MergeRow",
+    "columns": [
+      {
+        "name": "merge_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "merge_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY"
+      },
+      {
+        "name": "pr_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "pr_id BIGINT NOT NULL"
+      },
+      {
+        "name": "actor_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "actor_id BIGINT NOT NULL"
+      },
+      {
+        "name": "request_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "request_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "expected_pr_version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "expected_pr_version BIGINT NOT NULL"
+      },
+      {
+        "name": "source_head",
+        "sqlType": "CHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "source_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "target_head",
+        "sqlType": "CHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "target_head CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "merge_base",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "merge_base CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "strategy",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "strategy VARCHAR(24) NOT NULL"
+      },
+      {
+        "name": "fixed_message",
+        "sqlType": "TEXT",
+        "nullable": false,
+        "generated": false,
+        "definition": "fixed_message TEXT NOT NULL"
+      },
+      {
+        "name": "fixed_timestamp",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "fixed_timestamp DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "candidate_commit",
+        "sqlType": "CHAR(40)",
+        "nullable": true,
+        "generated": false,
+        "definition": "candidate_commit CHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "state",
+        "sqlType": "VARCHAR(24)",
+        "nullable": false,
+        "generated": false,
+        "definition": "state VARCHAR(24) NOT NULL"
+      },
+      {
+        "name": "error_code",
+        "sqlType": "VARCHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "error_code VARCHAR(64) NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "pull_request_mutation": {
+    "javaRow": "com.gitnova.entity.pullrequest.PullRequestRows.MutationRow",
+    "columns": [
+      {
+        "name": "mutation_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "mutation_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY"
+      },
+      {
+        "name": "pr_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "pr_id BIGINT NOT NULL"
+      },
+      {
+        "name": "actor_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "actor_id BIGINT NOT NULL"
+      },
+      {
+        "name": "request_key",
+        "sqlType": "VARCHAR(128)",
+        "nullable": false,
+        "generated": false,
+        "definition": "request_key VARCHAR(128) NOT NULL"
+      },
+      {
+        "name": "request_digest",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "request_digest CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "action",
+        "sqlType": "VARCHAR(32)",
+        "nullable": false,
+        "generated": false,
+        "definition": "action VARCHAR(32) NOT NULL"
+      },
+      {
+        "name": "result_json",
+        "sqlType": "JSON",
+        "nullable": false,
+        "generated": false,
+        "definition": "result_json JSON NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "user_follow": {
+    "javaRow": "com.gitnova.entity.social.SocialRows.FollowRow",
+    "columns": [
+      {
+        "name": "follower_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "follower_id BIGINT NOT NULL"
+      },
+      {
+        "name": "followee_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "followee_id BIGINT NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "repository_star": {
+    "javaRow": "com.gitnova.entity.social.SocialRows.StarRow",
+    "columns": [
+      {
+        "name": "user_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "user_id BIGINT NOT NULL"
+      },
+      {
+        "name": "repo_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "repo_id BIGINT NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "repository_watch": {
+    "javaRow": "com.gitnova.entity.social.SocialRows.WatchRow",
+    "columns": [
+      {
+        "name": "user_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "user_id BIGINT NOT NULL"
+      },
+      {
+        "name": "repo_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "repo_id BIGINT NOT NULL"
+      },
+      {
+        "name": "mode",
+        "sqlType": "VARCHAR(16)",
+        "nullable": false,
+        "generated": false,
+        "definition": "mode VARCHAR(16) NOT NULL"
+      },
+      {
+        "name": "include_pr",
+        "sqlType": "BOOLEAN",
+        "nullable": false,
+        "generated": false,
+        "definition": "include_pr BOOLEAN NOT NULL"
+      },
+      {
+        "name": "include_comments",
+        "sqlType": "BOOLEAN",
+        "nullable": false,
+        "generated": false,
+        "definition": "include_comments BOOLEAN NOT NULL"
+      },
+      {
+        "name": "include_branch_updates",
+        "sqlType": "BOOLEAN",
+        "nullable": false,
+        "generated": false,
+        "definition": "include_branch_updates BOOLEAN NOT NULL"
+      },
+      {
+        "name": "version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "version BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "user_social_stats": {
+    "javaRow": "com.gitnova.entity.social.SocialRows.UserStatsRow",
+    "columns": [
+      {
+        "name": "user_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "user_id BIGINT NOT NULL PRIMARY KEY"
+      },
+      {
+        "name": "following_count",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "following_count BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "followers_count",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "followers_count BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "version BIGINT NOT NULL DEFAULT 0"
+      }
+    ]
+  },
+  "repo_social_stats": {
+    "javaRow": "com.gitnova.entity.social.SocialRows.RepoStatsRow",
+    "columns": [
+      {
+        "name": "repo_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "repo_id BIGINT NOT NULL PRIMARY KEY"
+      },
+      {
+        "name": "star_count",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "star_count BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "version BIGINT NOT NULL DEFAULT 0"
+      }
+    ]
+  },
+  "domain_event_outbox": {
+    "javaRow": "com.gitnova.entity.activity.DomainEventRows.OutboxRow",
+    "columns": [
+      {
+        "name": "event_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "event_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY"
+      },
+      {
+        "name": "schema_version",
+        "sqlType": "INT",
+        "nullable": false,
+        "generated": false,
+        "definition": "schema_version INT NOT NULL"
+      },
+      {
+        "name": "type",
+        "sqlType": "VARCHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "type VARCHAR(40) NOT NULL"
+      },
+      {
+        "name": "scope_key",
+        "sqlType": "VARCHAR(128)",
+        "nullable": false,
+        "generated": false,
+        "definition": "scope_key VARCHAR(128) NOT NULL"
+      },
+      {
+        "name": "scope_sequence",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "scope_sequence BIGINT NULL"
+      },
+      {
+        "name": "causation_event_id",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "causation_event_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "repo_id",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "repo_id BIGINT NULL"
+      },
+      {
+        "name": "actor_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "actor_id BIGINT NOT NULL"
+      },
+      {
+        "name": "subject_id",
+        "sqlType": "VARCHAR(128)",
+        "nullable": false,
+        "generated": false,
+        "definition": "subject_id VARCHAR(128) NOT NULL"
+      },
+      {
+        "name": "occurred_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "occurred_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "visibility_at_creation",
+        "sqlType": "VARCHAR(16)",
+        "nullable": false,
+        "generated": false,
+        "definition": "visibility_at_creation VARCHAR(16) NOT NULL"
+      },
+      {
+        "name": "payload_json",
+        "sqlType": "JSON",
+        "nullable": false,
+        "generated": false,
+        "definition": "payload_json JSON NOT NULL"
+      },
+      {
+        "name": "payload_hash",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "status",
+        "sqlType": "VARCHAR(16)",
+        "nullable": false,
+        "generated": false,
+        "definition": "status VARCHAR(16) NOT NULL"
+      },
+      {
+        "name": "claim_token",
+        "sqlType": "CHAR(36)",
+        "nullable": true,
+        "generated": false,
+        "definition": "claim_token CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL"
+      },
+      {
+        "name": "lease_until",
+        "sqlType": "DATETIME(6)",
+        "nullable": true,
+        "generated": false,
+        "definition": "lease_until DATETIME(6) NULL"
+      },
+      {
+        "name": "attempts",
+        "sqlType": "INT",
+        "nullable": false,
+        "generated": false,
+        "definition": "attempts INT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "next_attempt_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "next_attempt_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "error_code",
+        "sqlType": "VARCHAR(64)",
+        "nullable": true,
+        "generated": false,
+        "definition": "error_code VARCHAR(64) NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "published_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": true,
+        "generated": false,
+        "definition": "published_at DATETIME(6) NULL"
+      }
+    ]
+  },
+  "domain_event_receipt": {
+    "javaRow": "com.gitnova.entity.activity.DomainEventRows.ReceiptRow",
+    "columns": [
+      {
+        "name": "consumer_name",
+        "sqlType": "VARCHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "consumer_name VARCHAR(64) NOT NULL"
+      },
+      {
+        "name": "event_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "event_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "payload_hash",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "processed_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "processed_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "domain_event_failure": {
+    "javaRow": "com.gitnova.entity.activity.DomainEventRows.FailureRow",
+    "columns": [
+      {
+        "name": "consumer_name",
+        "sqlType": "VARCHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "consumer_name VARCHAR(64) NOT NULL"
+      },
+      {
+        "name": "event_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "event_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "payload_hash",
+        "sqlType": "CHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "envelope_json",
+        "sqlType": "LONGTEXT",
+        "nullable": false,
+        "generated": false,
+        "definition": "envelope_json LONGTEXT NOT NULL"
+      },
+      {
+        "name": "error_code",
+        "sqlType": "VARCHAR(64)",
+        "nullable": false,
+        "generated": false,
+        "definition": "error_code VARCHAR(64) NOT NULL"
+      },
+      {
+        "name": "attempts",
+        "sqlType": "INT",
+        "nullable": false,
+        "generated": false,
+        "definition": "attempts INT NOT NULL"
+      },
+      {
+        "name": "next_attempt_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": true,
+        "generated": false,
+        "definition": "next_attempt_at DATETIME(6) NULL"
+      },
+      {
+        "name": "state",
+        "sqlType": "VARCHAR(16)",
+        "nullable": false,
+        "generated": false,
+        "definition": "state VARCHAR(16) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "updated_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "activity_entry": {
+    "javaRow": "com.gitnova.entity.activity.DomainEventRows.ActivityRow",
+    "columns": [
+      {
+        "name": "id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY"
+      },
+      {
+        "name": "event_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "event_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "actor_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "actor_id BIGINT NOT NULL"
+      },
+      {
+        "name": "repo_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "repo_id BIGINT NOT NULL"
+      },
+      {
+        "name": "subject_type",
+        "sqlType": "VARCHAR(32)",
+        "nullable": false,
+        "generated": false,
+        "definition": "subject_type VARCHAR(32) NOT NULL"
+      },
+      {
+        "name": "subject_id",
+        "sqlType": "VARCHAR(128)",
+        "nullable": false,
+        "generated": false,
+        "definition": "subject_id VARCHAR(128) NOT NULL"
+      },
+      {
+        "name": "type",
+        "sqlType": "VARCHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "type VARCHAR(40) NOT NULL"
+      },
+      {
+        "name": "visibility_at_creation",
+        "sqlType": "VARCHAR(16)",
+        "nullable": false,
+        "generated": false,
+        "definition": "visibility_at_creation VARCHAR(16) NOT NULL"
+      },
+      {
+        "name": "occurred_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "occurred_at DATETIME(6) NOT NULL"
+      }
+    ]
+  },
+  "repo_counter": {
+    "javaRow": "com.gitnova.entity.activity.DomainEventRows.RepoCounterRow",
+    "columns": [
+      {
+        "name": "repo_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "repo_id BIGINT NOT NULL PRIMARY KEY"
+      },
+      {
+        "name": "next_pr_number",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "next_pr_number BIGINT NOT NULL DEFAULT 0"
+      },
+      {
+        "name": "event_sequence",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "event_sequence BIGINT NOT NULL DEFAULT 0"
+      }
+    ]
+  },
+  "user_notification": {
+    "javaRow": "com.gitnova.entity.notification.NotificationRows.NotificationRow",
+    "columns": [
+      {
+        "name": "id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY"
+      },
+      {
+        "name": "event_id",
+        "sqlType": "CHAR(36)",
+        "nullable": false,
+        "generated": false,
+        "definition": "event_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL"
+      },
+      {
+        "name": "recipient_id",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "recipient_id BIGINT NOT NULL"
+      },
+      {
+        "name": "channel",
+        "sqlType": "VARCHAR(16)",
+        "nullable": false,
+        "generated": false,
+        "definition": "channel VARCHAR(16) NOT NULL"
+      },
+      {
+        "name": "repo_id",
+        "sqlType": "BIGINT",
+        "nullable": true,
+        "generated": false,
+        "definition": "repo_id BIGINT NULL"
+      },
+      {
+        "name": "subject_type",
+        "sqlType": "VARCHAR(32)",
+        "nullable": false,
+        "generated": false,
+        "definition": "subject_type VARCHAR(32) NOT NULL"
+      },
+      {
+        "name": "subject_id",
+        "sqlType": "VARCHAR(128)",
+        "nullable": false,
+        "generated": false,
+        "definition": "subject_id VARCHAR(128) NOT NULL"
+      },
+      {
+        "name": "type",
+        "sqlType": "VARCHAR(40)",
+        "nullable": false,
+        "generated": false,
+        "definition": "type VARCHAR(40) NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": false,
+        "generated": false,
+        "definition": "created_at DATETIME(6) NOT NULL"
+      },
+      {
+        "name": "read_at",
+        "sqlType": "DATETIME(6)",
+        "nullable": true,
+        "generated": false,
+        "definition": "read_at DATETIME(6) NULL"
+      },
+      {
+        "name": "version",
+        "sqlType": "BIGINT",
+        "nullable": false,
+        "generated": false,
+        "definition": "version BIGINT NOT NULL DEFAULT 0"
+      }
+    ]
+  }
+}

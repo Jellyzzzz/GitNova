@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "requestKey",
+    "expectedWorklineId",
+    "expectedSessionVersion",
+    "targetBranchId",
+    "targetHead",
+    "changePolicy"
+  ],
+  "properties": {
+    "requestKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "expectedWorklineId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "expectedSessionVersion": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "targetBranchId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "targetHead": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "changePolicy": {
+      "enum": [
+        "REQUIRE_CLEAN",
+        "CARRY_CHANGES",
+        "DISCARD_CHANGES"
+      ]
+    },
+    "expectedTreeDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "changePolicy": {
+            "const": "DISCARD_CHANGES"
+          }
+        },
+        "required": [
+          "changePolicy"
+        ]
+      },
+      "then": {
+        "required": [
+          "expectedTreeDigest"
+        ]
+      }
+    }
+  ]
+}

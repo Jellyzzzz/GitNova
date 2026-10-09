@@ -13,5 +13,14 @@
   "previewTokens": 1024,
   "maxCaptureBytes": 33554432,
   "thinkingJson": "{}",
-  "summaryThinkingJson": "{}"
+  "summaryThinkingJson": "{}",
+  "allowedTools": [
+    "create_pull_request",
+    "edit_file",
+    "history_read",
+    "history_search",
+    "read_file",
+    "report_progress",
+    "shell"
+  ]
 }

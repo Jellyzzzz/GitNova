@@ -1,8 +1,14 @@
 {
-  "commandId": "cmd-example-001",
-  "taskId": "task-example-001",
-  "attemptId": "attempt-example-001",
-  "accepted": true,
+  "commandId": "11111111-1111-4111-8111-111111111111",
+  "requestDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "ACCEPTED",
+  "sessionId": "22222222-2222-4222-8222-222222222222",
+  "worklineId": "00000000-0000-4000-8000-000000000003",
+  "runnerEpoch": 1,
+  "taskId": "33333333-3333-4333-8333-333333333333",
+  "attemptId": "44444444-4444-4444-8444-444444444444",
+  "acceptedSequence": 41,
   "duplicate": false,
-  "executionStatus": "ACCEPTED"
+  "code": null,
+  "message": "命令已受理，不代表任务完成"
 }

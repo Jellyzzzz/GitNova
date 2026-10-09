@@ -1,8 +1,8 @@
 package com.gitnova.agent.protocol.query;
-
-public record WorkerHealth(String sessionId, long runnerEpoch, State state,
+/** Private control-plane data: never serialize this directly into the public Session response. */
+public record WorkerHealth(String sessionId, String worklineId, long runnerEpoch, State state,
  String activeTaskId, String activeAttemptId, long lastSequence, String publishedHead,
  String runtimeConfigDigest, String problemCode) {
  public enum State { BOOTING, INITIALIZING, IDLE, RUNNING, CANCELLING, FINALIZING,
- WAITING_SETTLEMENT, BLOCKED, STOPPING, STOPPED }
+ QUIESCING, AWAITING_ARCHIVE, PARKED, BLOCKED, STOPPING, STOPPED }
 }

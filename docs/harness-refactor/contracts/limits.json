@@ -1,0 +1,11 @@
+{
+  "requestBytes": 1048576,
+  "messageCharacters": 32000,
+  "messageUtf8Bytes": 131072,
+  "pageLimit": 50,
+  "notificationBatchLimit": 100,
+  "notificationRecipientsPerEvent": 500,
+  "onlineObjectGc": false,
+  "wireVersion": 2,
+  "assurance": "trusted development baseline, not arbitrary hostile multi-tenant certification"
+}

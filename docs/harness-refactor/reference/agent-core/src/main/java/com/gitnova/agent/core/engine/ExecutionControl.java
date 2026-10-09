@@ -1,11 +1,11 @@
 package com.gitnova.agent.core.engine;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.function.Supplier;
-/** Both HTTP controls and STOP decision use the same implementation/lock. */
+import com.gitnova.agent.core.model.ModelTypes;
+/** Host input and the Engine STOP decision share one implementation/lock; HTTP is an optional adapter. */
 public interface ExecutionControl {
- record Steer(String commandId, String message, String acceptedEventId) {}
+ record Steer(String inputId, ModelTypes.Message message, String acceptedEventId) {}
  void checkActive();
  void cancel(String reason);
  boolean isCancelled();

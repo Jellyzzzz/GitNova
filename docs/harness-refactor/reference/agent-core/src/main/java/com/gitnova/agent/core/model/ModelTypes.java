@@ -6,6 +6,7 @@ public final class ModelTypes {
  public enum Finish { STOP, TOOL_CALLS, LENGTH, ERROR }
  public record ToolCall(String id, String name, String argumentsJson) {}
  public record ToolDefinition(String name, String description, String parametersJson) {}
+ /** Provider-neutral message. User text is preserved exactly; execution identity is never embedded here. */
  public record Message(String role, String text, List<ToolCall> toolCalls, String toolCallId,
    String reasoningContent) {}
  public record Usage(Long inputTokens, Long outputTokens, Long totalTokens) {}

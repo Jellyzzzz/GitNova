@@ -1,9 +1,8 @@
-# 协议示意样例
+# 示例与调用层次
+`public-submit.json` 是浏览器POST `/api/repos/{r}/agent/sessions/{q}/tasks` 的body；另传`Idempotency-Key`。只含message、expectedWorklineId、expectedSessionVersion。它不是AgentCommand。
+`submit-task.json` 和 fixtures/*.json 是Server发Worker的私有命令，使用schemaVersion=2与session/workline/epoch；不能直接拿给公共Task接口。
+`merge-request.json`、`sync-carry.json`、`sync-discard.json` 是公共业务接口样例，字段按16和各Schema。
+`runtime-config.json` 是平台受信运行配置，不允许从任务body覆盖。ID/HEAD/Digest/时间都是合成测试值，生产由平台生成/验证；fixtures测试格式不代表这些身份已授权或deadline现在有效。
+`events.sse` 是v2原始私有SSE样例；公共页面必须经白名单投影。
 
-这些是合成示例，不是真实Session日志，也不是可直接向现有服务器发送的已实现API。
-
-`submit-task.json` 展示任务数据进入Worker的格式；内部ID、HEAD和deadline应由平台生成。用它做测试时，启动的假Session配置必须匹配。`accepted.json` 是受理回执，不表示Agent已经完成。
-
-`events.sse` 是一段从序号40之后开始的精简展示片段，重点是原始响应42如何被回答43和终态44引用；省略实际工具执行内容，不用于证明一次真实任务全过程。生产事件还需要按协议保留适用的命令/Task内容、时间等记录。
-
-可以用样例验证JSON编码、SSE分帧、中文、事件身份与引用解析；业务测试仍应由真实Worker产生完整轨迹。
+accepted.json、worker-health.json、task-view.json是私有响应样例，各有同名用途Schema。bootstrap-manifest.json只用于字段结构校验；其摘要是合成值，不作为可解包的真实恢复档案。events.sse同样是协议fixture，不代表真实任务通过。

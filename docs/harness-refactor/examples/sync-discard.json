@@ -1,0 +1,9 @@
+{
+  "requestKey": "sync-demo-002",
+  "expectedWorklineId": "00000000-0000-4000-8000-000000000003",
+  "expectedSessionVersion": 4,
+  "targetBranchId": 10,
+  "targetHead": "1111111111111111111111111111111111111111",
+  "changePolicy": "DISCARD_CHANGES",
+  "expectedTreeDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

@@ -1,163 +1,108 @@
-# Mapper、SQL及Service事务接口施工表
+# Mapper方法、作用域与事务施工
 
-目标包：`src/main/java/com/gitnova/mapper/agent/control`。每个接口加 `@Mapper`，多个参数逐个加 `@Param`，使用注解SQL或同名XML任选编码形式，但SQL语义不变。本表固定方法；不要让IDE自动推导列名或将旧mapper混进新事务。
+## 1. 共用约束
 
-行类型完整定义在 `reference/server-control/src/main/java/com/gitnova/entity/agent/control/ControlRows.java`；逐列字典在 [sql-field-map.md](sql-field-map.md)。手写INSERT按DDL所有NOT NULL列赋值，`createdAt/updatedAt`一次固定UTC；generated列和自增列不放INSERT。所有update检查affectedRows，0不是成功。
+列名/类型唯一来源schema-columns.json与../schema/target.sql.reference。参考POJO使用UTC LocalDateTime，公开API用Instant。SQL只放单条读取/写入，不调用HTTP/模型/MQ。所有新增方法需在真实MySQL测试确认，不把内存规格模型当SQL实现。
 
-## SessionControlMapper（步骤 10）
+锁顺序：repository → Session → Workline/Binding → PR → Branch(id升序) → Task/Attempt → Operation/Publication/Sync/Merge → counters/Outbox。同仓库业务写先锁已存在repository行；只有本地事件归档可以从Session开始，之后不获取repo锁。关系Follow只锁两user行/id升序再统计，不参与repo。消费投影只取receipt/PR或通知，不反取repo写锁。
 
-```java
-SessionRow findSession(String sessionId);
-SessionRow findByCreationKey(String key);
-SessionRow lockSession(String sessionId);
-int insertSession(SessionRow row);
-BindingRow findBinding(String sessionId, long epoch);
-BindingRow lockBinding(String sessionId, long epoch);
-int insertBinding(BindingRow row);
-int attachSandbox(String sessionId, long epoch, String operationId, String sandboxId,
-                  LocalDateTime expiresAt, long expectedVersion);
-int activate(String sessionId, long epoch, long expectedVersion);
-int setActiveTask(String sessionId, String taskId, long expectedVersion);
-int clearActiveTask(String sessionId, String taskId);
-int updatePublishedHead(String sessionId, String expectedHead, String head);
-int setLatestArchive(String sessionId, String archiveId);
-List<BindingRow> scanBindings(int limit);
-int claimLifecycle(String sessionId,long epoch,String owner,LocalDateTime until,long version);
-int recordObservedStatus(String sessionId,long epoch,String status,LocalDateTime expiresAt,
-                         String errorCode,long version);
-List<SessionRow> listOwned(long repoId,long actorId,String afterId,int limit);
-```
+`RepositoryMapper.lockForWrite(repoId)`为SELECT该repo FOR UPDATE，并返回当前可见性及授权所需身份；最终敏感授权在同事务使用当前锁定读，数据库故障不能当NONE继续。`BranchMapper.lockById(repoId,branchId)`按两个ID排序；保留已有findHead/compareAndSetHead，新增按稳定ID更新避免同名重建。
 
-`lockSession`是 `SELECT * FROM agent_session WHERE session_id=#{sessionId} FOR UPDATE`。必须在Spring事务里调用，否则锁在方法返回前已释放。`lockBinding`同时匹配epoch。
+## 2. SessionControlMapper / WorklineMapper（步骤10先写基础）
 
+| 方法 | SQL事实与必要条件 |
+|---|---|
+| findOwned/listOwned | session的repo/actor归属；不靠已失效客户端指针 |
+| lockSession(Q) | SELECT agent_session WHERE session_id=Q FOR UPDATE |
+| insertSession / insertWorkline / insertBinding | 三类独立行；L PREPARING、source_branch_id初始可空；Binding带Q/L/newEpoch |
+| reserveEpoch(Q) | Session锁内next_runner_epoch+1并返回，失败实例也不回收该数字 |
+| lockWorkline(Q,L) / lockBinding(Q,L,E) | 所有身份都校验，不能只匹配Q |
+| activateInitial / activateSynced | TX-S2/Y2，指针、workline、分支、binding、sync结果同事务 |
+| setPublishedHead(Q,L,expected,new) | 更新agent_workline.published_head/version；不写Session旧HEAD字段 |
+| setLatestRecovery(Q,L,archive) | 只接完整RECOVERY且覆盖可信，不用PROGRESS覆盖 |
+| claimLifecycle / recordObservedStatus | 条件scope+version+owner；过期不直接认为旧实例死亡 |
+| insertSync / findSyncByKey / lockSync | 唯一(Q,actor,requestKey)，比较固定请求摘要 |
+| recordSyncStage | 已完成事实后推进阶段；UNKNOWN不直接FAILED |
+
+Task受理占槽（持上述锁与权限检查后）：
 ```sql
-UPDATE agent_session SET active_task_id=#{taskId}, version=version+1, updated_at=UTC_TIMESTAMP(6)
-WHERE session_id=#{sessionId} AND version=#{expectedVersion}
- AND execution_backend='SANDBOX_AGENT' AND status='ACTIVE'
- AND workflow_state='OPEN' AND active_task_id IS NULL;
-
-UPDATE agent_session SET active_task_id=NULL, version=version+1, updated_at=UTC_TIMESTAMP(6)
-WHERE session_id=#{sessionId} AND active_task_id=#{taskId};
-
-UPDATE agent_sandbox_binding
-SET sandbox_id=#{sandboxId},status='BOOTING',expires_at=#{expiresAt},
-    version=version+1,updated_at=UTC_TIMESTAMP(6)
-WHERE session_id=#{sessionId} AND runner_epoch=#{epoch}
- AND create_operation_id=#{operationId} AND version=#{expectedVersion}
- AND sandbox_id IS NULL AND status IN ('CREATING','UNKNOWN');
+UPDATE agent_session
+SET active_task_id=#{taskId},session_version=session_version+1,updated_at=UTC_TIMESTAMP(6)
+WHERE session_id=#{sessionId} AND active_workline_id=#{worklineId}
+  AND session_version=#{expectedVersion} AND workflow_state='OPEN'
+  AND sync_operation_id IS NULL AND active_task_id IS NULL;
 ```
+注意Task事务先插Task，再占槽；占槽失败整事务回滚。幂等已有Task在版本检查前按actor+requestKey查回，不因后来版本变了重复执行。
 
-activate还要匹配current_runner_epoch并确认该binding READY。分支插入与Session ACTIVE在TX-S2同一事务。claimLifecycle只能在旧operation租约过期/为空或同owner时成立；持有者不在数据库事务里做长网络请求。create响应不明不能把新createOperationId代替旧ID。
-
-## TaskControlMapper（步骤 11）
-
-```java
-TaskRow findTask(String taskId);
-TaskRow findByIdempotency(String sessionId,String key);
-TaskRow lockTask(String taskId);
-AttemptRow findAttempt(String attemptId);
-AttemptRow lockAttempt(String attemptId);
-int insertTask(TaskRow row);
-int insertAttempt(AttemptRow row);
-int attachAttempt(String taskId,String attemptId,long attemptNumber);
-int insertCommand(CommandRow row);
-CommandRow findCommand(String commandId);
-List<CommandRow> scanPending(LocalDateTime now,int limit);
-int recordDelivery(String commandId,String state,String receiptJson,String error,
-                   LocalDateTime nextAttemptAt);
-int requestCancel(String taskId);
-int updateExecution(String taskId,String currentAttemptId,String status,String reason,
-                    String answerEventId,LocalDateTime finishedAt);
-int updateAttemptExecution(String attemptId,String status,String reason,String answerEventId,
-                           LocalDateTime finishedAt);
-int updateSettlement(String taskId,String expectedAttempt,String settlement,String publication);
-```
-
-findTask之后仍由Service核对repo/session/actor，mapper不等于授权。insertTask先置current_attempt_id=NULL，insertAttempt之后attachAttempt，避免循环FK失败。Task与Attempt状态同时更新。
-
+最终同步激活（其余参与行同事务）：
 ```sql
-SELECT * FROM agent_control_command
-WHERE status IN ('PENDING','SENDING','UNKNOWN') AND next_attempt_at<=#{now}
-ORDER BY next_attempt_at,created_at LIMIT #{limit};
-
-UPDATE agent_control_task
-SET status=#{status},terminal_reason=#{reason},answer_event_id=#{answerEventId},
-    finished_at=#{finishedAt},updated_at=UTC_TIMESTAMP(6),version=version+1
-WHERE task_id=#{taskId} AND current_attempt_id=#{currentAttemptId};
+UPDATE agent_session SET active_workline_id=#{newWorklineId},
+ current_runner_epoch=#{newEpoch},sync_operation_id=NULL,
+ session_version=session_version+1,updated_at=UTC_TIMESTAMP(6)
+WHERE session_id=#{sessionId} AND active_workline_id=#{oldWorklineId}
+ AND sync_operation_id=#{syncId} AND active_task_id IS NULL
+ AND session_version=#{transitionVersion};
 ```
+transitionVersion是取得gate后持久记录的基准（若实现沿用expected_session_version则规定gate使version+1，expected+1即此值）；gate期间其他改变Session指针的动作拒绝，不能每次重试猜当前version。
 
-scanPending不claim AgentLoop线程，只恢复离散控制意图。多副本可重复发送相同commandId，由Worker幂等接收；绝不创建第二个attempt抵消网络超时。撤销发生在SUBMIT发送前：同Session锁下将尚未发送的意图ABORTED；已经SENDING/UNKNOWN则查询/投递同attempt的CANCEL，404后仍须核对SUBMIT结果。
+## 3. TaskControlMapper / CommandDispatcher（步骤11）
 
-## EventArchiveMapper（步骤 11）
+findTask/findByIdempotency(Q,actor,key)、lockTask、insertTask、insertAttempt、attachAttempt、insertCommand、findCommand、scanPending、recordDelivery、requestCancel、updateExecution、updateAttemptExecution。POJO分别TaskRow/AttemptRow/CommandRow，不复用旧AgentTask CHECK。
 
-```java
-EventRow findByEventId(String eventId);
-EventRow findCoordinate(String sessionId,long epoch,long sequence);
-int insert(EventRow row); // 回填archiveOffset；不是INSERT IGNORE
-int advanceCursor(String sessionId,long epoch,long expectedSequence,long nextSequence);
-List<EventRow> readAfter(String sessionId,long afterOffset,int limit);
-List<EventRow> readEpoch(String sessionId,long epoch,long afterSequence,int limit);
-```
+插Task先令current_attempt_id=NULL；环境可用后插Attempt，再附着Task。新Attempt只在明确重试中创建；HTTP重发使用同commandId/attemptId。CANCEL对未发送意图ABORT；SENDING/UNKNOWN仍按相同attempt核对取消，不能因receipt404断言没执行。
 
-TX-E1先lockSession、lockBinding，再查事件与连续性。相同ID必须比较摘要，相同则无副作用返回；不同报警，不用INSERT IGNORE掩盖。seq=current+1才插入并投影；重复<=current核对，跳号不前移游标。游标update成功与投影同事务。public readAfter只接Session专属流，limit上限；返回副本在Service白名单化，不能直接serialize私有payload。
-
+终态投影更新Task条件至少taskId/currentAttemptId/worklineId；随后清Session槽必须同时匹配Q/L/currentEpoch/currentTask。旧终态可以存档，不可清新Task槽：
 ```sql
-UPDATE agent_sandbox_binding SET last_archived_sequence=#{nextSequence},
- version=version+1,updated_at=UTC_TIMESTAMP(6)
-WHERE session_id=#{sessionId} AND runner_epoch=#{epoch}
- AND last_archived_sequence=#{expectedSequence};
-SELECT * FROM agent_event_archive WHERE session_id=#{sessionId}
- AND archive_offset>#{afterOffset} ORDER BY archive_offset LIMIT #{limit};
+UPDATE agent_session SET active_task_id=NULL,session_version=session_version+1
+WHERE session_id=#{sessionId} AND active_workline_id=#{worklineId}
+ AND current_runner_epoch=#{epoch} AND active_task_id=#{taskId};
 ```
+控制命令成功只更新delivery和receipt，不把202变成COMPLETED。更新0行必须区分重复已达状态与版本/身份冲突。
 
-## DeliveryMapper（步骤 8、14）
+## 4. EventArchiveMapper / DeliveryMapper
 
-```java
-ArchiveRow findArchive(String archiveId);
-ArchiveRow findArchiveByExport(String sessionId,String exportId);
-int insertArchive(ArchiveRow row);
-PublicationRow findPublication(String publicationId);
-PublicationRow findByExport(String sessionId,String exportId);
-PublicationRow lockPublication(String publicationId);
-int insertPublication(PublicationRow row);
-int recordCandidate(String publicationId,String candidateCommit);
-int recordPublicationResult(String publicationId,String expectedStatus,String newStatus,
-                            String resultCommit,String errorCode);
-int recordSettlement(String archiveId,String outcome,String head,String commandId);
-List<PublicationRow> scanUnsettled(int limit);
-```
+`findByEventId/findCoordinate/insertEvent/advanceContinuousCursor/listAfter/findAnswer`：insert原事件、更新同Q/L/E连续sequence与Task投影在TX-E1同事务。archive_offset只作为同Session已提交序列查询；同Session归档都先锁Session，使后提交小offset不从已前移游标漏掉。未知间隙先补齐再推连续cursor。
 
-文件保存不在mapper事务内：下载到临时路径→限额/manifest/hash验证→force/原子发布不可变storage_key→insertArchive。以(sessionId,exportId)唯一找赢家并比bundle hash；同身份不同内容是错误。归档已保存但DB未成功的对象只是孤儿，不重新读活动目录。
+`insertArchive/findByExport/confirmArchive`：导出校验、下载与文件持久化在事务外；固定包身份(hash/size/scope)确认后短事务STORED。RECOVERY含state与baseline，连续事件覆盖含快照事件满足后CONFIRMED；更新Workline.latestRecoveryArchiveId。旧ACK晚到只确认对应archive，不清Task，不发布，不前移另一工作线恢复点。
 
-TX-P1固定timestamp/message/expectedHead；构造对象完成后TX-P2以Session→Publication→Branch顺序锁，检验当前HEAD，推进Branch、CommitRecord、Publication、Session.lastPublishedHead同事务。使用BranchMapper.compareAndSetHead，不从Mapper直接执行模型。recordSettlement附记与创建ACK命令同事务，ACK重试只读同记录。
+## 5. PlatformOperationMapper / Publication
 
-## PullRequestMapper（步骤 15）
+findOperation、findByToolCall(attemptId,toolCallId)、insertOperation、markProcessing、completeOperation、scanPending；publication按operationId唯一，导出按Q/exportId去重。首次受理绑定Q/L/E/Task/Attempt/toolCallId/type与规范化摘要；未知操作只能原ID核对。
 
-```java
-PullRequestRow find(long repoId,long prId);
-PullRequestRow lock(long prId);
-PullRequestRow findOpen(long repoId,String source,String target);
-List<PullRequestRow> list(long repoId,String status,long afterId,int limit);
-int insert(PullRequestRow row);
-int updateState(long prId,long expectedRevision,String state,int draft);
-CommentRow findCommentByKey(long prId,long actorId,String key);
-int insertComment(CommentRow row);
-List<CommentRow> comments(long prId,long afterId,int limit);
-MergeRow findMergeByKey(long prId,String key);
-MergeRow lockMerge(String mergeId);
-int insertMerge(MergeRow row);
-int commitMerge(String mergeId,String commit);
-int failMerge(String mergeId,String status,String errorJson);
-int markMerged(long prId,long expectedRevision,String fromHead,String commit,
-               String method,LocalDateTime at);
-```
+最终发布：repo→Q→L/Binding→Branch→原Task/Attempt→op/publication；验证原受理身份、原expectedHead及当前仓库写授权，更新branch CAS、CommitRecord、L.publishedHead、publication、operation结果、业务Outbox同事务。用户取消等待不回滚已受理Commit，不按Task终态把原目标改成当前线。sync/merge必须等未决操作明确结束。
 
-所有用户入口先RepositoryAccessService鉴权，PR必须属于path repo。草稿转换/关闭/重开使用revision CAS。已MERGED不能重开；重开可能与另一个OPEN PR撞唯一索引，应409不覆盖。评论幂等key碰撞比较body，不返回不同内容的旧评论当成功。
+对象编码/下载/哈希/祖先遍历尽量在事务外；若库里HEAD/权限变化则拒绝候选。CommitRecord按repo+sha，不按branchName过滤祖先；在线GC在本范围关闭。
 
-merge请求先固定sourceHead,targetHead,revision,actor,key,timestamp；事务外读取对象/计算三方候选；TX-R2锁关联Session→Merge意图→PR→按名称排序的两条Branch。源Agent Session未IDLE/SETTLED拒绝，目标是活跃受管Agent分支也拒绝。重新校验双HEAD/revision再CAS目标、写CommitRecord、更新PR和Merge意图；任何一项不满足整笔回滚，候选对象可不可达。
+## 6. PullRequestMapper / RepoCounterMapper
 
-## Mapper SQL怎么写到文件
+| 方法 | 约束 |
+|---|---|
+| findByCreateKey / findOpenPair | 前者是一次意图，后者是活动分支对；不同键不能突破生成列唯一约束 |
+| insertRequest / insertInitialRevision | 与PR_OPENED及number/repoSequence同事务 |
+| listVisible/detailCurrent | ACL先过滤；OPEN读当前S/T，CLOSED/MERGED读固定关闭/合并证据 |
+| insertRevisionIfAbsent | UNIQUE(pr,branch,repoSequence)，targetHeadSeen没采集可空 |
+| insertComment/findCommentByKey/updateComment | author由登录态派生；更新匹配version，普通/行锚点完整性在服务与CHECK验证 |
+| insertMutation/findMutation | close/reopen/draft回执同事务，不用旧请求重演新状态 |
+| insertMerge/findMerge/lockMerge | 固定R/S/T/time/message/actor/hash；重复sameID不同内容冲突 |
+| commitMergeResult | PR/version/HEAD均未变才target CAS+PR MERGED+line状态+操作结果+Outbox |
+| snapshotClosingHeads | 分支删除之前保留确定source/target/base；历史不依赖分支还活着 |
 
-本手册选择注解SQL，不额外建XML文件：上述签名放对应 `*Mapper.java`。SELECT短语放`@Select`；INSERT与UPDATE用Java文本块（Server Java17支持）。批量/动态条件不用字符串拼接用户输入，条件选择写成固定SQL方法；排序字段使用白名单。日期/JSON参数绑定，不把JSON正文拼入SQL。
+RepoCounterMapper在repo门闩内创建/锁定一行，分配next_pr_number、event_sequence。不要MAX()+1无锁，不把自增ID当跨事务有序提交游标。派生PR_SOURCE_UPDATED使用原repoSequence和PR scope，不调用RepoCounter。
 
-建议先写Session/Task/Event三组mapper的真实MySQL集成测试，再编排Service。测试使用事务回滚或独立测试数据库；建表迁移不能对个人唯一开发库直接试错。本包仅对DDL做静态检查，没有宣称MySQL执行成功。
+## 7. SocialMapper / Profile查询
+
+Follow：lockUsersAscending→确保统计行→lockStatsAscending→存在检查/INSERT或DELETE。**只有关系实际插入/删除1行才增减统计**。唯一冲突不等于任意DB错误可忽略。Star按repo门闩与当前授权执行相同模式；Watch按version CAS，PARTICIPATING的既有行保留version而不是删除重置。
+
+主页/收藏/关注作者仓库列表在SQL JOIN当前repository/member关系过滤后keyset分页；批量加载，不每条调用一次远程权限；不返回隐藏项目的总数。实际user/repository成员列名在H0核对，原SQL不存在的字段不能凭文档猜。
+
+## 8. DomainEventMapper / NotificationMapper
+
+Outbox认领短事务：查询PENDING或租期已过CLAIMED，用FOR UPDATE SKIP LOCKED，批量写claimToken/leaseUntil后提交；锁外发送，按eventId+claimToken更新结果。毒消息写QUARANTINED。Publisher与消费者确认分离。
+
+消费者insertReceipt与revision/notification/activity在同事务；重复hash一致直接返回既有结果。同ID不同hash隔离。回滚后独立持久化domain_event_failure，再ACK原消息；failure也写失败则不ACK。完整过程见15及business-events。
+
+NotificationMapper.setRead匹配id、recipient_id、version；先读到desired状态已相同则幂等返回，否则UPDATE version+1。缓存不是read权威，也不能让重复事件插入重新清空read_at。Batch逐项回报，不用全局MAX(id)作为已提交高水位。
+
+## 9. 实机验收门槛
+
+每种Mapper至少列一个重复、一个真实双连接竞争、一个事务中途异常。H2/SQLite/内存只能辅助，不代替MySQL生成列、NULL唯一、外键、CHECK、行锁及隔离验证。本包没有执行任何线上迁移；导入脚本不会连接DB。

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "sessionId": "22222222-2222-4222-8222-222222222222",
+  "runnerEpoch": 1,
+  "operationId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+  "taskId": "11111111-1111-1111-1111-111111111111",
+  "attemptId": "22222222-2222-2222-2222-222222222222",
+  "toolCallId": "call_sample",
+  "type": "CREATE_PULL_REQUEST",
+  "payload": {
+    "expectedSourceHead": "dddddddddddddddddddddddddddddddddddddddd",
+    "title": "修复分页边界",
+    "body": "包含回归测试。",
+    "draft": true
+  },
+  "worklineId": "00000000-0000-4000-8000-000000000003"
+}

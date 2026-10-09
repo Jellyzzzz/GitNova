@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "purpose",
+    "exportId",
+    "sessionId",
+    "worklineId",
+    "taskId",
+    "attemptId",
+    "runnerEpoch",
+    "throughSequence",
+    "baseCommit",
+    "expectedPublishedHead",
+    "executionOutcome",
+    "treeDigest",
+    "stateDigest",
+    "runtimeConfigDigest",
+    "workerImage",
+    "entries"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "purpose": {
+      "enum": [
+        "BOOTSTRAP",
+        "RECOVERY",
+        "PROGRESS"
+      ]
+    },
+    "exportId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sessionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "worklineId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "taskId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "attemptId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "runnerEpoch": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "throughSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "baseCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "expectedPublishedHead": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "executionOutcome": {
+      "type": "string"
+    },
+    "treeDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "stateDigest": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "runtimeConfigDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "workerImage": {
+      "type": "string",
+      "minLength": 1
+    },
+    "entries": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "size",
+          "sha256",
+          "kind",
+          "executable"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "kind": {
+            "enum": [
+              "TREE",
+              "STATE",
+              "BASELINE"
+            ]
+          },
+          "executable": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "purpose": {
+            "enum": [
+              "BOOTSTRAP",
+              "RECOVERY"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "stateDigest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "taskId": {
+            "type": "null"
+          },
+          "attemptId": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "purpose": {
+            "const": "PROGRESS"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "attemptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stateDigest": {
+            "type": "null"
+          },
+          "entries": {
+            "items": {
+              "properties": {
+                "kind": {
+                  "const": "TREE"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,16 +1,17 @@
 {
-  "schemaVersion": 1,
-  "commandId": "11111111-1111-4111-8111-111111111111",
-  "sessionId": "22222222-2222-4222-8222-222222222222",
-  "runnerEpoch": 1,
+  "schemaVersion": 2,
+  "commandId": "00000000-0000-4000-8000-000000000001",
+  "sessionId": "00000000-0000-4000-8000-000000000002",
+  "worklineId": "00000000-0000-4000-8000-000000000003",
+  "runnerEpoch": 4,
   "type": "SUBMIT_TASK",
-  "taskId": "33333333-3333-4333-8333-333333333333",
-  "attemptId": "44444444-4444-4444-8444-444444444444",
+  "taskId": "00000000-0000-4000-8000-000000000005",
+  "attemptId": "00000000-0000-4000-8000-000000000006",
   "payload": {
-    "mode": "CODING",
-    "message": "修复空指针；不要更改测试文件。",
-    "expectedPublishedHead": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "deadlineAt": "2099-01-01T00:00:00Z",
-    "runtimeConfigDigest": "025ae4e1a047e924acf89630f631a60ac52b2ac4fcfbda0ddc8b9006e4b7e879"
+    "message": "分析并修复分页边界；需要提交时调用显式发布工具。",
+    "expectedPublishedHead": "1111111111111111111111111111111111111111",
+    "deadlineAt": "2026-10-08T12:00:00Z",
+    "runtimeConfigDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "worklineStatus": "ACTIVE"
   }
 }

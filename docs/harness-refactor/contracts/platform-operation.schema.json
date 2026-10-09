@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "operationId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "sessionId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "runnerEpoch": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "taskId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "attemptId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "toolCallId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "type": {
+      "enum": [
+        "REPORT_PROGRESS",
+        "CREATE_PULL_REQUEST"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "worklineId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "operationId",
+    "sessionId",
+    "worklineId",
+    "runnerEpoch",
+    "taskId",
+    "attemptId",
+    "toolCallId",
+    "type",
+    "payload"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "REPORT_PROGRESS"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "exportId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "bundleSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "treeDigest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "expectedHead": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "summary": {
+                "type": "string",
+                "maxLength": 16384
+              }
+            },
+            "required": [
+              "exportId",
+              "bundleSha256",
+              "treeDigest",
+              "expectedHead",
+              "message",
+              "summary"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "CREATE_PULL_REQUEST"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "expectedSourceHead": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "body": {
+                "type": "string",
+                "maxLength": 65536
+              },
+              "draft": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "expectedSourceHead",
+              "title",
+              "body",
+              "draft"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

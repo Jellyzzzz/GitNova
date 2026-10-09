@@ -3,7 +3,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": 1
+      "const": 2
     },
     "commandId": {
       "type": "string",
@@ -24,9 +24,9 @@
         "STEER_TASK",
         "CANCEL_TASK",
         "PREVIEW_CHANGES",
-        "SEAL_SESSION",
-        "ACK_PUBLICATION",
-        "CLOSE_SESSION"
+        "CHECKPOINT_SESSION",
+        "ACK_CHECKPOINT",
+        "STOP_WORKER"
       ]
     },
     "taskId": {
@@ -53,12 +53,17 @@
     },
     "payload": {
       "type": "object"
+    },
+    "worklineId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     }
   },
   "required": [
     "schemaVersion",
     "commandId",
     "sessionId",
+    "worklineId",
     "runnerEpoch",
     "type",
     "taskId",
@@ -133,16 +138,10 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "mode": {
-                "enum": [
-                  "CODING",
-                  "REVIEW",
-                  "QA"
-                ]
-              },
               "message": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "maxLength": 32000
               },
               "expectedPublishedHead": {
                 "type": "string",
@@ -155,14 +154,21 @@
               "runtimeConfigDigest": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{64}$"
+              },
+              "worklineStatus": {
+                "enum": [
+                  "ACTIVE",
+                  "MERGED",
+                  "SOURCE_MISSING"
+                ]
               }
             },
             "required": [
-              "mode",
               "message",
               "expectedPublishedHead",
               "deadlineAt",
-              "runtimeConfigDigest"
+              "runtimeConfigDigest",
+              "worklineStatus"
             ]
           },
           "taskId": {
@@ -192,7 +198,8 @@
             "properties": {
               "message": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "maxLength": 32000
               }
             },
             "required": [
@@ -266,47 +273,6 @@
             "required": [
               "expectedPublishedHead"
             ]
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "type": {
-            "const": "SEAL_SESSION"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "payload": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "purpose": {
-                "enum": [
-                  "SUSPEND",
-                  "CLOSE",
-                  "MANUAL"
-                ]
-              },
-              "expectedActiveTaskId": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "required": [
-              "purpose",
-              "expectedActiveTaskId"
-            ]
           },
           "taskId": {
             "type": "null"
@@ -321,12 +287,52 @@
       "if": {
         "properties": {
           "type": {
-            "const": "ACK_PUBLICATION"
+            "const": "CHECKPOINT_SESSION"
           }
         }
       },
       "then": {
         "properties": {
+          "taskId": {
+            "type": "null"
+          },
+          "attemptId": {
+            "type": "null"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "purpose": {
+                "enum": [
+                  "IDLE_RECLAIM",
+                  "MAINTENANCE"
+                ]
+              }
+            },
+            "required": [
+              "purpose"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "ACK_CHECKPOINT"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "taskId": {
+            "type": "null"
+          },
+          "attemptId": {
+            "type": "null"
+          },
           "payload": {
             "type": "object",
             "additionalProperties": false,
@@ -339,36 +345,20 @@
                 "type": "string",
                 "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
               },
-              "publicationId": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "outcome": {
-                "enum": [
-                  "PUBLISHED",
-                  "NO_CHANGES",
-                  "SKIPPED",
-                  "NOT_REQUIRED"
-                ]
-              },
-              "publishedHead": {
+              "bundleSha256": {
                 "type": "string",
-                "pattern": "^[0-9a-f]{40}$"
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "coveredThrough": {
+                "type": "integer",
+                "minimum": 0
               }
             },
             "required": [
               "exportId",
               "archiveId",
-              "publicationId",
-              "outcome",
-              "publishedHead"
+              "bundleSha256",
+              "coveredThrough"
             ]
           }
         }
@@ -378,12 +368,18 @@
       "if": {
         "properties": {
           "type": {
-            "const": "CLOSE_SESSION"
+            "const": "STOP_WORKER"
           }
         }
       },
       "then": {
         "properties": {
+          "taskId": {
+            "type": "null"
+          },
+          "attemptId": {
+            "type": "null"
+          },
           "payload": {
             "type": "object",
             "additionalProperties": false,
@@ -396,12 +392,6 @@
             "required": [
               "confirmedArchiveId"
             ]
-          },
-          "taskId": {
-            "type": "null"
-          },
-          "attemptId": {
-            "type": "null"
           }
         }
       }

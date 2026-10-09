@@ -1,0 +1,257 @@
+{
+  "createdAt": "2026-10-06T15:04:55.900015+00:00",
+  "productTestsExecuted": false,
+  "groups": [
+    {
+      "name": "结构文件解析",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.013,
+      "detail": {
+        ".json": 39,
+        ".xml": 6,
+        ".toml": 3
+      }
+    },
+    {
+      "name": "唯一手册/原施工顺序",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.004,
+      "detail": "21 chapters, Agent steps 0–18, one reference/DDL"
+    },
+    {
+      "name": "JSON Schema合法性",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.083,
+      "detail": [
+        "command.schema.json",
+        "event.schema.json",
+        "manifest.schema.json",
+        "merge-request.schema.json",
+        "platform-operation.schema.json",
+        "platform-result.schema.json",
+        "public-task.schema.json",
+        "receipt.schema.json",
+        "sync-request.schema.json",
+        "task-view.schema.json",
+        "worker-health.schema.json"
+      ]
+    },
+    {
+      "name": "样例与SSE正例",
+      "kind": "CONTRACT",
+      "status": "PASS",
+      "seconds": 0.004,
+      "detail": {
+        "json_fixtures": 19,
+        "sse_events": 4
+      }
+    },
+    {
+      "name": "协议负例拒绝",
+      "kind": "CONTRACT",
+      "status": "PASS",
+      "seconds": 0.004,
+      "detail": {
+        "rejected_cases": 22
+      }
+    },
+    {
+      "name": "Java/Schema字段枚举一致",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.003,
+      "detail": "8 outer/result records, 8 payload records, 2 enums"
+    },
+    {
+      "name": "全链作用域参考/部署",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.002,
+      "detail": 6
+    },
+    {
+      "name": "唯一SQL目标检查",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.005,
+      "detail": {
+        "new_tables": 26,
+        "existing_session_increment": true,
+        "real_mysql_executed": false
+      }
+    },
+    {
+      "name": "SQL/Java行映射",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.005,
+      "detail": {
+        "tables": 27,
+        "field_mappings": 360
+      }
+    },
+    {
+      "name": "数据库scope约束检查",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.002,
+      "detail": "scope columns + composite binding/task constraints (static only)"
+    },
+    {
+      "name": "唯一文件地图/参考覆盖",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.004,
+      "detail": 144
+    },
+    {
+      "name": "验收来源与未执行标记",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.002,
+      "detail": {
+        "product_cases": 285,
+        "product_pass_count": 0,
+        "note": "script never marks a case PASS"
+      }
+    },
+    {
+      "name": "工时预算与估计加总",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.0,
+      "detail": {
+        "budget": [
+          42,
+          60
+        ],
+        "planning_estimate": [
+          104,
+          166
+        ],
+        "not_a_promise": true
+      }
+    },
+    {
+      "name": "JDK17/21参考编译",
+      "kind": "REFERENCE",
+      "status": "PASS",
+      "seconds": 3.86,
+      "detail": {
+        "protocol": 12,
+        "core": 17,
+        "worker_ports": 2,
+        "server_types": 7,
+        "total": 38
+      }
+    },
+    {
+      "name": "作用域参考运行",
+      "kind": "REFERENCE",
+      "status": "PASS",
+      "seconds": 1.049,
+      "detail": "ScopeProbe PASS: Q/L/epoch checks (reference only)\n"
+    },
+    {
+      "name": "运行配置参考运行",
+      "kind": "REFERENCE",
+      "status": "PASS",
+      "seconds": 0.978,
+      "detail": "ConfigProbe PASS: immutable sorted tools/empty/duplicate/unknown\n"
+    },
+    {
+      "name": "有限规格模型实验",
+      "kind": "SPEC_MODEL",
+      "status": "PASS",
+      "seconds": 1.292,
+      "detail": "test_carry_baseline_and_new_draft (test_spec_model.ModelTests.test_carry_baseline_and_new_draft) ... ok\ntest_carry_conflict_preserves (test_spec_model.ModelTests.test_carry_conflict_preserves) ... ok\ntest_clean_rejects_no_replacement (test_spec_model.ModelTests.test_clean_rejects_no_replacement) ... ok\ntest_discard_requires_specific_old_tree (test_spec_model.ModelTests.test_discard_requires_specific_old_tree) ... ok\ntest_failed_epoch_not_reused (test_spec_model.ModelTests.test_failed_epoch_not_reused) ... ok\ntest_file_merge_truth_table (test_spec_model.ModelTests.test_file_merge_truth_table) ... ok\ntest_merge_dirty_keeps_session_tree (test_spec_model.ModelTests.test_merge_dirty_keeps_session_tree) ... ok\ntest_merge_gate_interleavings (test_spec_model.ModelTests.test_merge_gate_interleavings) ... ok\ntest_mutation_retry_does_not_reclose (test_spec_model.ModelTests.test_mutation_retry_does_not_reclose) ... ok\ntest_old_epoch_cannot_change_new (test_spec_model.ModelTests.test_old_epoch_cannot_change_new) ... ok\ntest_old_read_cas (test_spec_model.ModelTests.test_old_read_cas) ... ok\ntest_receipt_projection_rollback_model (test_spec_model.ModelTests.test_receipt_projection_rollback_model) ... ok\n\n----------------------------------------------------------------------\nRan 12 tests in 0.001s\n\nOK\n"
+    },
+    {
+      "name": "本机HTTP/SSE探针",
+      "kind": "PROBE",
+      "status": "PASS",
+      "seconds": 2.07,
+      "detail": "PASS: loopback HTTP, opaque task text, route prefix/header, duplicate/conflict, fragmented UTF-8 SSE\n"
+    },
+    {
+      "name": "Linux启动器探针",
+      "kind": "PROBE",
+      "status": "PASS",
+      "seconds": 8.039,
+      "detail": "{\"status\": \"PASS\", \"cases\": [\"zero\", \"nonzero\", \"dual\", \"cancel_regular_child_group\"], \"limit\": \"launcher only; no Docker/cgroup/hostile escape guarantee\"}\n"
+    },
+    {
+      "name": "安全文档导入演练",
+      "kind": "PROBE",
+      "status": "PASS",
+      "seconds": 2.468,
+      "detail": "dry-run, external backup, replacement, source unchanged"
+    },
+    {
+      "name": "Markdown链接/代码围栏",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.016,
+      "detail": {
+        "checked_local_links": 200
+      }
+    },
+    {
+      "name": "参考依赖与FQCN",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.004,
+      "detail": {
+        "fqcn_count": 38,
+        "check_scope": "reference imports only, not user source architecture"
+      }
+    },
+    {
+      "name": "施工提示存在性",
+      "kind": "READABILITY_STATIC",
+      "status": "PASS",
+      "seconds": 0.001,
+      "detail": "19 step guides + 4 detailed business chapters (presence checks; no reader blind test)"
+    },
+    {
+      "name": "废弃规则扫描",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.011,
+      "detail": "explicit superseded rules absent; semantic review still needed beyond keyword scan"
+    },
+    {
+      "name": "输入来源记录",
+      "kind": "STATIC",
+      "status": "PASS",
+      "seconds": 0.0,
+      "detail": {
+        "input_manifest_records": 153,
+        "note": "hash provenance recorded; report does not re-fetch external repos"
+      }
+    },
+    {
+      "name": "实机工具可用性记录",
+      "kind": "ENVIRONMENT",
+      "status": "PASS",
+      "seconds": 0.001,
+      "detail": {
+        "java": "/usr/bin/java",
+        "javac": "/usr/bin/javac",
+        "mvn": null,
+        "docker": null,
+        "mysql": null
+      }
+    }
+  ],
+  "passed": 26,
+  "failed": 0,
+  "warnings": [
+    "No MySQL/RabbitMQ/OpenSandbox/user-source/real-model integration executed",
+    "Specification model != production implementation",
+    "No low-effort-model or independent-reader blind test"
+  ]
+}

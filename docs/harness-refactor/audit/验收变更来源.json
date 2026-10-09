@@ -1,0 +1,32 @@
+[
+  {
+    "id": "AG-R12",
+    "previous": "Agent PR已MERGED后继续旧Session / 拒绝新Coding Task，提示从目标最新HEAD新建 / 15",
+    "current": "Agent PR合并后同Session仍可发消息，旧Workline不可report_progress；显式sync到新线后再次发布。"
+  },
+  {
+    "id": "AG-CL11",
+    "previous": "受管PR未发布改动 / W≠S明确拒绝，不隐式提交或加载覆盖 / NOT_RUN",
+    "current": "W含未发布草稿时merge已发布S仍可成功；W原样保留，之后REQUIRE_CLEAN同步拒绝。"
+  },
+  {
+    "id": "AG-CL12",
+    "previous": "合并维护gate / 准备期间新Task/平台操作/回收无法并发占用 / NOT_RUN",
+    "current": "sync持久gate阻止新Task/新平台操作/普通回收竞争；merge不使用跨网络维护gate，最终事务重新检查资格。"
+  },
+  {
+    "id": "AG-CL13",
+    "previous": "合并准备响应丢失 / 同mergeId核对，COMMITTED不再执行副作用 / NOT_RUN",
+    "current": "合并结果响应丢失按同mergeId核对，SUCCEEDED返回原M不重复副作用。"
+  },
+  {
+    "id": "AG-CL15",
+    "previous": "准备失败清理 / 只释放原owner/version；保留RECOVERY，无丢失dirty树 / NOT_RUN",
+    "current": "同步准备失败只清原syncId gate，保留RECOVERY，旧PARKED绑定不伪装IDLE。"
+  },
+  {
+    "id": "AG-CL16",
+    "previous": "后续新基线 / 新工作固定M或H；同创建请求重试不重新读取main / NOT_RUN",
+    "current": "明确同步选择固定H，重试不追踪main；同Session新Workline，不新建聊天冒充连续。"
+  }
+]

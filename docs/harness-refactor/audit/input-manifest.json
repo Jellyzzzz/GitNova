@@ -1,0 +1,920 @@
+[
+  {
+    "input": "agent",
+    "path": "00_从这里开始.md",
+    "bytes": 7987,
+    "sha256": "4420534ebbc64a7e8d0f3132918df46b43879df5a69e24d3575dcd87660a2944"
+  },
+  {
+    "input": "agent",
+    "path": "01_总体架构与通信契约.md",
+    "bytes": 50791,
+    "sha256": "abdbf67023cc0fda2b8b6252c3d311c82780e84238fdf6da24083621a9587812"
+  },
+  {
+    "input": "agent",
+    "path": "02_逐步手写开发与旧链路退役.md",
+    "bytes": 147098,
+    "sha256": "9475a63204bb44f507281cac192cee4432f53d28abc77be957ac24e76b2cf9f9"
+  },
+  {
+    "input": "agent",
+    "path": "03_验收矩阵与资料依据.md",
+    "bytes": 32771,
+    "sha256": "6c023b48342e8147770166bfc65b17e74b34a2705b8ef336faf14adba7fdc5d8"
+  },
+  {
+    "input": "agent",
+    "path": "04_源码迁移与包文件地图.md",
+    "bytes": 37514,
+    "sha256": "bfeb9ab7ebbb8ce743447d311aea84e68f558345647b65d494aea2d31bdef7d9"
+  },
+  {
+    "input": "agent",
+    "path": "05_接口与数据库契约.md",
+    "bytes": 31575,
+    "sha256": "26010ea49d55581fc7a5caad7b63057833a994f54760006be5b5ad97800ee125"
+  },
+  {
+    "input": "agent",
+    "path": "06_OpenSandbox安装接线与联调.md",
+    "bytes": 34988,
+    "sha256": "e4a0c1b4adfe2cda9ac3958061eecda96227ff688979b41f63813f69b881317b"
+  },
+  {
+    "input": "agent",
+    "path": "07_补全与再次自检报告.md",
+    "bytes": 4644,
+    "sha256": "9978205ccb61efcb7a589a882895f1d59fc863367b778e32cede37c47f361426"
+  },
+  {
+    "input": "agent",
+    "path": "08_显式发布与透明回收施工单.md",
+    "bytes": 15346,
+    "sha256": "e0b0fab881e622675ef6bc44de0bbc0b8b7f19a4b21ff70298e59a4a0ab8b357"
+  },
+  {
+    "input": "agent",
+    "path": "09_文档修正与开发导航.md",
+    "bytes": 26598,
+    "sha256": "47809cd52026592baae1332fbff824bab0aad4b0f868745a0965e2a83d729a4d"
+  },
+  {
+    "input": "agent",
+    "path": "10_OneDev与Gitea代码阅读导航.md",
+    "bytes": 17607,
+    "sha256": "e216e3594dea13650f653f2dbd876efe73347ea9ebe18c746871ab25318e0b37"
+  },
+  {
+    "input": "agent",
+    "path": "SHA256SUMS.txt",
+    "bytes": 13111,
+    "sha256": "57ddae0c6d08c264aaf1a660a13800334d1fe082621fcba888259ac35360d4b7"
+  },
+  {
+    "input": "agent",
+    "path": "audit/before-latest-logic.json",
+    "bytes": 11153,
+    "sha256": "d8210634cd6cde82360b24b391b761a07b06a6e6f60c671de8a7e30c073625a7"
+  },
+  {
+    "input": "agent",
+    "path": "audit/closure-change-manifest.json",
+    "bytes": 2490,
+    "sha256": "f58013ef35d9f4a3fcde220cbe9c06a1550f6bdc26644329d701723614670de2"
+  },
+  {
+    "input": "agent",
+    "path": "audit/closure-check.json",
+    "bytes": 1303,
+    "sha256": "5cdaa9e45500b40f913a4eafe934d5e8e47f7cd14952429d0c747bdda12dfa5a"
+  },
+  {
+    "input": "agent",
+    "path": "audit/closure-first-check.json",
+    "bytes": 1312,
+    "sha256": "b1fae71c090916e829ace29a7ecf465c647bc0d69742d4474cc5ef9c8b54fa4b"
+  },
+  {
+    "input": "agent",
+    "path": "audit/closure-input.json",
+    "bytes": 19462,
+    "sha256": "cd95f3990c0d7d19b6967459306c4a5434b61228653d11cde40d11a76d459b19"
+  },
+  {
+    "input": "agent",
+    "path": "audit/closure-summary.json",
+    "bytes": 371,
+    "sha256": "f6d24d70b7e103911658a8320b6e107f302c52992ea408244f86422e5294bf03"
+  },
+  {
+    "input": "agent",
+    "path": "audit/dual-host-changes.json",
+    "bytes": 1716,
+    "sha256": "571dbe87593ac24c9fa927458a07eeb30dd3ff227901e27f1c32cb4faa440283"
+  },
+  {
+    "input": "agent",
+    "path": "audit/dual-host-check.json",
+    "bytes": 1050,
+    "sha256": "2a80429869cbe717540c682f0efedf009d47171e364999163f674f08477bf7fe"
+  },
+  {
+    "input": "agent",
+    "path": "audit/history/07_本轮之前报告.txt",
+    "bytes": 9200,
+    "sha256": "fa4fa2744acb777bf85d388385a5930b58c3eb4379285b82b7d7a30037aaccae"
+  },
+  {
+    "input": "agent",
+    "path": "audit/history/首次本轮前_dual-host-check.json",
+    "bytes": 1050,
+    "sha256": "02ca518bfa11894574039164ed70b9381d96a3af6877790fd0e1376d135f454a"
+  },
+  {
+    "input": "agent",
+    "path": "audit/history/首次本轮前_latest-logic-check.json",
+    "bytes": 1298,
+    "sha256": "07461f7cd1c08f70c93743de53227027536ac2d14c4ed362f2d873aaac5ea54a"
+  },
+  {
+    "input": "agent",
+    "path": "audit/history/首次本轮前_self-check.json",
+    "bytes": 2481,
+    "sha256": "6aa54fae2c605e877ca9175e0244e1d0d9021facfaf61c33569b5050e2086c4b"
+  },
+  {
+    "input": "agent",
+    "path": "audit/latest-change-manifest.json",
+    "bytes": 12176,
+    "sha256": "b3ce2cff96a4075d9cfc2df618bb406b0c96066aed0e530559af6ecf0df0de9b"
+  },
+  {
+    "input": "agent",
+    "path": "audit/latest-logic-check.json",
+    "bytes": 1298,
+    "sha256": "ca1e47341cc694d8087d1eda17e292747decc5a611ca02937c8e6c0ab45a6bc6"
+  },
+  {
+    "input": "agent",
+    "path": "audit/latest-logic-first-check.json",
+    "bytes": 1143,
+    "sha256": "7718f2b8e65393b7feca262b937ffaa4694bee3118221dcf65e6c21b2b89c7a7"
+  },
+  {
+    "input": "agent",
+    "path": "audit/repository-read-manifest.json",
+    "bytes": 6561,
+    "sha256": "69ec5f1be5d7b7e8db85e9db412517fab7bbec5a070b7f9269c24975f3eebd83"
+  },
+  {
+    "input": "agent",
+    "path": "audit/self-check-before-dual-host.json",
+    "bytes": 2481,
+    "sha256": "33f16363bf2ecebd32610d0d1ec0796e5b355598987294831db0aa968f19e3b6"
+  },
+  {
+    "input": "agent",
+    "path": "audit/self-check.json",
+    "bytes": 2481,
+    "sha256": "f49d114cd7dc6ecbc7480ba7ea4c56d7bfd1ab4c517280d85395e57292ca55b8"
+  },
+  {
+    "input": "agent",
+    "path": "audit/上一轮双机记录/07_补全与再次自检报告.txt",
+    "bytes": 5261,
+    "sha256": "853e6529620a590551413ca4e369b842e696315e9d33a8e5c889497dbe9fb34a"
+  },
+  {
+    "input": "agent",
+    "path": "audit/上一轮双机记录/dual-host-check.json",
+    "bytes": 1050,
+    "sha256": "a4934992510c85c4e5a5da34c7b0f1a3c2f02d2c7b020e606e3584b9ee0c994a"
+  },
+  {
+    "input": "agent",
+    "path": "audit/上一轮双机记录/self-check.json",
+    "bytes": 2481,
+    "sha256": "da70f021ce02e67ef9039a5b71ad2da9249c61936510f133155875fca077b577"
+  },
+  {
+    "input": "agent",
+    "path": "audit/补全自检原报告.md",
+    "bytes": 8303,
+    "sha256": "f5062bacb6e06fa109f3ef157b8b9ad5596f4c3376383777b55c71327bbfa277"
+  },
+  {
+    "input": "agent",
+    "path": "changes/02_相对用户上传.diff",
+    "bytes": 30292,
+    "sha256": "269375c14558f09aa9fe99557c2773fdd67608fbc55a5eb294a64829e98d21c8"
+  },
+  {
+    "input": "agent",
+    "path": "contracts/command.schema.json",
+    "bytes": 8969,
+    "sha256": "1bd97d9a8959da91b095cccad0ba01f298bad13326d96b2e87b88b4adfe79400"
+  },
+  {
+    "input": "agent",
+    "path": "contracts/component-methods.md",
+    "bytes": 17043,
+    "sha256": "dc9bbacaf53b73b51899ae7859540af33ae9cd51f304538d87b6a343e48b607d"
+  },
+  {
+    "input": "agent",
+    "path": "contracts/existing-edits.json",
+    "bytes": 1591,
+    "sha256": "9dc8890e27ce2b65e54d2ca0027fad4b98a4d132c64c2bfe36343a719388ff50"
+  },
+  {
+    "input": "agent",
+    "path": "contracts/file-plan.json",
+    "bytes": 63992,
+    "sha256": "7137f8cbf03dfa9fea09532740f1bdb6cf82918247ed949fb3ebb5fb64de32ba"
+  },
+  {
+    "input": "agent",
+    "path": "contracts/mapper-contracts.md",
+    "bytes": 13838,
+    "sha256": "a1cdbd347e9e8f26319c039847b29b01be9ba6e40545d9cc07b36987e2fdbb61"
+  },
+  {
+    "input": "agent",
+    "path": "contracts/migration-map.csv",
+    "bytes": 63958,
+    "sha256": "b3e884912b287b3105b325488a6d29d543c5a88d491dcc20dc6327c3cb290dd6"
+  },
+  {
+    "input": "agent",
+    "path": "contracts/old-source-paths.json",
+    "bytes": 13252,
+    "sha256": "f1f71b2499a6e31ea5a369470dffd038153d315ee4344c7b864ce72dda14a3d9"
+  },
+  {
+    "input": "agent",
+    "path": "contracts/platform-operation.schema.json",
+    "bytes": 3534,
+    "sha256": "85670eee6ebe9dbdc4ba0436ae73ee000f6c9f6cc33bda7c84a5a1fb9e269e95"
+  },
+  {
+    "input": "agent",
+    "path": "contracts/sql-field-map.md",
+    "bytes": 12087,
+    "sha256": "52652042f35a1b1103c5962aae3dda469952301fb8edfa8752aaad3474ac0727"
+  },
+  {
+    "input": "agent",
+    "path": "deploy/agent-core.pom.xml",
+    "bytes": 1114,
+    "sha256": "ec2e0855e76d3e51539a8fda2a6a729d66531c43d73a6c19c872e8fea922ca13"
+  },
+  {
+    "input": "agent",
+    "path": "deploy/agent-parent.pom.xml",
+    "bytes": 1537,
+    "sha256": "bf9ec684e3a9ca402031bd9bedf368949201730ba1cb41ac70a9f4a79a34ede6"
+  },
+  {
+    "input": "agent",
+    "path": "deploy/agent-protocol.pom.xml",
+    "bytes": 753,
+    "sha256": "daf4002d328f66412e785e75dfc16980b3c5b9a0e2b628f7255fcf043e031c4c"
+  },
+  {
+    "input": "agent",
+    "path": "deploy/agent-worker.pom.xml",
+    "bytes": 1881,
+    "sha256": "170f24ecdab4ec77a812d70384ffdb0bed62b4b2ff6ab3229227d29f45b8adae"
+  },
+  {
+    "input": "agent",
+    "path": "deploy/agent.Dockerfile",
+    "bytes": 1130,
+    "sha256": "4cb10146505299712e9bd8f8e4bed64556125d7841a6d7ebab816932e87d3fe5"
+  },
+  {
+    "input": "agent",
+    "path": "deploy/opensandbox.example.toml",
+    "bytes": 750,
+    "sha256": "6e477407b2b842b4ed70d04cb841ed9c078bb0a4f4c8518fa44624ef3f126d94"
+  },
+  {
+    "input": "agent",
+    "path": "deploy/opensandbox.linux.example.toml",
+    "bytes": 839,
+    "sha256": "4bba3df343b49387af1a12835232765bb82110c0fd8a3f26301f50929fd348d1"
+  },
+  {
+    "input": "agent",
+    "path": "deploy/opensandbox.windows-wsl.example.toml",
+    "bytes": 1026,
+    "sha256": "8ea9b4986b542582aa0b3e464903207da8e506f2f5454c93f3ac299cc3cc8e1a"
+  },
+  {
+    "input": "agent",
+    "path": "deploy/process-launch.py",
+    "bytes": 1134,
+    "sha256": "d33dce499711fc2d73736830e4e7db190cd9e14561858265e4b61dc4a265be03"
+  },
+  {
+    "input": "agent",
+    "path": "deploy/server-dependencies.xml",
+    "bytes": 658,
+    "sha256": "3803809bba19b6ae5829123d54ac3301bf7bd4b59fa7076d6ed819b7584cd62e"
+  },
+  {
+    "input": "agent",
+    "path": "deploy/windows/.wslconfig.example",
+    "bytes": 425,
+    "sha256": "4d59796e46aab8863e02ef5567896b42580255ac52df39d34527ed29166fb4ff"
+  },
+  {
+    "input": "agent",
+    "path": "deploy/worker-entrypoint.sh",
+    "bytes": 737,
+    "sha256": "8a06ce179a4b7a269e042d6088b1f73379c4ab5962b0a715683b890a45c55afd"
+  },
+  {
+    "input": "agent",
+    "path": "examples/README.md",
+    "bytes": 957,
+    "sha256": "b821af82b01d323b96132191c23013c14d62ab466b5ce03eba4c542c2628cd45"
+  },
+  {
+    "input": "agent",
+    "path": "examples/accepted.json",
+    "bytes": 182,
+    "sha256": "5f8698829183b16a37c9fb2d840847e1e0c0cba62aeecbf296a31a544ee26e19"
+  },
+  {
+    "input": "agent",
+    "path": "examples/events.sse",
+    "bytes": 1378,
+    "sha256": "790de3e5ee554442fac4032190c95342cd310f533d60ea1fbe68fb68985df353"
+  },
+  {
+    "input": "agent",
+    "path": "examples/runtime-config.json",
+    "bytes": 567,
+    "sha256": "ad1e54b15a59bd0a0e2e0296cc2b73b3287b31549257a95a0f1fee6e52f4740a"
+  },
+  {
+    "input": "agent",
+    "path": "examples/submit-task.json",
+    "bytes": 580,
+    "sha256": "daf44afe553fcbac4736171bc786feb66ba0aff32d1a96ab313b6acffbf98e68"
+  },
+  {
+    "input": "agent",
+    "path": "fixtures/ack_checkpoint.json",
+    "bytes": 468,
+    "sha256": "7e97c693455988ed3eaaae83a245397714c5ef90b9cd60d099203772cd11448e"
+  },
+  {
+    "input": "agent",
+    "path": "fixtures/cancel_task.json",
+    "bytes": 338,
+    "sha256": "9bb860a5f4872012dde7a7f9ab9cbb360a3fcf9a15648dffaa05542d2f36109b"
+  },
+  {
+    "input": "agent",
+    "path": "fixtures/checkpoint_session.json",
+    "bytes": 276,
+    "sha256": "f1cb9b8b0de45139444a44b32244c6cde648516fba89d23a068de7aabc267ffa"
+  },
+  {
+    "input": "agent",
+    "path": "fixtures/initialize.json",
+    "bytes": 609,
+    "sha256": "8f0438c54197aa907e61a22b9042d754ba42ffa27106a9ae5b24f34482d17a68"
+  },
+  {
+    "input": "agent",
+    "path": "fixtures/preview_changes.json",
+    "bytes": 383,
+    "sha256": "aa60dfc27dfbcde8479d55006e2a80fdb8850f03210c2cb0c6059486bb7bc1df"
+  },
+  {
+    "input": "agent",
+    "path": "fixtures/steer_task.json",
+    "bytes": 393,
+    "sha256": "a3bb52fd24ddd9ad814add1110b6343eb3964e7972ac034634eced149fa67b95"
+  },
+  {
+    "input": "agent",
+    "path": "fixtures/stop_worker.json",
+    "bytes": 304,
+    "sha256": "25f9242be780f95312c4f57bcf941c4581eb939d9233e29d6e5fc906f18705fa"
+  },
+  {
+    "input": "agent",
+    "path": "fixtures/submit_task.json",
+    "bytes": 604,
+    "sha256": "74071f3913eef6b35c32b361c38b8ce18efb93225a604006a0b15b27f091e114"
+  },
+  {
+    "input": "agent",
+    "path": "fixtures-platform/create_pull_request.json",
+    "bytes": 508,
+    "sha256": "05d555f5a4b5e16d455adc3089ed98cf78c797602018984fced80f1f36142bd9"
+  },
+  {
+    "input": "agent",
+    "path": "fixtures-platform/report_progress.json",
+    "bytes": 723,
+    "sha256": "1f22963c7fd08604011a0557dc9c361f40ab32841cb485c9dc45aa72a21fbaf2"
+  },
+  {
+    "input": "agent",
+    "path": "probes/TransportProbe.java",
+    "bytes": 5859,
+    "sha256": "b77bddfcf06b14b5bb8c0d16f9f55ca023a2eb1000254250051e58b4d8c7d029"
+  },
+  {
+    "input": "agent",
+    "path": "probes/opensandbox/pom.xml",
+    "bytes": 968,
+    "sha256": "9a30602cfcc42741493cd3fc5dac1abbd414cde0adba9110f11c306d1517a77c"
+  },
+  {
+    "input": "agent",
+    "path": "probes/opensandbox/src/main/java/OpenSandboxProbe.java",
+    "bytes": 9546,
+    "sha256": "ecfd38f47c88a3603e6afc3b9f283ca46c8bbf100bd7b21f36f71c1809d43048"
+  },
+  {
+    "input": "agent",
+    "path": "reference/README.md",
+    "bytes": 1032,
+    "sha256": "490cf21d24728df712da1e25013dbeabf41363c7ddf266eacd2d70e80cf2b923"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/config/RuntimeConfig.java",
+    "bytes": 1825,
+    "sha256": "db933dec35068fb39f3e8a00f8273180862f23a8df46cf4657f38cc00c3ca459"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/context/ContextCoordinator.java",
+    "bytes": 383,
+    "sha256": "2d5afee61605e74e19b5b2182e429dd27ef802c2971fa9046f1e729397c743d9"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/context/ContextTypes.java",
+    "bytes": 610,
+    "sha256": "228d1bb84089b4c827ee2b50ed85f265a89587bed0169d2c48baa4862dfb85a2"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/AgentEngine.java",
+    "bytes": 159,
+    "sha256": "8a024b4c879bad9fb12b2f6df29ad43928e9c1433c6df8f3a4b957ec3c8d3995"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/AgentOutcome.java",
+    "bytes": 289,
+    "sha256": "f051ee78ea94a078b4e2660c5e23869002dba0d250dd52ee13737cc75b2ca4e2"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/ExecutionControl.java",
+    "bytes": 736,
+    "sha256": "431a0459a9f150caf64949a6bbb3dd6436fe5c50ed6aa4eb86604a91a758c500"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/SessionRuntime.java",
+    "bytes": 305,
+    "sha256": "c5b3ed70d34d02b969dec636851e80c4eae9e458b6d211e89f5195f37e85fb00"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/engine/TaskInput.java",
+    "bytes": 229,
+    "sha256": "ff4f8741859cd8161cea88cebf8621c1ed8f1ba6da895348a1c73cc8581f416a"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/history/ResultStore.java",
+    "bytes": 507,
+    "sha256": "07de7d3ea8fbeac520616e02d5adbd29b2ace9334b5a90fd806d0cc1c37a00cf"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/history/SessionLog.java",
+    "bytes": 801,
+    "sha256": "f8025e3059c1be932f110172269835e6ead358cee9387037b7ba887cf380653f"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/model/ModelGateway.java",
+    "bytes": 213,
+    "sha256": "50bd9dbd537dd4d66bed4b9e6aa057d06de84bdf147808646b9abec77b6a4b89"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/model/ModelTypes.java",
+    "bytes": 848,
+    "sha256": "6377a750852fb90baced782438a1e91cad7a0f3bb758c695a6b10dbf2984f506"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/platform/PlatformCapabilities.java",
+    "bytes": 610,
+    "sha256": "ce0f6fa1c7dd81308156583cec88320f8bbff2140b638f7cc504fbe60bf66383"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/process/ProcessSupervisor.java",
+    "bytes": 1118,
+    "sha256": "a98901df565ab62194337cea1b8baac84526136cbc955d68c1235bef810f6ebc"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/tool/AgentTool.java",
+    "bytes": 234,
+    "sha256": "f5898e0592df92c13b4ae46ee5796d732cdd52fd06c4ae35736b849fc5d27411"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/tool/ToolRuntime.java",
+    "bytes": 1452,
+    "sha256": "8793ab421bea19ef6f0925379b3b502c180611202771f7049b36b8e329af4733"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-core/src/main/java/com/gitnova/agent/core/tool/ToolTypes.java",
+    "bytes": 589,
+    "sha256": "58037e4107918351ce2ad2d33c90ec4e9c612d1ca669197daa2efd6f8e6b08a1"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/AgentCommand.java",
+    "bytes": 1290,
+    "sha256": "d3d2d8eeda8f0504a20915df810d291864ff49b268a7f711fc60833a045eee3b"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/CommandReceipt.java",
+    "bytes": 332,
+    "sha256": "34ad7724819120039e07f30c169812430f59095831c2209ee259cd06cc54691d"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/command/CommandType.java",
+    "bytes": 189,
+    "sha256": "2e449d3553d77d1f6816ad250875c9d566b29aab8fc4a10561e3df2630f8cb38"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/event/AgentEvent.java",
+    "bytes": 405,
+    "sha256": "e913e0cf444927d9c95672b79a87adf82a81f726b414d38baff38548a0d591d7"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/event/EventType.java",
+    "bytes": 495,
+    "sha256": "887727e5219599dd751d5636ee63b4996c33c02b21ea243f9000c603e9802da7"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/platform/PlatformOperation.java",
+    "bytes": 1161,
+    "sha256": "34d3356d902a66381bea582b90e177173ecbaa17a0fef0026569bec5fcc73ecd"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/ApiProblem.java",
+    "bytes": 137,
+    "sha256": "e0efbcf7a989a4bfae3ac80651ae2586b47e3daafe0b55b4b93230845f7e1e70"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/TaskView.java",
+    "bytes": 653,
+    "sha256": "96199a1633a389a89627c6f4ed8e583913fc56f3d87aa0c9884040b55d3b6360"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/query/WorkerHealth.java",
+    "bytes": 507,
+    "sha256": "dac996a8828f73c3b81f3ca4a56a9d700ee92437a12c851cf2fd09f58227b269"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/snapshot/ExportManifest.java",
+    "bytes": 719,
+    "sha256": "05b4dbdf80f8dc3f26c79adcd0651fb562441bb694e151458f8d7b54f8bb734d"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-protocol/src/main/java/com/gitnova/agent/protocol/transport/WorkerEndpoint.java",
+    "bytes": 267,
+    "sha256": "e605a14a52038a6691dc5852f8ec72388997d11c462ad0bf88d2e9087c9e6fbd"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-worker/src/main/java/com/gitnova/agent/worker/control/TaskFinalizer.java",
+    "bytes": 324,
+    "sha256": "d438afbfb23e0f7a290759d41db44fd710b76ba7cf9e9197d7e4d263f1647573"
+  },
+  {
+    "input": "agent",
+    "path": "reference/agent-worker/src/main/java/com/gitnova/agent/worker/control/WorkerResources.java",
+    "bytes": 908,
+    "sha256": "2f8a9d6ba81d14a310a8aa9b3e060be297195eaab7d0dcaa05b6f63e7b94488b"
+  },
+  {
+    "input": "agent",
+    "path": "reference/server-control/src/main/java/com/gitnova/entity/agent/control/ControlRows.java",
+    "bytes": 5040,
+    "sha256": "3a4c583f0db2869e633a36e7d4e188398cf9738b8822aaa8b2c90e4fa9e6cd28"
+  },
+  {
+    "input": "agent",
+    "path": "reference/server-control/src/main/java/com/gitnova/entity/pullrequest/PullRequestRows.java",
+    "bytes": 1607,
+    "sha256": "28e69e3c787d5d3b59feb72452cf18f01f41144ce3f41418c72b07d7c2cabd45"
+  },
+  {
+    "input": "agent",
+    "path": "reference/server-control/src/main/java/com/gitnova/service/agent/control/ControlTypes.java",
+    "bytes": 1154,
+    "sha256": "e12665343dc8601c5bfbfd0f3f067c3cc3653818853f22228080348af762917f"
+  },
+  {
+    "input": "agent",
+    "path": "schema/agent_control.sql",
+    "bytes": 16749,
+    "sha256": "9e90305f01da1570d0d66c2abb952db2a24b2cf93ae05708b5b0f05b31c65c98"
+  },
+  {
+    "input": "agent",
+    "path": "scripts/check_closure.py",
+    "bytes": 6816,
+    "sha256": "0cf11ee1ce39d5881f2f769cc119b0f2343e97072cba8997a08e3fde7b0fd3e1"
+  },
+  {
+    "input": "agent",
+    "path": "scripts/check_dual_host_docs.py",
+    "bytes": 4113,
+    "sha256": "93240e99aa0d082509b2a3839e6840f9d430388c0bceb61d4dd14b726e28e5d5"
+  },
+  {
+    "input": "agent",
+    "path": "scripts/check_latest_logic.py",
+    "bytes": 5750,
+    "sha256": "c2d1a22467f7f62a938fcbf523fad81ba90ec5ed3580c9625c30608a8acb0e81"
+  },
+  {
+    "input": "agent",
+    "path": "scripts/install_migration.py",
+    "bytes": 1318,
+    "sha256": "7ccea7ab529b309b6a761bf4089b34cb80b93107a20573fe5cca20fbe02fd164"
+  },
+  {
+    "input": "agent",
+    "path": "scripts/inventory_current.py",
+    "bytes": 2211,
+    "sha256": "4b590a98ea71c43724d59e6968a24013b16c0f5c220f0be3e6e9871e8798a33f"
+  },
+  {
+    "input": "agent",
+    "path": "scripts/self_check.py",
+    "bytes": 9182,
+    "sha256": "35a58756ddef7d5ef0bec268860f0f5479450b37974d093872d77dab9215d9e7"
+  },
+  {
+    "input": "agent",
+    "path": "scripts/test_process_launcher.py",
+    "bytes": 2488,
+    "sha256": "65322811535575b15bf5699d03314ae4d81acc94646deb663791979652201394"
+  },
+  {
+    "input": "collaboration",
+    "path": "00_从这里开始.md",
+    "bytes": 4457,
+    "sha256": "7dc0833b3634d23ebe2571ca4407ea5e2d2d0a9eb1bee6912e6160ef948ecba2"
+  },
+  {
+    "input": "collaboration",
+    "path": "11_总体架构与范围.md",
+    "bytes": 7665,
+    "sha256": "09f91a8fd0f7b2263ea37d3745e223dc9de89a509611134856832badfa782488"
+  },
+  {
+    "input": "collaboration",
+    "path": "12_Session连续性与显式同步.md",
+    "bytes": 12559,
+    "sha256": "058aca38634cb3fdf7e5d2fcca26d76f2666d42dcf86d522f7af4b0b709d3084"
+  },
+  {
+    "input": "collaboration",
+    "path": "13_PR与代码讨论_详细施工单.md",
+    "bytes": 15236,
+    "sha256": "aa885f32de0cba6d605190b5d512abc472433c5a12cae0a1fb3eede9252870a6"
+  },
+  {
+    "input": "collaboration",
+    "path": "14_主页与Follow_Star_Watch_详细施工单.md",
+    "bytes": 9798,
+    "sha256": "80f26382d4779d3d3153723946f117039c486b5dda6fdea0e229ec6824ad724a"
+  },
+  {
+    "input": "collaboration",
+    "path": "15_Outbox_通知与动态_详细施工单.md",
+    "bytes": 11810,
+    "sha256": "d35cfc4d6be729fbcbdbc5e668bd5aa73af5b0132b2ecfcdee19e5ad39af2bf5"
+  },
+  {
+    "input": "collaboration",
+    "path": "16_字段_接口_事务契约.md",
+    "bytes": 16182,
+    "sha256": "f075ff0c068fe8ff308aa8738348bb1c398ac8b53590fa371a65413a8912506b"
+  },
+  {
+    "input": "collaboration",
+    "path": "17_源码阅读与验收.md",
+    "bytes": 10191,
+    "sha256": "3f91aa4eeaa5b4b90f341423ed1b4f5d9dca3bdb08ed2720cac738b2cd984b49"
+  },
+  {
+    "input": "collaboration",
+    "path": "18_时间线与工时.md",
+    "bytes": 7593,
+    "sha256": "5270c54c72628ef6db2f83832d6bb4a0d80aefc21348d31f3a7dff30628bc300"
+  },
+  {
+    "input": "collaboration",
+    "path": "19_现有Agent文档逐项衔接.md",
+    "bytes": 7490,
+    "sha256": "cf73b74d2e106538f791e97d6e1ed1270349fe62c1e4b6fad656ef6cba008ae4"
+  },
+  {
+    "input": "collaboration",
+    "path": "20_从需求到第一项测试.md",
+    "bytes": 4042,
+    "sha256": "a7a5712e7470dd0c5faaa3b770b9a256a15edfb477392ffc06c184fa60f232fe"
+  },
+  {
+    "input": "collaboration",
+    "path": "SHA256SUMS.txt",
+    "bytes": 3775,
+    "sha256": "bda105f6eb4e399b56c4a5c260c4b6e5920af974d68b323341af6dbccbc8bc70"
+  },
+  {
+    "input": "collaboration",
+    "path": "agent_integration/README.md",
+    "bytes": 607,
+    "sha256": "889028b96079b921bcfb8a1b34ca5a8622261d8c17759258dd8f04bf1f60eaff"
+  },
+  {
+    "input": "collaboration",
+    "path": "agent_integration/reference/com/gitnova/agent/protocol/command/AgentCommand.java",
+    "bytes": 1309,
+    "sha256": "d4ae8c8ba5fe041ed8afd9869a693f791a051bc084fdb20626b56e9de73e104a"
+  },
+  {
+    "input": "collaboration",
+    "path": "agent_integration/reference/com/gitnova/agent/protocol/command/CommandType.java",
+    "bytes": 189,
+    "sha256": "2e449d3553d77d1f6816ad250875c9d566b29aab8fc4a10561e3df2630f8cb38"
+  },
+  {
+    "input": "collaboration",
+    "path": "agent_integration/reference/com/gitnova/agent/protocol/event/AgentEvent.java",
+    "bytes": 424,
+    "sha256": "441efa8afbced109bb64edf3cfbcbbd5b3a7d2e3926653071001c08bea443f8f"
+  },
+  {
+    "input": "collaboration",
+    "path": "agent_integration/reference/com/gitnova/agent/protocol/event/EventType.java",
+    "bytes": 514,
+    "sha256": "7fe49da3a7ec8be72892cf0f48e1f1f20e2658ff4032c309943987c8c599722d"
+  },
+  {
+    "input": "collaboration",
+    "path": "agent_integration/reference/com/gitnova/agent/protocol/platform/PlatformOperation.java",
+    "bytes": 1180,
+    "sha256": "584540d43e244daef7124796e5422c110a383395aae245fb45f8c9d07a4c08e4"
+  },
+  {
+    "input": "collaboration",
+    "path": "agent_integration/reference/com/gitnova/agent/protocol/snapshot/ExportManifest.java",
+    "bytes": 738,
+    "sha256": "494dae15d2801d07139b56e3b4b7a7c3ab1b6f51472212423ddc88fede09ade8"
+  },
+  {
+    "input": "collaboration",
+    "path": "audit/check_package.py",
+    "bytes": 7618,
+    "sha256": "635adfa38f9d79245218213c9a7f5f9971c190c259ee377bd2644b018c0806c7"
+  },
+  {
+    "input": "collaboration",
+    "path": "audit/check_results.json",
+    "bytes": 2003,
+    "sha256": "155ed31ec95b8ac6f0c87c380a9b85c7cafc06832e7cdecf1d64ae8f5b8fa881"
+  },
+  {
+    "input": "collaboration",
+    "path": "audit/文档检查报告.md",
+    "bytes": 3855,
+    "sha256": "8a6817bfcad61387671979fe0802836e74dbfcfa3577582cd1a03cccad5f416c"
+  },
+  {
+    "input": "collaboration",
+    "path": "audit/本地基线待填.md",
+    "bytes": 592,
+    "sha256": "c64677666cbfdc1d2ee062821063dd5455ce9ba2a3ed8002dfeb27803c20ca18"
+  },
+  {
+    "input": "collaboration",
+    "path": "contracts/acceptance.json",
+    "bytes": 16021,
+    "sha256": "e06f4dcea5f129ab0bdb219d613b01735fcb7b42d563a4c41ff64384d4108a09"
+  },
+  {
+    "input": "collaboration",
+    "path": "contracts/file-map.json",
+    "bytes": 14042,
+    "sha256": "407f343583e4e0290bdc35c6d6ec840aba14ca7487d0aa6fcc8987fe58555298"
+  },
+  {
+    "input": "collaboration",
+    "path": "contracts/sources.json",
+    "bytes": 7463,
+    "sha256": "e81e00645a62d359fb126c1dcac43ed2147b13701fdeea4358747c37389f9059"
+  },
+  {
+    "input": "collaboration",
+    "path": "contracts/submit-request.schema.json",
+    "bytes": 1520,
+    "sha256": "e8dabe5c31709be9042427c336e646c22f2a5437cf953f4213a749e356344542"
+  },
+  {
+    "input": "collaboration",
+    "path": "contracts/sync-request.schema.json",
+    "bytes": 1247,
+    "sha256": "fa3c7fc7b0829d4e0a14c22cd78b2f149f446f9050a4030ac66f4b45290e5745"
+  },
+  {
+    "input": "collaboration",
+    "path": "contracts/timeline.json",
+    "bytes": 1546,
+    "sha256": "806b0ba6294015914455993d32910d9186118369d4641bd806f0ef555293d902"
+  },
+  {
+    "input": "collaboration",
+    "path": "contracts/文件与方法地图.md",
+    "bytes": 12664,
+    "sha256": "28fc8d65f77e888630077df427f11bce5d5add7c57d575f5a8f51d7fcb052a16"
+  },
+  {
+    "input": "collaboration",
+    "path": "contracts/目标DDL使用说明.md",
+    "bytes": 890,
+    "sha256": "d3ab4430df334d884cb99ad5c91ca7a53d7a8d4cf924c217581d5a8e7928e960"
+  },
+  {
+    "input": "collaboration",
+    "path": "contracts/目标表结构.sql.reference",
+    "bytes": 10127,
+    "sha256": "401b1c44921682552494a4e1bad1c79e656e04540d2c43072d2a6d31269d4f71"
+  },
+  {
+    "input": "collaboration",
+    "path": "examples/README.md",
+    "bytes": 551,
+    "sha256": "fa521526d9b550958f72000cec4aa4ad7b1a0d1c5df278f5900df986cff02bb5"
+  },
+  {
+    "input": "collaboration",
+    "path": "examples/merge-request.json",
+    "bytes": 265,
+    "sha256": "d994d2f3cccaec0663c6defc46f0500e25dce9ead0d61e33e25833749fb5d562"
+  },
+  {
+    "input": "collaboration",
+    "path": "examples/submit-task.json",
+    "bytes": 663,
+    "sha256": "3762a7c64123c6278d7aeeb8b48fc721682ccfd1931ec981681bb5bb236e468f"
+  },
+  {
+    "input": "collaboration",
+    "path": "examples/sync-carry.json",
+    "bytes": 250,
+    "sha256": "fbf2811528c5609f9880760ac2677d28a5899a7c04c432dd0f7c5d76f766adab"
+  },
+  {
+    "input": "collaboration",
+    "path": "examples/sync-discard.json",
+    "bytes": 344,
+    "sha256": "361d92282bd4623892ce113b5e76ad0956e2fac69b6681725ea6e58750a3f819"
+  }
+]

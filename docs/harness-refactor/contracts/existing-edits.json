@@ -7,7 +7,7 @@
   [
     11,
     "src/main/java/com/gitnova/controller/AgentTaskController.java",
-    "新Task公共API改走TaskApplicationService，保留answer.content外形并加入发布/结算状态。"
+    "新Task公共API改走TaskApplicationService，保留answer.content外形并加入零到多条平台操作结果，不将Task结束绑定发布。"
   ],
   [
     11,

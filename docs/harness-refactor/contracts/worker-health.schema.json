@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sessionId",
+    "worklineId",
+    "runnerEpoch",
+    "state",
+    "activeTaskId",
+    "activeAttemptId",
+    "lastSequence",
+    "publishedHead",
+    "runtimeConfigDigest",
+    "problemCode"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "worklineId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "runnerEpoch": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "state": {
+      "enum": [
+        "BOOTING",
+        "INITIALIZING",
+        "IDLE",
+        "RUNNING",
+        "CANCELLING",
+        "FINALIZING",
+        "QUIESCING",
+        "AWAITING_ARCHIVE",
+        "PARKED",
+        "BLOCKED",
+        "STOPPING",
+        "STOPPED"
+      ]
+    },
+    "activeTaskId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "activeAttemptId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lastSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "publishedHead": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "runtimeConfigDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "problemCode": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

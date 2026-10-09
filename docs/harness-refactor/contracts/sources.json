@@ -1,0 +1,146 @@
+[
+  {
+    "id": "GN1",
+    "url": "https://github.com/Jellyzzzz/GitNova/blob/316112ae38747a5f5ceef95aa6e6b095fa76c919/src/main/java/com/gitnova/mapper/BranchMapper.java",
+    "symbols": "findHead / compareAndSetHead",
+    "coverage": "本轮读取完整文件；现有CAS与影响行数，不代表新PR已实现"
+  },
+  {
+    "id": "GN2",
+    "url": "https://github.com/Jellyzzzz/GitNova/blob/316112ae38747a5f5ceef95aa6e6b095fa76c919/src/main/java/com/gitnova/gitobject/CommitObject.java",
+    "symbols": "parentSha1 / mapping / validateRepositoryPath",
+    "coverage": "本轮读取完整文件；单父、自定义path→blob，不是标准Git工作树"
+  },
+  {
+    "id": "GN3",
+    "url": "https://github.com/Jellyzzzz/GitNova/blob/316112ae38747a5f5ceef95aa6e6b095fa76c919/src/main/java/com/gitnova/service/TransferService.java",
+    "symbols": "updateHead / writeCommitRecordIfAbsent / requireDescendsFrom",
+    "coverage": "本轮读取1–260；先验证、CAS、PostReceiveEvent，未审计全部调用者"
+  },
+  {
+    "id": "GN4",
+    "url": "https://github.com/Jellyzzzz/GitNova/blob/316112ae38747a5f5ceef95aa6e6b095fa76c919/src/main/java/com/gitnova/service/RepositoryAccessService.java",
+    "symbols": "requireReadAccess / requireWriteAccess / evictMemberAfterCommit",
+    "coverage": "本轮完整读取；写查MySQL、私有读可缓存，读撤权实时性要补足"
+  },
+  {
+    "id": "O1",
+    "url": "https://github.com/theonedev/onedev/blob/0eb6c7fe6f683737c319ae17545d496ea5e36e64/server-core/src/main/java/io/onedev/server/service/PullRequestService.java",
+    "symbols": "findOpen / open / merge / getComparisonBase",
+    "coverage": "前轮已读公开契约1–107；用于识别PR责任"
+  },
+  {
+    "id": "O2",
+    "url": "https://github.com/theonedev/onedev/blob/0eb6c7fe6f683737c319ae17545d496ea5e36e64/server-core/src/main/java/io/onedev/server/rest/resource/PullRequestResource.java",
+    "symbols": "createPullRequest / setTitle / setWorkInProgress",
+    "coverage": "前轮窗口240–510；入口到业务服务，不把未读下层保证当事实"
+  },
+  {
+    "id": "O3",
+    "url": "https://github.com/theonedev/onedev/blob/0eb6c7fe6f683737c319ae17545d496ea5e36e64/server-core/src/main/java/io/onedev/server/service/impl/DefaultPullRequestService.java",
+    "symbols": "open / merge / checkMergePreview / updateRef",
+    "coverage": "前轮窗口350–560；合并预览与expected目标HEAD，Git/DB全局原子性未审计"
+  },
+  {
+    "id": "O4",
+    "url": "https://github.com/theonedev/onedev/blob/0eb6c7fe6f683737c319ae17545d496ea5e36e64/server-core/src/main/java/io/onedev/server/model/PullRequest.java",
+    "symbols": "numberScope / sourceProject / targetProject / MergePreview",
+    "coverage": "前轮窗口80–235；实体索引与身份，不照搬全部关联"
+  },
+  {
+    "id": "O5",
+    "url": "https://github.com/theonedev/onedev/blob/0eb6c7fe6f683737c319ae17545d496ea5e36e64/server-core/src/main/java/io/onedev/server/service/impl/DefaultPullRequestUpdateService.java",
+    "symbols": "create / checkUpdate / queryAfter",
+    "coverage": "本轮完整读取；检测源HEAD变化后保存head/targetHead并发出PullRequestUpdated"
+  },
+  {
+    "id": "G1",
+    "url": "https://github.com/go-gitea/gitea/blob/1065f03454dac629a84eadd8b46876f66f0092b3/models/user/follow.go",
+    "symbols": "FollowUser / UnfollowUser",
+    "coverage": "前轮完整小文件；关系/统计事务，未证明所有并发调用安全"
+  },
+  {
+    "id": "G2",
+    "url": "https://github.com/go-gitea/gitea/blob/1065f03454dac629a84eadd8b46876f66f0092b3/models/repo/star.go",
+    "symbols": "StarRepo / GetStargazers / ClearRepoStars",
+    "coverage": "前轮读取1–116；私有化清理用途与本包保留关系策略不同"
+  },
+  {
+    "id": "G3",
+    "url": "https://github.com/go-gitea/gitea/blob/1065f03454dac629a84eadd8b46876f66f0092b3/models/repo/watch.go",
+    "symbols": "WatchRepoWithOptions / GetRepoWatchersIDs / GetRepoIgnorersIDs",
+    "coverage": "前轮1–185，本轮补170–300；IDs查询不独立保证权限"
+  },
+  {
+    "id": "G4",
+    "url": "https://github.com/go-gitea/gitea/blob/1065f03454dac629a84eadd8b46876f66f0092b3/services/pull/pull.go",
+    "symbols": "NewPullRequest / notify_service.NewPullRequest",
+    "coverage": "前轮1–225；Issue体系不适合整套搬入GitNova"
+  },
+  {
+    "id": "G5",
+    "url": "https://github.com/go-gitea/gitea/blob/1065f03454dac629a84eadd8b46876f66f0092b3/services/pull/merge.go",
+    "symbols": "recordMergeIntent / hasPullRequestCommitBeenMerged / Merge",
+    "coverage": "前轮250–520；分阶段副作用核对，不搬标准Git push实现"
+  },
+  {
+    "id": "G6",
+    "url": "https://github.com/go-gitea/gitea/blob/1065f03454dac629a84eadd8b46876f66f0092b3/services/notify/notify.go",
+    "symbols": "RegisterNotifier / NewPullRequest / MergePullRequest",
+    "coverage": "前轮1–195；通知分发不是事务Outbox保证"
+  },
+  {
+    "id": "G7",
+    "url": "https://github.com/go-gitea/gitea/blob/1065f03454dac629a84eadd8b46876f66f0092b3/services/uinotification/notify.go",
+    "symbols": "handler / NewPullRequest / issueQueue",
+    "coverage": "前轮1–200；候选集合与队列；未审计全部队列后端"
+  },
+  {
+    "id": "G8",
+    "url": "https://github.com/go-gitea/gitea/blob/1065f03454dac629a84eadd8b46876f66f0092b3/models/activities/notification_list.go",
+    "symbols": "CreateOrUpdateIssueNotifications / CheckRepoUnitUser",
+    "coverage": "前轮1–240；静音/当前ACL/去重，读取入口仍需自行检验"
+  },
+  {
+    "id": "G9",
+    "url": "https://github.com/go-gitea/gitea/blob/1065f03454dac629a84eadd8b46876f66f0092b3/models/user/follow_test.go",
+    "symbols": "TestIsFollowing",
+    "coverage": "前轮1–23；仅查询样例，不是并发增删证明"
+  },
+  {
+    "id": "JG1",
+    "url": "https://github.com/eclipse-jgit/jgit/blob/v6.10.0.202406032230-r/org.eclipse.jgit/src/org/eclipse/jgit/merge/MergeAlgorithm.java",
+    "symbols": "merge(cmp,base,ours,theirs) / containsConflicts(需读MergeResult)",
+    "coverage": "本轮读取MergeAlgorithm 1–150；核实顺序，未在真实项目编译依赖"
+  },
+  {
+    "id": "DB1",
+    "url": "https://dev.mysql.com/doc/refman/8.0/en/innodb-locking-reads.html",
+    "symbols": "FOR UPDATE / SKIP LOCKED",
+    "coverage": "本轮打开官方文档；锁随事务结束释放，SKIP LOCKED只用于队列式认领"
+  },
+  {
+    "id": "TX1",
+    "url": "https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-propagation.html",
+    "symbols": "PROPAGATION_REQUIRED / REQUIRES_NEW",
+    "coverage": "本轮打开官方文档；阅读语义，不建议无条件升级Spring版本"
+  },
+  {
+    "id": "MQ1",
+    "url": "https://www.rabbitmq.com/docs/confirms",
+    "symbols": "Publisher confirms / Consumer acknowledgements / mandatory",
+    "coverage": "本轮打开官方文档；Broker确认与消费者确认独立"
+  },
+  {
+    "id": "GH1",
+    "url": "https://docs.github.com/en/pull-requests/reference/branches",
+    "symbols": "three-dot comparison",
+    "coverage": "本轮打开GitHub官方PR比较文档的重定向目标"
+  },
+  {
+    "id": "SEC1",
+    "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html",
+    "symbols": "HTML Sanitization / Safe Sinks",
+    "coverage": "本轮打开；评论输出安全，不能仅靠前端隐藏按钮"
+  }
+]

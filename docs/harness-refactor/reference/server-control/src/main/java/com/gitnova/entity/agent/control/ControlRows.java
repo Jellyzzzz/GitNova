@@ -1,10 +1,9 @@
 package com.gitnova.entity.agent.control;
-
 import java.time.LocalDateTime;
-
-/** Mapper-only rows. UTC conversion belongs at the boundary. */
+/** Mapping-only reference. UTC LocalDateTime; convert at API boundaries. No production service bodies. */
 public final class ControlRows {
  private ControlRows() {}
+ /** agent_session; generated fields read-only. Existing Session columns require H0 verification. */
  public static final class SessionRow {
   public String sessionId;
   public String creationIdempotencyKey;
@@ -17,19 +16,22 @@ public final class ControlRows {
   public LocalDateTime updatedAt;
   public LocalDateTime closedAt;
   public String executionBackend;
-  public String sourceBranchName;
-  public String baseCommit;
-  public String agentBranchName;
   public String activeTaskId;
-  public String lastPublishedHead;
-  public String latestArchiveId;
-  public String workflowState;
+  public String activeWorklineId;
+  public Long sessionVersion;
+  public String syncOperationId;
+  public Long nextRunnerEpoch;
   public Long currentRunnerEpoch;
+  public String workflowState;
   public String creationRequestDigest;
  }
+ /** agent_sandbox_binding; generated fields read-only. Existing Session columns require H0 verification. */
  public static final class BindingRow {
   public String sessionId;
+  public String worklineId;
   public Long runnerEpoch;
+  public String bootstrapId;
+  public String bootstrapSha256;
   public String createOperationId;
   public String sandboxId;
   public String volumeName;
@@ -49,17 +51,16 @@ public final class ControlRows {
   public LocalDateTime createdAt;
   public LocalDateTime updatedAt;
  }
+ /** agent_control_task; generated fields read-only. Existing Session columns require H0 verification. */
  public static final class TaskRow {
   public String taskId;
   public String sessionId;
+  public String worklineId;
   public String idempotencyKey;
   public Long actorId;
-  public String taskMode;
   public String message;
   public String requestDigest;
   public String status;
-  public String settlementStatus;
-  public String publicationStatus;
   public String currentAttemptId;
   public Long attemptNumber;
   public String answerEventId;
@@ -70,10 +71,12 @@ public final class ControlRows {
   public LocalDateTime updatedAt;
   public LocalDateTime finishedAt;
  }
+ /** agent_control_attempt; generated fields read-only. Existing Session columns require H0 verification. */
  public static final class AttemptRow {
   public String attemptId;
   public String taskId;
   public String sessionId;
+  public String worklineId;
   public Long attemptNumber;
   public Long runnerEpoch;
   public String status;
@@ -85,9 +88,11 @@ public final class ControlRows {
   public LocalDateTime createdAt;
   public LocalDateTime finishedAt;
  }
+ /** agent_control_command; generated fields read-only. Existing Session columns require H0 verification. */
  public static final class CommandRow {
   public String commandId;
   public String sessionId;
+  public String worklineId;
   public Long runnerEpoch;
   public String taskId;
   public String attemptId;
@@ -102,10 +107,12 @@ public final class ControlRows {
   public LocalDateTime createdAt;
   public LocalDateTime updatedAt;
  }
+ /** agent_event_archive; generated fields read-only. Existing Session columns require H0 verification. */
  public static final class EventRow {
   public Long archiveOffset;
   public String eventId;
   public String sessionId;
+  public String worklineId;
   public Long runnerEpoch;
   public Long sequence;
   public String taskId;
@@ -116,9 +123,11 @@ public final class ControlRows {
   public LocalDateTime occurredAt;
   public LocalDateTime archivedAt;
  }
+ /** agent_snapshot_archive; generated fields read-only. Existing Session columns require H0 verification. */
  public static final class ArchiveRow {
   public String archiveId;
   public String sessionId;
+  public String worklineId;
   public String exportId;
   public Long runnerEpoch;
   public String taskId;
@@ -131,19 +140,43 @@ public final class ControlRows {
   public String storageKey;
   public String manifestJson;
   public String executionOutcome;
+  public String purpose;
   public String status;
-  public String settledPublishedHead;
-  public String settledOutcome;
-  public String settlementCommandId;
+  public String confirmedPublishedHead;
+  public String checkpointCommandId;
   public LocalDateTime createdAt;
   public LocalDateTime updatedAt;
  }
+ /** agent_platform_operation; generated fields read-only. Existing Session columns require H0 verification. */
+ public static final class PlatformOperationRow {
+  public String operationId;
+  public String sessionId;
+  public String worklineId;
+  public String taskId;
+  public String attemptId;
+  public Long runnerEpoch;
+  public String toolCallId;
+  public String type;
+  public String requestJson;
+  public String requestDigest;
+  public String status;
+  public String resultJson;
+  public String errorCode;
+  public Integer attemptCount;
+  public LocalDateTime nextAttemptAt;
+  public LocalDateTime createdAt;
+  public LocalDateTime updatedAt;
+ }
+ /** agent_publication; generated fields read-only. Existing Session columns require H0 verification. */
  public static final class PublicationRow {
+  public String operationId;
   public String publicationId;
   public String sessionId;
+  public String worklineId;
   public String exportId;
   public String archiveId;
   public String taskId;
+  public Long branchId;
   public String branchName;
   public String expectedHead;
   public String treeDigest;
@@ -154,53 +187,6 @@ public final class ControlRows {
   public String status;
   public String errorCode;
   public Long version;
-  public LocalDateTime createdAt;
-  public LocalDateTime updatedAt;
- }
- public static final class PullRequestRow {
-  public Long id;
-  public Long repoId;
-  public String sourceBranch;
-  public String targetBranch;
-  public Long authorId;
-  public String agentSessionId;
-  public String title;
-  public String body;
-  public String status;
-  public Integer draft;
-  public Long revision;
-  public Integer openSlot;
-  public String mergedFromHead;
-  public String mergedCommit;
-  public String mergeMethod;
-  public LocalDateTime createdAt;
-  public LocalDateTime updatedAt;
-  public LocalDateTime mergedAt;
- }
- public static final class CommentRow {
-  public Long id;
-  public Long prId;
-  public Long authorId;
-  public String idempotencyKey;
-  public String body;
-  public String sourceHead;
-  public LocalDateTime createdAt;
- }
- public static final class MergeRow {
-  public String id;
-  public Long prId;
-  public String idempotencyKey;
-  public String requestDigest;
-  public Long actorId;
-  public Long expectedRevision;
-  public String sourceHead;
-  public String targetHead;
-  public String method;
-  public Long commitEpochMillis;
-  public String message;
-  public String candidateCommit;
-  public String status;
-  public String errorJson;
   public LocalDateTime createdAt;
   public LocalDateTime updatedAt;
  }

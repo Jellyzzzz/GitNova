@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mergeId",
+    "prVersion",
+    "sourceHead",
+    "targetHead",
+    "strategy",
+    "message"
+  ],
+  "properties": {
+    "mergeId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "prVersion": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sourceHead": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "targetHead": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "strategy": {
+      "const": "FF_OR_SQUASH"
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    }
+  }
+}

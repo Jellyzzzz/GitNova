@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "taskId",
+    "sessionId",
+    "worklineId",
+    "attemptId",
+    "runnerEpoch",
+    "status",
+    "terminalReason",
+    "answer",
+    "progresses",
+    "unpublishedChanges"
+  ],
+  "properties": {
+    "taskId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sessionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "worklineId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "attemptId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "runnerEpoch": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "status": {
+      "enum": [
+        "PENDING_DISPATCH",
+        "ACCEPTED",
+        "RUNNING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED",
+        "INTERRUPTED",
+        "REJECTED"
+      ]
+    },
+    "terminalReason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "answer": {
+      "anyOf": [
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "content",
+            "answerEventId",
+            "modelResponseEventId"
+          ],
+          "properties": {
+            "content": {
+              "type": "string",
+              "minLength": 1
+            },
+            "answerEventId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "modelResponseEventId": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "progresses": {
+      "type": "array",
+      "items": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operationId",
+          "state",
+          "outcome",
+          "branch",
+          "commit",
+          "treeDigest",
+          "pullRequestId",
+          "errorCode",
+          "message"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "enum": [
+              "PENDING",
+              "PROCESSING",
+              "SUCCEEDED",
+              "FAILED",
+              "REJECTED",
+              "CONFLICT"
+            ]
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "PUBLISHED",
+                  "NO_CHANGES",
+                  "PR_CREATED",
+                  "PR_EXISTS"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "treeDigest": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pullRequestId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "unpublishedChanges": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

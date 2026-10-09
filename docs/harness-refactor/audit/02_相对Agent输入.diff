@@ -1,0 +1,453 @@
+--- Agent-input/02.md
++++ Unified/02.md
+@@ -2,7 +2,7 @@
+ 
+ > **双机部署接线更新：** 手写步骤0—18不变。Mac负责代码与Server调试，Windows 32G负责Linux/AMD64执行环境；06的独立基础设施探针可以从现在提前执行，不依赖步骤1—8已经完成。正式Worker仍在步骤9接入；多客户端语义在01第2.4节，新增验收在03第6.2节。本文同机`127.0.0.1`样例仅限同机，跨机必须使用06的地址矩阵。
+ 
+-> 手写阅读方法：顺序执行步骤 0—18。每步原有目标/逻辑下面新增“文件级施工卡”和“接线与放行”，不会另开版本。完整Java签名在reference，数据库/协议在05，SDK命令在06。步骤 3用测试替身而不是尚未实现的真实Context/Sealer，构建依赖不会向后悬空。
++> 手写阅读方法：顺序执行步骤 0—18。每步原有目标/逻辑下面新增“文件级施工卡”和“接线与放行”，不会另开版本。完整Java签名在唯一reference，数据库/协议在05/16，SDK命令在06。步骤 3用测试替身而不是尚未实现的真实Context/Sealer，构建依赖不会向后悬空。
+ 
+ 本指南服务于 [总体架构](01_总体架构与通信契约.md) 的**同一个完整终态**。下面的步骤是依赖顺序，不是先交付缩水产品、再补功能的版本划分。
+ 
+@@ -84,7 +84,7 @@
+ 验证命令/操作：
+ 
+ ```bash
+-python3 scripts/inventory_current.py .
++python3 docs/harness-refactor/scripts/inventory_current.py .
+ ```
+ 
+ 测试类是本步需要创建的测试，不是旧仓库已存在的类。新Server测试须按根pom的profile添加 `@Tag("mysql-it")` / `@Tag("gateway")` 等对应tag，否则Surefire可能零测试。核对实际执行数>0，不以BUILD SUCCESS代替测试通过。
+@@ -94,6 +94,9 @@
+ ---
+ 
+ ## 步骤 1：建立三个独立模块与协议样例
++
++本步私有信封统一schemaVersion=2，并固定sessionId/worklineId/runnerEpoch。CommandReceipt、TaskView、WorkerHealth、Event、Manifest、PlatformOperation与Core的TaskInput/SessionRuntime同步带工作线；不是只改AgentCommand。八种CommandType不增加SYNC。先读05的字段含义和examples/public-submit.json与submit-task.json的对比。新增ExecutionScope.java只表达三个身份与比较，不提供授权。
++
+ 
+ > **动手提示：** 先用Submit和Cancel各写一个具体请求，列出共有身份与不同参数；不要先猜所有业务实现。 最先验证：含中文/换行的Submit往返不变；未知字段mode、类型错配和尾随JSON拒绝。 逻辑与检索目标见[09步骤1](09_文档修正与开发导航.md#step-1)。
+ 
+@@ -118,10 +121,10 @@
+ 建议接口骨架：
+ 
+ ```java
+-// AgentCommand中的任务载荷；完整信封和sealed Payload见reference。
++// AgentCommand中的任务载荷（外层信封固定v2与sessionId/worklineId/runnerEpoch）；完整信封和sealed Payload见reference。
+ // 逐字段校验在构造/解析边界实现，不携带任务分类或权限列表。
+ public record Submit(String message, String expectedPublishedHead,
+-                     Instant deadlineAt, String runtimeConfigDigest)
++                     Instant deadlineAt, String runtimeConfigDigest, String worklineStatus)
+         implements Payload {}
+ ```
+ 
+@@ -291,6 +294,9 @@
+ 
+ ## 步骤 2：先做本地日志与完整结果存储
+ 
++FileSessionLog固定构造时的Q/L/epoch；read旧epoch从只读history目录读取，不能因Session当前工作线变化重写事件归属。新epoch序号从1开始，所有旧resultId保留。Worker全进程锁位于/session/worker.lock，由WorkerApplication先持有；日志只借用其“已经取得”证据，close日志不释放全进程锁。
++
++
+ > **动手提示：** 先分清：日志记录已发生的事实；ResultStore存事实引用的字节。你要定义append成功的含义，而不是先背NIO。 最先验证：顺序append两条、close/reopen后读回同一内容；再增加短写/force失败/尾行损坏测试。 逻辑与检索目标见[09步骤2](09_文档修正与开发导航.md#step-2)。
+ 
+ ### 目标
+@@ -356,7 +362,7 @@
+ 
+ **2.3 创建 `agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/history/FileSessionLog.java`**
+ 
+-签名/字段：`FileSessionLog(Path stateRoot, String sessionId, long epoch, FileLock directoryLock); append(...); read(...); boundary(); awaitAfter(...); close()`
++签名/字段：`FileSessionLog(Path stateRoot, String sessionId, String worklineId, long epoch, FileLock directoryLock); append(...); read(...); boundary(); awaitAfter(...); close()`
+ 
+ 实现逻辑：只在初始化目录安装完成后构造，接收WorkerApplication已持有的 /session/worker.lock 对应FileLock并检查有效性；锁文件不在待恢复state内。FileSessionLog不释放外部文件锁，仅关闭自己的日志通道；WorkerApplication最后释放锁。逐行恢复当前 epoch 日志，每行保存 event+digest；只隔离不完整尾行。append 用单一 ReentrantLock 分配序号、序列化、写满 ByteBuffer、force，再更新可读尾部并 signalAll。日志失败置不可继续状态。read 只返回已 force 的完整边界；先实现内存 offset 索引，不为每行另造数据库。
+ 
+@@ -425,7 +431,7 @@
+ // ToolRuntime 是本地Map分发类，完整签名见 reference 中同名文件。
+ ```
+ 
+-这里的 `SessionRuntime` 是 Worker 内存与本地存储状态，不是数据库 SessionEntity。通过 `SessionRuntime.log()` 写本地事实日志，不新增EventSink接口。
++这里的 `SessionRuntime` 固定session/workline/epoch，是 Worker 内存与本地存储状态，不是数据库 SessionEntity。通过 `SessionRuntime.log()` 写本地事实日志，不新增EventSink接口。
+ 
+ ### 完整循环顺序
+ 
+@@ -930,9 +936,9 @@
+ 
+ ### 启动过程
+ 
+-Worker从配置读取sessionId、epoch、workRoot、stateRoot、模型代理地址和受控身份。缺少必要配置退出并记录启动错误；未完成 INITIALIZE 时只开放 live/初始化，不声称 ready。
+-
+-应用监听0.0.0.0:8081；`/health/ready` 返回实际 Session/epoch，不能只返回字符串“ok”。平台要验证连到的不是另一个会话。
++Worker从配置读取sessionId、worklineId、epoch、workRoot、stateRoot、模型代理地址和受控身份。缺少必要配置退出并记录启动错误；未完成 INITIALIZE 时只开放 live/初始化，不声称 ready。
++
++应用监听0.0.0.0:8081；`/health/ready` 返回实际 Session/Workline/epoch，不能只返回字符串“ok”。平台要验证连到的不是另一个会话。
+ 
+ ### SUBMIT受理流程
+ 
+@@ -1026,7 +1032,7 @@
+ 
+ **6.4 创建 `agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/control/WorkerSession.java`**
+ 
+-签名/字段：`snapshot(); initialize(...); begin(TaskInput); beginFinalizing(...); finishTaskLocally(...); beginCheckpoint(exportId); checkpointStored(CheckpointAck); block(code)`
++签名/字段：`health(); initialized(...); begin(TaskInput); beginFinalizing(...); finishTaskLocally(...); beginCheckpoint(exportId); checkpointStored(CheckpointAck); block(code)`
+ 
+ 实现逻辑：独立的任务和后台实例状态；TASK_FINISHED后IDLE，回收才QUIESCING/AWAITING_ARCHIVE/PARKED。pendingPlatformOperationId本地记录不等于Task结算门槛。
+ 
+@@ -1348,7 +1354,7 @@
+ 
+ 1. 创建一次性Sandbox，确认execd可用。
+ 2. 确认Worker进程已启动，解析8081端点，通过proxy访问live。
+-3. 上传初始包，发送INITIALIZE，确认ready中的session与epoch。
++3. 上传初始包，发送INITIALIZE，确认ready中的session/workline与epoch。
+ 4. 连续两个Task修改并读取同一文件，证明环境不是每命令重建。
+ 5. 验证SSE通过proxy能及时flush，长连接不被错误的短requestTimeout杀死；必要的代理读超时与缓冲按部署配置修正。
+ 6. 验证命名卷重挂、主动销毁、续期与服务端重启后的重新连接。
+@@ -1371,7 +1377,7 @@
+ 
+ 签名/字段：`完整嵌套record见reference/server-control/.../ControlTypes.java`
+ 
+-实现逻辑：字段来自05数据库/manifest和06创建API。LaunchSpec必须包含sessionId/epoch/createOperationId/volumeName/imageRef/runtimeConfigDigest/modelEndpoint/令牌来源；Binding不保存绝对宿主路径。VerifiedBundle只在包已验证且不可变时构造，附Path/manifest/hash；业务controller不接收该内部对象。
++实现逻辑：字段来自05数据库/manifest和06创建API。LaunchSpec必须包含sessionId/worklineId/epoch/createOperationId/volumeName/imageRef/runtimeConfigDigest/modelEndpoint/令牌来源；Binding不保存绝对宿主路径。VerifiedBundle只在包已验证且不可变时构造，附Path/manifest/hash；业务controller不接收该内部对象。
+ 
+ 依赖：本步已完成类型及reference契约。
+ 
+@@ -1430,6 +1436,9 @@
+ 
+ ## 步骤 10：平台 Session 初始化与工作分支创建
+ 
++**本步同时建立初始Workline，不能等同步阶段再加。** 新增WorklineRows/WorklineMapper；Session不再拥有永久唯一分支。所有事务前置repo门闩，再Session，完整顺序见05/16。数据库目标只有schema/target.sql.reference，真实迁移先H0比对，原编号不改变。
++
++
+ > **动手提示：** 先画A对应的path→blob→真实文件字节。bootstrap不是镜像，也不是调用git clone。 最先验证：main在创建中推进到B，Session仍从A启动；并发创建不会建两条工作分支。 逻辑与检索目标见[09步骤10](09_文档修正与开发导航.md#step-10)。
+ 
+ ### 目标
+@@ -1444,15 +1453,15 @@
+ 
+ 平台新增 `SessionLifecycleService` 是确定的新入口；已有Controller显式按executionBackend分派。最终新系统只调用新分派，旧分派仅在迁移期间用于旧任务收口。
+ 
+-数据库严格执行05及schema的Session增量字段；实例信息放独立binding记录，新Task写agent_control_task，不套旧Task CHECK。不要再保留一个新Workspace表作为当前目录状态真源。
++数据库按05/16及目标DDL核对Session+Workline增量字段；实例信息放独立binding记录，新Task写agent_control_task，不套旧Task CHECK。不要再保留一个新Workspace表作为当前目录状态真源。
+ 
+ 实施顺序：
+ 
+ 1. 验证仓库写权限——创建工作分支不是纯读操作。
+ 2. 以用户/仓库/请求幂等键解析已有Session。相同键但不同源选择返回冲突。
+-3. 固定源HEAD=A、分支名、会话身份，短事务插入PROVISIONING。
++3. 固定源HEAD=A、会话Q、工作线L1/分支及实例epoch，短事务准备Session、Workline(PREPARING)、Binding。
+ 4. 事务外准备Sandbox、导出A、启动/初始化Worker。
+-5. ready通过后，短事务创建指向A的新分支，绑定归属，将Session激活。
++5. ready通过后，短事务创建指向A的新分支并绑定L1，标Workline ACTIVE、激活Q.activeWorklineId与current_runner_epoch，sessionVersion递增。
+ 6. 任一步失败记录可重试/不可重试原因；重复请求核对已有资源，不重新读取新的main HEAD替换A。
+ 
+ 分支创建只插引用，不造空Commit；不能直接调用首次push方法时传错expectedBase而导致拒绝。通用BranchService接收“创建指向既有Commit”的显式操作。
+@@ -1472,7 +1481,7 @@
+ 
+ **10.1 创建 `src/main/java/com/gitnova/entity/agent/control/ControlRows.java`**
+ 
+-签名/字段：`静态POJO：SessionRow、BindingRow、TaskRow、AttemptRow、CommandRow、EventRow、ArchiveRow、PublicationRow、PlatformOperationRow`
++签名/字段：`静态POJO字段按reference与contracts/sql-field-map.md：SessionRow、BindingRow、TaskRow、AttemptRow、CommandRow、EventRow、ArchiveRow、PublicationRow、PlatformOperationRow`
+ 
+ 实现逻辑：字段逐一对应schema字段，snake_case→camelCase；时间一律Instant映射或UTC LocalDateTime，不能混宿主时区。使用Lombok @Data+无参构造用于现有MyBatis，枚举字段先String，由Service显式解析。生成列active_pair不由代码赋值。
+ 
+@@ -1502,7 +1511,7 @@
+ 
+ **10.4 创建 `src/main/java/com/gitnova/service/repository/RepositoryBootstrapService.java`**
+ 
+-签名/字段：`create(long repoId,String baseSha,String sessionId,long epoch,String runtimeConfigDigest):Path`
++签名/字段：`create(long repoId,String baseSha,String sessionId,String worklineId,long epoch,String runtimeConfigDigest):Path`
+ 
+ 实现逻辑：读取固定A的完整GNOV mapping，使用原ObjectStorage逐个取blob；构造仅tree+baseline+初始state/manifest的bootstrap ZIP，配置摘要与Session身份固定，不能含密钥。使用JDK ZipOutputStream或Commons Compress生成，格式与协议ExportManifest一致；不导入agent-worker的BundleCodec类到Server。bootstrap文件耐久保存后上传Worker的PUT入口，同bootstrapId重试不重新读取main。
+ 
+@@ -1547,11 +1556,18 @@
+ ---
+ 
+ 
++### 本步增加的工作线接线
++
++`entity/agent/control/WorklineRows.java`与`mapper/agent/control/WorklineMapper.java`按16定义；先只用初始线insert/find/lock，SyncRow类型可以声明但不放假业务体。源/目标分支保存稳定branchId和显示名，删除同名重建不能劫持旧身份。Session.nextRunnerEpoch负责分配实例代数；每次替换实例都增加，失败不复用。Binding READY不自动等于active，Server只有指针匹配才派发。
++
+ ### 初始化的数据来源
+ 
+ 先创建CommitTreeService的读取/确定性编码能力与RepositoryBootstrapService，再写SessionLifecycleService。生成bootstrap不依赖步骤11的ArchiveService。工作分支的首次插入在TX-S2中使用已有BranchMapper及BranchName校验；步骤14提取BranchPublicationService时将这段合并，不能为等待该类而阻塞Session准备。AgentControlConfiguration此时只注册本步存在的Bean，步骤11再增加Task/Event/Archive相关Bean。
+ 
+ ## 步骤 11：平台 Task 接收、发送与状态投影
++
++Task请求固定expectedWorklineId/expectedSessionVersion，Server在受理时冻结workline_id。MERGED工作线不阻止对话或本地分析；仓库发布需线ACTIVE。显式SYNC gate拒绝新Task且保留用户输入，普通后台回收可以先持久受理排队再恢复原线。两者不是同一个门槛。
++
+ 
+ > **动手提示：** 先列两个崩溃点：DB提交后HTTP发送前，Worker受理后响应丢失。两者都必须能查到原身份。 最先验证：注入两处崩溃仍只执行一次attempt；两客户端并发Submit只能占一个活跃槽。 逻辑与检索目标见[09步骤11](09_文档修正与开发导航.md#step-11)。
+ 
+@@ -1644,7 +1660,7 @@
+ 
+ 签名/字段：`collect(sessionId,exportId); requireArchive(archiveId); confirmCheckpoint(archiveId)`
+ 
+-实现逻辑：固定包下载校验。RECOVERY包含完整状态才更新latestArchive；PROGRESS仅绑定显式operation，不能自动Commit/成为恢复点。ACK_CHECKPOINT确认连续事件覆盖及包耐久，不更新HEAD。
++实现逻辑：固定包下载校验。RECOVERY包含完整状态才更新该Workline.latestRecoveryArchive；PROGRESS仅绑定显式operation，不能自动Commit/成为恢复点。ACK_CHECKPOINT确认连续事件覆盖及包耐久，不更新HEAD。
+ 
+ 依赖：本步已完成类型及reference契约。
+ 
+@@ -1652,9 +1668,9 @@
+ 
+ **11.6 创建 `src/main/java/com/gitnova/service/agent/control/TaskApplicationService.java`**
+ 
+-签名/字段：`submit(repoId,sessionId,actorId,message,key); steer(...); cancel(...); retryInterrupted(...); detail(...)`
+-
+-实现逻辑：鉴权后锁Session，先按幂等键查已有Task，再检查业务可继续/active槽为空，持久插Task(PENDING_DISPATCH)并预留active槽。READY时同事务创建Attempt与SUBMIT；没有环境/正在回收则currentAttempt为空，ensureExecutable就绪后在同锁下补齐。202仅平台受理；原消息和key不变，取消可中止尚未发送任务。
++签名/字段：`submit(repoId,sessionId,actorId,message,expectedWorklineId,expectedSessionVersion,key); steer(...); cancel(...); retryInterrupted(...); detail(...)`
++
++实现逻辑：鉴权后锁Session，先按幂等键查已有Task，再检查业务可继续/active槽为空，持久插Task(PENDING_DISPATCH)并预留active槽。当前Binding已READY且平台active指针Q/L/epoch匹配时同事务创建Attempt与SUBMIT；没有环境/正在回收则currentAttempt为空，ensureExecutable就绪后在同锁下补齐。202仅平台受理；原消息和key不变，取消可中止尚未发送任务。
+ 
+ 依赖：本步已完成类型及reference契约。
+ 
+@@ -1674,7 +1690,7 @@
+ 
+ 签名/字段：`archiveAndProject(AgentEvent); answer(taskId); publicEvents(sessionId,offset,limit)`
+ 
+-实现逻辑：按Session行→Binding锁顺序，验证event身份/seq/hash→插archive→更新Task/Attempt→更新连续cursor同事务。旧epoch只归档；不更新当前任务。答复引用先查原事件归属/STOP条件。每Session串行归档保证页面offset不会因事务提交乱序漏读。 TASK_FINISHED匹配当前attempt后同事务清activeTaskId；RECOVERY事件不清新Task槽，PROGRESS事件不能伪造平台提交结果。
++实现逻辑：按Session→Binding→Task/Attempt锁顺序（该路径绝不再取repository），验证event身份/seq/hash→插archive→更新Task/Attempt→更新连续cursor同事务。旧epoch只归档；不更新当前任务。答复引用先查原事件归属/STOP条件。每Session串行归档保证页面offset不会因事务提交乱序漏读。 TASK_FINISHED匹配当前attempt后同事务清activeTaskId；RECOVERY事件不清新Task槽，PROGRESS事件不能伪造平台提交结果。
+ 
+ 依赖：本步已完成类型及reference契约。
+ 
+@@ -1887,6 +1903,9 @@
+ 
+ ## 步骤 14：复用托管底座发布 Commit 和工作分支
+ 
++先按11/16把普通Push、Agent发布和PR最终提交统一为repository门闩内的Branch写入口；共享Outbox表与事务写端口此时建立。Agent发布目标由workline_id→source_branch_id派生，必须线ACTIVE且绑定scope匹配。已受理操作的异步完成与初次授权分开，取消Task不撤销旧副作用；sync/merge等待其状态确定。
++
++
+ > **动手提示：** 先固定一份不可变PROGRESS树和operationId。完成的是仓库副作用，不是Task终态。 最先验证：分支已推进但HTTP响应丢失，重试仍返回同一个Commit；UNKNOWN不生成新身份。 逻辑与检索目标见[09步骤14](09_文档修正与开发导航.md#step-14)。
+ 
+ ### 目标
+@@ -1928,7 +1947,7 @@
+ 
+ 签名/字段：`createReference(...); publishExpected(...); assertManagedBranchWrite(...)`
+ 
+-实现逻辑：提取TransferService可共享的权威检查；事务短，先验证objects完整，再锁Session/Publication（如有）和分支。普通Push写受管agent分支拒绝；保持默认branch缓存及PostReceive语义，不把eventPublisher误说成MQ。CommitRecord按repo+sha索引，不用branchName字段判断祖先。
++实现逻辑：提取TransferService可共享的权威检查；事务短，先验证objects完整，再锁repository→Session/Workline（如有）→分支→Task/Attempt→Operation/Publication。普通Push写受管agent分支拒绝；保持默认branch缓存及PostReceive语义，不把eventPublisher误说成MQ。CommitRecord按repo+sha索引，不用branchName字段判断祖先。
+ 
+ 依赖：本步已完成类型及reference契约。
+ 
+@@ -1982,167 +2001,38 @@
+ 
+ ## 步骤 15：完成通用 PR，而不是 Agent 专用交付表
+ 
+-> **动手提示：** 先分别写出O共同祖先、S源HEAD、T目标HEAD、W未发布树。PR审查、合并计算、工作树替换不可混成一步。 最先验证：普通分支PR关闭全部Sandbox也能合并；Agent W≠S拒绝；同source/target并发变化不合入未审查代码。 逻辑与检索目标见[09步骤15](09_文档修正与开发导航.md#step-15)。
+-
+-### 目标
+-
+-从Session工作分支到可审查、可关闭和可合并的代码协作流程。普通用户分支也能使用同一服务。
+-
+-### 数据与API
+-
+-新增pull_request、pull_request_comment（实际migration编号按步骤 0）。PR字段：id、repoId、sourceBranch、targetBranch、authorId、title/body、status、draft、revision、mergedFromHead、mergedCommit、created/updated时间。Session关联可空。
+-
+-API包括创建、列表、详情、files/diff、comments、ready/draft、close/reopen、merge。每个写入口执行权限检查；评论作者身份来自登录用户，不来自payload。
+-
+-创建PR时branch必须存在且同仓库、source!=target。源/目标相同树允许Draft，但merge返回NO_CHANGES。避免同一对分支重复开放PR：在已有分支行的稳定锁顺序下查询/创建，或使用数据库能保证的唯一活动关系设计，不仅靠先SELECT再INSERT。
+-
+-### Diff
+-
+-计算共同祖先到source的变更供审查；同时显示当前target HEAD用于判断合并状态。不要只直接diff target与source就把target独有的新修改显示成PR要删除的内容。
+-
+-活动改动预览默认比较confirmed published baseline与当前树；初始A只能作明确标注的累计比较，也不是所有PR永久的比较基准。源HEAD变化后按新HEAD计算；基于旧HEAD的review/approve必须带提交身份，不能继承成未经审查的新代码已通过。
+-
+-本次基础讨论用评论，不强制组织审批流程；UI不要用“有评论/模型通过”冒充人工approval。
+-
+-### 合并
+-
+-先实现前述完整策略：fast-forward和三方squash，冲突明确拒绝，不新增双父对象格式。使用JGit纯内容三方合并库时先固定与Server Java17兼容的发布包，测试 `MergeAlgorithm` 的base/ours/theirs输入顺序。[S11]
+-
+-算法：
+-
+-```text
+-读取 sourceHead S、targetHead T、共同祖先 O、PR revision R
+-计算 mergeTree(O,T,S)
+-  → 有冲突：返回路径，不更新Branch/PR
+-  → 无冲突：准备快进目标或squash Commit M
+-提交事务：
+-  锁PR并验证R/status
+-  按稳定顺序锁相关分支，验证仍为S/T
+-  更新target到S或M
+-  写索引与PR MERGED/mergedFromHead/mergedCommit
+-```
+-
+-如果验证时HEAD改变返回409，让用户刷新重新计算，不默默合并未经展示的新source。
+-
+-
+-### 合并前未发布修改与合并后加载新树（本轮明确的产品规则）
+-
+-合并只处理远端sourceHead=S；沙箱工作树W不自动进入PR。受管Session必须无活跃Task/未决平台操作，默认要求W等于S的完整发布树；有差异返回UNPUBLISHED_CHANGES，未知则拒绝猜测。用户先明确发布并刷新PR确认，或自行明确处理不需保留的修改，再合并；不在合并处理器里补一次Commit，也不自动覆盖脏树。
+-
+-合并后应以目标分支的确定提交加载新的工作副本。直接接续本次合并用mergedCommit=M；较晚开始新工作时将当时target HEAD解析一次为H，后续重试始终用H，不反复读取移动的分支名。旧RECOVERY用于原工作线恢复，新bootstrap用于新工作基准，二者不能混装。
+-
+-本轮保留既有“一Session一条工作分支”规则：旧Session只保留历史与归档，下一轮建新Session/新工作分支，并用既有bootstrap→INITIALIZE装入新Worker。这里不是直接覆写运行中的Sandbox，也不声称已实现同sessionId无缝轮换分支。要让同sessionId承载多轮PR，需另外定义工作轮次/历史关联，不能只改publishedHead；本轮不暗中增加该功能。
+-
+-新Session不继承旧模型的活动messages/工具验证；可显式引用旧任务结论，但旧结果仍是历史证据。旧沙箱只有在完整RECOVERY及连续事件已归档后才可回收；不能因为PR已合并就认为未发布文件已自动保存。
+-
+-### 受管PR的接线位置与竞态检查
+-
+-新增 `src/main/java/com/gitnova/service/agent/control/AgentPullRequestCoordinator.java`（步骤15）作为Agent来源适配：普通PR跳过它。它复用Binding.operationOwner/operationUntil+version做 `merge:<mergeId>` 维护保留，不添加逐工具锁表。Task受理、平台副作用、reclaim都在同Session锁下检查该保留。租期到期不代表可以覆盖旧操作；先查mergeId记录和实际Worker状态再核对接管。
+-
+-先持久merge意图及保留权→事务外生成/接收固定RECOVERY（已有可信空闲归档可核验复用；不能拿过期包猜当前树）→比较W与S→通用三方候选→提交时按05锁序复核S/T/R、保留owner与version、无活动→Branch/PR/merge结果及受管工作线完成标记同事务。dirty/冲突/失败都释放或可恢复地清理保留权；已经PARKED则下条Task恢复旧RECOVERY，不能把失败合并后的旧工作树清掉。所有网络在数据库事务外。
+-
+-通用PR的公开API由 `PullRequestController` 调用；Controller仅根据可空agent_session_id路由到上述编排或普通PullRequestService。通用服务不import agent-core/agent-worker、不访问HTTP、不自己组装checkpoint。Session完成标记可由协调器在同一个平台事务中参与，不让通用PR依赖Session执行实现。新增协调器方法见contracts/component-methods.md。
+-
+-### 合并后
+-
+-Agent工作分支对应PR合并后，不再向该分支接受新Coding Task；保留原历史页面和已合并PR事实，不插入关闭提示。后续工作从目标最新提交新建Session，避免单父squash血缘被重复计算。
+-
+-关闭PR可以重开，但已MERGED不允许重开。用户关闭PR不必销毁Sandbox或删除分支；这些是独立操作。
+-
+-### 测试
+-
+-`PullRequestIT`：Draft空差异、后续提交刷新、重复创建、评论鉴权、关闭/重开、快进、target前进后无冲突squash、同文件不同段自动合并、删除/修改冲突、二进制冲突、并发两次merge、source在提交前变化、非授权merge、Session合并后禁止继续。
+-
+----
+-### 文件级施工卡（本步按下列顺序写）
+-
+-本步全部类型就位后编译；依赖以接口隔离，不把测试Fake装进正式JAR。
+-
+-**本步开始前核对PR行类型（步骤10建空类型，步骤15补完整映射）**
+-
+-`src/main/java/com/gitnova/entity/pullrequest/PullRequestRows.java`：嵌套PullRequestRow、CommentRow、MergeRow，完整字段见reference同路径。不要放回ControlRows。测试为PullRequestRowMappingIT，须覆盖可空source Session和普通PR无Agent准备字段的情况。
+-
+-**15.1 创建 `src/main/java/com/gitnova/mapper/pullrequest/PullRequestMapper.java`**
+-
+-签名/字段：`按05 SQL事务编号声明 selectForUpdate/insert/update 方法；行类型见05字段字典。`
+-
+-实现逻辑：只放单条SQL，不在Mapper中发HTTP。使用Mapper注解SQL，完整方法见contracts/mapper-contracts.md。返回ControlRows的同名静态POJO；mapUnderscoreToCamelCase显式开启。UPDATE返回int，调用方必须检查=1。PR/评论/merge request。
+-
+-依赖：本步已完成类型及reference契约。
+-
+-测试：MapperMySqlIT：两连接真实并发/unique/check/rollback。；测试包对应生产包的src/test/java。
+-
+-**15.2 创建 `src/main/java/com/gitnova/service/pullrequest/CommitCompareService.java`**
+-
+-签名/字段：`compare(repoId,sourceHead,targetHead); diffFiles(...)`
+-
+-实现逻辑：共同祖先沿单父链查；PR默认展示ancestor→source而不是target→source混淆双方修改，另返回targetHead与mergeability。缓存key包含两个确定HEAD。列表分页和diff返回大小有界，二进制仅metadata。
+-
+-依赖：本步已完成类型及reference契约。
+-
+-测试：CommitCompareTest；测试包对应生产包的src/test/java。
+-
+-**15.3 创建 `src/main/java/com/gitnova/service/pullrequest/ThreeWayMergeService.java`**
+-
+-签名/字段：`merge(baseTree,targetTree,sourceTree): MergeCandidate`
+-
+-实现逻辑：先按blob相等三方规则选取；双改UTF8文本使用JGit MergeAlgorithm/RawTextComparator，不开启Git传输。统一LF或CRLF文件可按约定恢复该换行；混合换行/无法可靠表达的格式返回conflict，不悄悄规范化。冲突不写目标分支。
+-
+-依赖：本步已完成类型及reference契约。
+-
+-测试：ThreeWayMergeTest：add/add、modify/delete、nonoverlap、CRLF、binary。；测试包对应生产包的src/test/java。
+-
+-**15.4 创建 `src/main/java/com/gitnova/service/pullrequest/PullRequestService.java`**
+-
+-签名/字段：`create/list/detail/comment/changeDraft/close/reopen/merge`
+-
+-实现逻辑：PR独立于Agent。开放同source/target唯一；MERGED不能重开。merge固定PR revision与两HEAD，在事务外计算，再依全局锁序校验并提交目标CAS和PR状态。Agent来源由AgentPullRequestCoordinator先取得维护保留权、核对无活跃Task/未决平台操作并保存固定RECOVERY，默认存在未发布变化就返回UNPUBLISHED_CHANGES；未知状态返回PRECONDITION_UNCONFIRMED。通用PR服务不调用Worker，仅使用仓库写保护规则与准备证据完成提交；merge成功封存旧工作线，后续从目标确定HEAD建立新工作Session。不得写入其他Session受管target。
+-
+-依赖：本步已完成类型及reference契约。
+-
+-测试：PullRequestIT；测试包对应生产包的src/test/java。
+-
+-**15.5 创建 `src/main/java/com/gitnova/controller/PullRequestController.java`**
+-
+-签名/字段：`/api/repos/{repoId}/pulls 全接口见05`
+-
+-实现逻辑：只解析权限上下文和DTO、调用Service；错误409与details返回具体冲突文件。公开API不接受authorId、repoKey、模型内部权限字段。merge入口先按仓库分支管理元数据识别普通/Agent受管来源：普通来源调用PullRequestService，Agent来源交给AgentPullRequestCoordinator；这一选择在平台入口装配，不让通用PR服务反向import Worker/Core。
+-
+-依赖：本步已完成类型及reference契约。
+-
+-测试：PullRequestApiIT；测试包对应生产包的src/test/java。
+-
+-**15.6 创建 `src/main/resources/static/agent-ui/pull-request.js`**
+-
+-签名/字段：`export函数名见上方与05公共API`
+-
+-实现逻辑：PR列表/detail/comments/draft/close/reopen/merge；merge携带revision+sourceHead+targetHead+idempotencyKey；409刷新预览并显示冲突。
+-
+-依赖：本步已完成类型及reference契约。
+-
+-测试：BrowserAgentE2E；测试包对应生产包的src/test/java。
+-
+-**15.7 创建 `src/main/java/com/gitnova/service/agent/control/AgentPullRequestCoordinator.java`**
+-
+-输入：已鉴权用户和通用PR合并请求。输出：通用PR合并结果或明确的准备失败。先调用prepareMerge固定mergeId；以原Session/Binding维护保留权排除新Task与平台操作；在事务外checkpoint、下载与验证RECOVERY；证明当前树等于固定sourceHead后提交。网络不在数据库锁内，失败只释放自己的保留权；UNKNOWN按同mergeId核对。具体方法、SQL和测试见09第4节以及contracts/component-methods.md、contracts/mapper-contracts.md。
+-
+-测试：ManagedMergeIT，至少包含dirty拒绝、Task竞态、准备响应丢失、源HEAD变化、普通PR不调用协调器。
+-
+-### 本步接线与放行
+-
+-PR API→compare/merge候选→TX-R2→branch+PR原子更新。已合并Agent Session不再接Task。
+-
+-验证命令/操作：
+-
+-```text
+-./mvnw -Pmysql-it -Dtest=PullRequestIT -Dsurefire.failIfNoSpecifiedTests=false test
+-```
+-
+-测试类是本步需要创建的测试，不是旧仓库已存在的类。新Server测试须按根pom的profile添加 `@Tag("mysql-it")` / `@Tag("gateway")` 等对应tag，否则Surefire可能零测试。核对实际执行数>0，不以BUILD SUCCESS代替测试通过。
+-
+-**此时不要做：** 用扩大范围或自动重试模型掩盖本步失败；未达退役门槛不删旧历史。
+-
+----
++### 目标与主施工文档
++
++这一功能现在按[13_PR与代码讨论_详细施工单](13_PR与代码讨论_详细施工单.md)的P1—P8逐项实现；它是本步骤的完整展开，不是第二套PR。所有表/字段/API只采用16与schema/target.sql.reference。
++
++普通分支可以在全部Sandbox关闭时创建、比较、评论、关闭/重开、合并PR。source revision保存历史，当前S/T直接读仓库；消费者延迟不能授权合并旧代码。PR.version和pull_request_revision不是同一个概念。
++
++### 本步按此顺序写
++
++1. CommitTreeService固定树读与比较（仓库公共能力，已经写过就复用）。
++2. PullRequestRows/PullRequestMapper；repo_counter与Outbox写入端口先可用，消费者之后接入。
++3. PullRequestService.create与唯一活动分支对、固定首版本、当前详情。
++4. CommitCompareService及ThreeWayMergeService；PR用O/T/S，同步之后复用B/H/W。
++5. 普通/行评论、元数据版本、关闭/重开、Mutation回执。
++6. PullRequestApplicationService统一merge入口；ManagedBranchPolicy接口与AgentManagedBranchPolicy DB实现；固定候选与最终CAS+PR+Workline+Outbox同事务。
++7. PullRequestRevisionProjector处理原始分支事件，当前详情不依赖投影。
++8. 通用collaboration-ui页面与Agent结果中的链接，测试真实权限和409。
++
++### Agent来源的准确规则
++
++merge不调用Worker、不做checkpoint、不比较W/S。准备与最终提交分别检查无活跃Task、无未决平台操作、无sync gate；最终核对权限、R/S/T，标PR与源Workline MERGED，Session仍OPEN。Task若在候选计算期间进入，merge最终409，不能暗杀Task。未发布W原样保留；之后发消息仍固定旧line，平台拒绝旧MERGED线新增发布。
++
++### 本步API、文件与验收
++
++文件清单使用04/contracts/file-plan.json；PR行在entity.pullrequest、Mapper在mapper.pullrequest，不能写回ControlRows。通用服务不import Core/Worker。三方合并输入不可变Tree，计算过程中不持数据库事务；快进与单父squash，不自建标准.git。
++
++接口使用`GET .../{prId}/compare`、`PATCH .../{prId}`、`POST .../{prId}/merge`；merge字段为mergeId/prVersion/sourceHead/targetHead/strategy/message，strategy=FF_OR_SQUASH。精确字段16与examples/merge-request.json。
++
++先通过普通PR闭环，再测受管PR：有草稿且无运行Task可merge、W不改、Session继续、旧线发布拒绝；同时测试source/target变动、两次merge、权限撤销、提交成功回包丢失、历史评论和分支删除。测试证据登记03的统一acceptance，原通过报告不挪用。
++
++### 下一步：同Session显式同步
++
++[12_Session连续性与显式同步](12_Session连续性与显式同步.md)是本步骤后的单独施工块。先假Installer测试Q指针切换，再接Agent真实安装器；默认clean、显式carry/discard。空闲恢复仍回旧线，不作为sync替代。源码参考17；不认识API时按20的卡片提问，不让低推理模型替你重新选择Session身份。
+ 
+ ## 步骤 16：生命周期、恢复与安全基线收口
+ 
+@@ -2341,7 +2231,7 @@
+ 
+ ### 工期说明
+ 
+-本指南覆盖的不是“把JAR放进容器”这一小时级动作，而是完整任务通信、状态保存、出版、PR、故障和旧链退役。按你手写核心实现估计，可以先把以下范围当作排期假设：
++本指南覆盖的不是“把JAR放进容器”这一小时级动作，而是完整任务通信、状态保存、出版、PR、故障和旧链退役。原Agent范围的历史工时拆分如下，仅作来源记录；当前完整范围、早期起步与42—60小时预算的现实判断统一见18，不据此承诺本轮总交付时间：
+ 
+ | 工作 | 有效开发工时的初始估计 |
+ |---|---:|
+@@ -2381,11 +2271,11 @@
+ 
+ ## 附：手写时不依赖IDE猜出来的装配顺序
+ 
+-WorkerAssembly拥有单一资源容器WorkerApplication（嵌套final class/AutoCloseable；不必用不可变record表达尚未激活的句柄）。Boot：config→Paths→/session/worker.lock→BundleCodec/ExportStore/LocalWorkerResources→HTTP。INITIALIZE完全安装目录后，activate：Log/ResultStore→SessionRuntime/WorkerSession→Context/ProcessSupervisor→SessionSealer→平台Client/Capabilities→获授Tools→Engine→LocalTaskFinalizer→TaskInbox。全部构造成功才原子发布一个RuntimeServices引用给HTTP，随后READY。Sealer不依赖Engine/Inbox；pending核对器只在activate成功后启动。安装失败留BOOTING/BLOCKED，不发布半装配对象；细节见09第3节。
+-
+-所有执行器都由assembly创建，任务线程不拥有HTTP线程；close先拒绝任务，再请求取消/等进程停止，持久终态，停止SSE，关HTTP，最后关log与FileLock。不能停HTTP后等待一个永远不可能到达的ACK；有未确认平台操作/恢复包则保存现场并由平台核对。
+-
+-平台配置类只注册control服务和SDK，不创建AgentEngine。旧Agent运行Bean最终退出；ModelProxy与简单suggest-message可能仍使用HTTP client，但不是服务端AgentLoop。平台入站public DTO、私有command DTO与SQL rows是三个不同边界，不直接互相暴露。
++Boot：WorkerConfig(Q/L/epoch)→独立/session/worker.lock→incoming与安装标记组件→WorkerResources→HTTP控制壳。不提前打开state内日志，不new一个假Core供ready。
++
++INITIALIZE：固定包校验→staging→PREPARED/INSTALLED恢复标记→目标安装完整→打开当前epoch日志/结果→SessionRuntime/WorkerSession→Context/进程→Sealer→平台Client/获授Tools→Engine→LocalTaskFinalizer→Inbox→一次发布RuntimeServices→WORKER_READY。原始历史只读，workline来源保留。
++
++平台active指针激活之后才给该实例派发SUBMIT或批准模型/仓库出站。Core不从平台数据库读运行中active指针。close先拒绝Task、停止进程与核对请求、保存终态、结束SSE/HTTP，最后关log与全进程锁；不能先关HTTP再等一个不可能到达的ACK。详见09第3节。
+ 
+ ## 附：本次没有留给你重新决定的接线
+ 

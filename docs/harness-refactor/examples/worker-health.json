@@ -1,0 +1,12 @@
+{
+  "sessionId": "22222222-2222-4222-8222-222222222222",
+  "worklineId": "00000000-0000-4000-8000-000000000003",
+  "runnerEpoch": 1,
+  "state": "IDLE",
+  "activeTaskId": null,
+  "activeAttemptId": null,
+  "lastSequence": 10,
+  "publishedHead": "1111111111111111111111111111111111111111",
+  "runtimeConfigDigest": "025ae4e1a047e924acf89630f631a60ac52b2ac4fcfbda0ddc8b9006e4b7e879",
+  "problemCode": null
+}

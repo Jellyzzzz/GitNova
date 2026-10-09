@@ -2,7 +2,7 @@
 # Development build template; record the resolved base digest before release.
 FROM eclipse-temurin:21-jdk-jammy
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends bash coreutils util-linux ripgrep python3 maven diffutils ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends bash coreutils sed findutils util-linux ripgrep python3 maven diffutils ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && (getent group 1000 >/dev/null || groupadd -g 1000 agent) \
  && (getent passwd 1000 >/dev/null || useradd -u 1000 -g 1000 -m agent) \
