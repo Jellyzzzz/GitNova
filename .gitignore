@@ -52,3 +52,6 @@ gitnova-files.txt
 # Python evaluation helpers
 __pycache__/
 *.py[cod]
+
+# Node.js dependencies
+node_modules/
