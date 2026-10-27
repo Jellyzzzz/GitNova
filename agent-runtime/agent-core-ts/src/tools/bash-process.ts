@@ -11,15 +11,15 @@ export interface BashProcessOptions{
 
     readonly onData:(text:string)=>void;
 }
-export interface BashProvessResult{
+export interface BashProcessResult{
     readonly exitCode:number|null;
     readonly signalCode:NodeJS.Signals|null;
     readonly timeout:boolean;
     readonly outputIncomplete:boolean;
 }
-export function runBash(options:BashProcessOptions):Promise<BashProvessResult>{
+export function runBash(options:BashProcessOptions):Promise<BashProcessResult>{
     const startedAt=performance.now();
-    return new Promise<BashProvessResult>((resolve,reject)=>{
+    return new Promise<BashProcessResult>((resolve,reject)=>{
     options.signal.throwIfAborted();
     if(!Number.isFinite(options.timeoutMSs)||
     options.timeoutMSs<=0||

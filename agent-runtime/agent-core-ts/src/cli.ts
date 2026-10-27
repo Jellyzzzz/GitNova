@@ -2,6 +2,8 @@ import {createModels}from "@earendil-works/pi-ai";
 import {deepseekProvider}from "@earendil-works/pi-ai/providers/deepseek";
 import {PiGateway}from "./model/pi-gateway.js";
 import type{Request}from "./model/types.js";
+import {ToolRegistry} from "./tools/registry.js";
+import {BashTool} from "./tools/bash.js";
 
 async function main():Promise<void>{
     const apiKey=process.env.DEEPSEEK_API_KEY;
@@ -40,6 +42,9 @@ async function main():Promise<void>{
     };
     process.once("SIGINT",onInterrupt);
 
+    const registry=new ToolRegistry();
+    registry.register(BashTool);
+
     const request:Request={
         modelCallId:crypto.randomUUID(),
         model:{
@@ -54,17 +59,7 @@ async function main():Promise<void>{
             }],
             timestamp:Date.now(),
         }],
-        tools:[{
-    name:"get_weather",
-    description:"Get weather for a city",
-    parametersJson:JSON.stringify({
-        type:"object",
-        properties:{
-            city:{type:"string"}
-        },
-        required:["city"]
-    }),
-}],
+        tools:registry.definitions(),
         maxOutputTokens:1024,
         thinkingJson:thinkingMode==="enabled"
             ?JSON.stringify({reasoning:"high"})
@@ -93,6 +88,23 @@ async function main():Promise<void>{
                     if(event.response.termination.kind==="ERROR"){
                         process.exitCode=1;
                     }
+                    if(event.response.termination.kind==="TOOL_CALLS"){
+    for(const block of event.response.message.content){
+        if(block.type!=="tool_call"){
+            continue;
+        }
+
+        console.log("工具调用：",block.name,block.argumentsJson);
+
+        const result=await registry.execute(
+            block,
+            process.cwd(),
+            controller.signal,
+        );
+
+        console.dir(result,{depth:null});
+    }
+}
                     break;
             }
         }
