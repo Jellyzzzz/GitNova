@@ -4,10 +4,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({
-        RepositoryStorageProperties.class,
-        WorkspaceStorageProperties.class,
-        ArtifactStorageProperties.class
-})
+@EnableConfigurationProperties(RepositoryStorageProperties.class)
 public class StorageConfiguration {
 }

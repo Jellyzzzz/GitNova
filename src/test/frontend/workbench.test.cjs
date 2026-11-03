@@ -13,17 +13,14 @@ const repos = [
   { id: 42, name: 'gitnova-platform', description: 'Git-native Cloud Coding Agent · 后端与工作区', isPrivate: 1, createdAt: '2026-09-14T10:00:00' },
   { id: 43, name: 'repository-research', description: 'Repository context research', isPrivate: 0 }
 ];
-const session = {
-  sessionId: 'session-7f40e8a2', workspaceId: '3fe30e61-95bb-4a1d-bd46-8ef0c03e1381', status: 'ACTIVE',
-  baseRevision: 'aeed32f679ebf317ce644589c22a9a0ac7f91b242', createdAt: '2026-09-14T08:30:00Z', updatedAt: '2026-09-14T09:45:00Z'
-};
 async function reply(route, data, code = 200, message = 'success', headers = {}) {
   await route.fulfill({ status: code, contentType: 'application/json', headers, body: JSON.stringify({ code, message, data }) });
 }
 
 before(async () => {
   server = http.createServer(async (req, res) => {
-    const file = req.url === '/' ? 'index.html' : req.url.slice(1);
+    const pathname = new URL(req.url, 'http://localhost').pathname;
+    const file = pathname === '/' ? 'index.html' : pathname.slice(1);
     if (!['index.html', 'app.js', 'api.js', 'app.css'].includes(file)) { res.writeHead(404).end(); return; }
     res.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html');
     res.end(await fs.readFile(path.join(root, file)));
@@ -52,14 +49,13 @@ async function open(t, handler, authenticated = true) {
     const req = route.request();
     if (await handler?.(route, req)) return;
     if (req.url().endsWith('/api/repos') && req.method() === 'GET') return reply(route, repos);
-    if (req.method() === 'GET' && req.url().includes('/agent/sessions')) return reply(route, [session]);
     throw new Error(`Unexpected API request: ${req.method()} ${req.url()}`);
   });
   await page.goto(origin);
   return page;
 }
 
-test('login uses form data; renders repository and Session on desktop/mobile', async t => {
+test('login uses form data; renders repository without retired Agent requests on desktop/mobile', async t => {
   const page = await open(t, async (route, req) => {
     if (!req.url().endsWith('/api/auth/login')) return false;
     assert.match(req.headers()['content-type'], /application\/x-www-form-urlencoded/);
@@ -73,7 +69,7 @@ test('login uses form data; renders repository and Session on desktop/mobile', a
   await page.fill('#username', 'developer');
   await page.fill('#password', 'fixture-password');
   await page.click('#login-form button[type=submit]');
-  await page.locator('.session-card').waitFor();
+  await page.locator('#repo-name').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#repo-name').textContent(), repos[0].name);
   assert.equal(await page.locator('#password').inputValue(), '');
   assert.match(await page.locator('#push-command').textContent(), /push http:\/\/127\.0\.0\.1:\d+ 42 main/);
@@ -86,18 +82,17 @@ test('login uses form data; renders repository and Session on desktop/mobile', a
   assert.equal(await page.locator('#login-view').isVisible(), true);
 });
 
-test('empty list is normal; API errors are not shown as empty Sessions', async t => {
+test('empty repositories are normal; request failures remain visible', async t => {
   let fail = false;
   const page = await open(t, async (route, req) => {
-    if (!req.url().includes('/agent/sessions')) return false;
+    if (!req.url().endsWith('/api/repos')) return false;
     await reply(route, fail ? null : [], fail ? 403 : 200, fail ? '无权访问仓库' : 'success'); return true;
   });
-  await page.getByText('开始你的第一个 Session', { exact: true }).waitFor();
+  await page.getByText('还没有仓库，点击「新建」开始。', { exact: true }).waitFor();
   assert.equal(await page.locator('#notice').isVisible(), false);
   fail = true;
-  await page.click('#refresh-current');
+  await page.click('#refresh-repos');
   await page.getByText('无权访问仓库', { exact: true }).waitFor();
-  assert.equal(await page.getByText('开始你的第一个 Session', { exact: true }).count(), 0);
 });
 
 test('repository creation uses form data and selects the returned repository', async t => {
@@ -112,7 +107,7 @@ test('repository creation uses form data and selects the returned repository', a
     } else await reply(route, created ? [...repos, { ...repos[0], id: 44, name: 'new-project' }] : repos);
     return true;
   });
-  await page.locator('.session-card').waitFor();
+  await page.locator('#repo-name').waitFor({ state: 'visible' });
   await page.click('#new-repo');
   await page.fill('#new-repo-name', 'new-project');
   await page.click('#repo-form button[type=submit]');
@@ -120,43 +115,32 @@ test('repository creation uses form data and selects the returned repository', a
   assert.equal(created, true);
 });
 
-test('Session failure and reload reuse the logical request key; success releases it', async t => {
-  const keys = [];
-  const page = await open(t, async (route, req) => {
-    if (req.method() !== 'POST') return false;
-    assert.deepEqual(req.postDataJSON(), { branchName: 'main' });
-    keys.push(req.headers()['idempotency-key']);
-    if (keys.length === 1) await reply(route, null, 503, 'storage unavailable');
-    else await reply(route, session);
-    return true;
-  });
-  await page.locator('.session-card').waitFor();
-  await page.click('#new-session');
-  await page.click('#session-form button[type=submit]');
-  await page.getByText('storage unavailable', { exact: true }).waitFor();
-  await page.reload();
-  await page.locator('.session-card').waitFor();
-  await page.click('#new-session');
-  await page.click('#session-form button[type=submit]');
-  await page.getByText('Session 已创建，工作区已就绪。', { exact: true }).waitFor();
-  assert.equal(keys.length, 2);
-  assert.ok(keys[0]);
-  assert.equal(keys[0], keys[1]);
-  assert.equal(await page.evaluate(() => sessionStorage.getItem('gitnova.pendingSessions')), '{}');
+test('retired Session and Task controls are absent and send no API requests', async t => {
+  const requests = [];
+  const page = await open(t, async (route, req) => { requests.push(req.url()); return false; });
+  await page.locator('#agent-unavailable').waitFor();
+  assert.match(await page.locator('#agent-unavailable').textContent(), /Agent 暂不可用/);
+  for (const selector of ['#new-session', '#session-form', '#task-form']) {
+    assert.equal(await page.locator(selector).count(), 0);
+  }
+  await page.click('#refresh-current');
+  assert.equal(requests.some(url => url.includes('/agent/')), false);
 });
 
-test('slow previous repository response cannot overwrite the selected repository', async t => {
+test('repository refresh preserves a later repository selection', async t => {
+  let loads = 0;
   const page = await open(t, async (route, req) => {
-    if (!req.url().includes('/42/agent/sessions')) return false;
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    await reply(route, [{ ...session, sessionId: 'old-repository-session' }]); return true;
+    if (!req.url().endsWith('/api/repos')) return false;
+    loads++;
+    if (loads === 2) await new Promise(resolve => setTimeout(resolve, 500));
+    await reply(route, repos); return true;
   });
-  const oldResponse = page.waitForResponse(response => response.url().includes('/42/agent/sessions'));
+  await page.locator('#repo-name').waitFor({ state: 'visible' });
+  const response = page.waitForResponse(value => value.url().endsWith('/api/repos'));
+  await page.click('#refresh-repos');
   await page.locator('.repo-link').filter({ hasText: 'repository-research' }).click();
-  await page.locator('.session-card').waitFor();
-  await oldResponse;
-  assert.equal(await page.locator('#repo-name').textContent(), 'repository-research');
-  assert.equal(await page.locator('.session-id').textContent(), session.sessionId);
+  await response;
+  assert.equal(await page.locator('#repo-name').textContent(), repos[1].name);
 });
 
 test('untrusted names render as text; expired auth returns to login', async t => {
@@ -167,7 +151,7 @@ test('untrusted names render as text; expired auth returns to login', async t =>
     if (req.url().endsWith('/api/repos')) { await reply(route, [{ ...repos[0], name: hostileName }]); return true; }
     return false;
   });
-  await page.locator('.session-card').waitFor();
+  await page.locator('#repo-name').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#repo-name').textContent(), hostileName);
   assert.equal(await page.locator('#repo-name img').count(), 0);
   expired = true;

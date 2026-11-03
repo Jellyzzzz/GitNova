@@ -1,7 +1,6 @@
 package com.gitnova.mapper.agent;
 
 import com.gitnova.entity.agent.AgentRunEntity;
-import com.gitnova.service.agent.execution.AgentRun;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

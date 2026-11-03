@@ -4,12 +4,6 @@ server:
 spring:
   application:
     name: gitnova
-  rabbitmq:
-    publisher-confirm-type: correlated
-    publisher-returns: true
-    template:
-      mandatory: true
-
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -50,15 +44,6 @@ spring:
       max-file-size: 128MB       # HTTP 外层保护；协议内层限制见 gitnova.transfer
       max-request-size: 128MB
 
-  # ===== 异步线程池：Spring Event @Async使用 =====
-  task:
-    execution:
-      pool:
-        core-size: 4
-        max-size: 8
-        queue-capacity: 100
-      thread-name-prefix: gitnova-async-
-
 # ===== MyBatis-Plus =====
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml
@@ -92,28 +77,6 @@ gitnova:
   repo:
     base-path: ${REPO_BASE_PATH:./data/repos}
 
-  workspace:
-    base-path: ${WORKSPACE_BASE_PATH:./data/workspaces}
-    docker:
-      enabled: ${WORKSPACE_DOCKER_ENABLED:false}
-      executable: ${WORKSPACE_DOCKER_EXECUTABLE:docker}
-      image: ${WORKSPACE_DOCKER_IMAGE:gitnova-workspace:java21}
-      user: ${WORKSPACE_DOCKER_USER:1000:1000}
-      cpus: 1.0
-      memory-mb: 512
-      pids-limit: 128
-
-
-  # LLM API配置（Phase 4 Agent使用）
-  llm:
-    api-key: ${LLM_API_KEY:}                                      # 必须通过环境变量注入，不要硬编码
-    base-url: ${LLM_BASE_URL:https://api.deepseek.com}
-    model: ${LLM_MODEL:deepseek-v4-flash}
-    thinking-mode: ${LLM_THINKING_MODE:disabled}
-    reasoning-effort: ${LLM_REASONING_EFFORT:high} # enabled 时生效：low/high/max；兼容 minimal/medium/xhigh/ultra
-    timeout: ${LLM_TIMEOUT_SECONDS:60} # 整次请求的总时限，单位秒，必须 > 0
-    read-timeout: ${LLM_READ_TIMEOUT_SECONDS:${gitnova.llm.timeout}} # 单次等待响应数据的时限，默认跟随总时限
-
   # 存储策略（Phase 1 接口，Phase 2 起用）
   storage:
     type: local                    # local | minio（未来扩展）
@@ -144,38 +107,3 @@ gitnova:
       refill-permits-per-second: 10
       request-cost: 1
       idle-ttl: 10m
-
-  agent:
-    artifact:
-      base-path: ${AGENT_ARTIFACT_BASE_PATH:./data/agent-artifacts}
-    runtime:
-      model: ${gitnova.llm.model:deepseek-v4-flash}
-      max-model-calls: ${AGENT_MAX_MODEL_CALLS:20}
-      max-tool-calls: 50
-      # 整个 Run 共享的协议纠偏次数，包含响应解析失败；纠偏仍消耗 max-model-calls。
-      max-protocol-corrections: 1
-      max-final-draft-corrections: 1
-      max-output-tokens: ${AGENT_MAX_OUTPUT_TOKENS:4096}
-      temperature: 0.0
-      # 随 Task 保存，后续修改环境变量不会改变已有 Run 的思考配置。
-      thinking:
-        mode: ${gitnova.llm.thinking-mode}
-        effort: ${gitnova.llm.reasoning-effort}
-      summary-thinking:
-        mode: ${SUMMARY_LLM_THINKING_MODE:disabled}
-        effort: ${SUMMARY_LLM_REASONING_EFFORT:high}
-      # Explicit model-matched capacity; no guessed provider window or duplicate output reserve.
-      context:
-        summary-enabled: ${AGENT_CONTEXT_SUMMARY_ENABLED:true}
-        context-window-tokens: ${AGENT_CONTEXT_WINDOW_TOKENS}
-        safety-margin-tokens: ${AGENT_CONTEXT_SAFETY_MARGIN_TOKENS}
-        # Initial experiment settings, not measured optima.
-        summary-trigger-ratio: ${AGENT_CONTEXT_SUMMARY_TRIGGER_RATIO:0.8}
-        compact-trigger-ratio: ${AGENT_CONTEXT_COMPACT_TRIGGER_RATIO:0.9}
-        # Target after strong compaction, not a second trigger or a measured optimum.
-        compact-target-ratio: ${AGENT_CONTEXT_COMPACT_TARGET_RATIO:0.6}
-        keep-recent-groups: ${AGENT_CONTEXT_KEEP_RECENT_GROUPS:4}
-      observation:
-          externalization-enabled: ${AGENT_OBSERVATION_EXTERNALIZATION_ENABLED:true}
-          max-inline-tokens: ${AGENT_OBSERVATION_MAX_INLINE_TOKENS:4096}
-          max-preview-tokens: ${AGENT_OBSERVATION_MAX_PREVIEW_TOKENS:1024}

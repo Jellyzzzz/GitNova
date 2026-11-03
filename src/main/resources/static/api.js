@@ -32,7 +32,7 @@ export async function request(path, { method = 'GET', body, form, key, timeout =
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(error.name === 'AbortError'
-      ? '请求超时。操作可能已在服务端生效，请先刷新查看；创建 Session 可使用原请求重试。'
+      ? '请求超时。操作可能已在服务端生效，请先刷新查看，避免重复提交。'
       : '无法连接服务。操作是否生效尚不确定，请检查网络并刷新查看。');
   } finally { clearTimeout(timer); }
 }

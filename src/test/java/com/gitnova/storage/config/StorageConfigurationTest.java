@@ -13,36 +13,19 @@ class StorageConfigurationTest {
     private final ApplicationContextRunner contextRunner =
             new ApplicationContextRunner()
                     .withUserConfiguration(StorageConfiguration.class)
-                    .withPropertyValues(
-                            "gitnova.repo.base-path=build/test-repositories",
-                            "gitnova.workspace.base-path=build/test-workspaces",
-                            "gitnova.agent.artifact.base-path=build/test-artifacts"
-                    );
+                    .withPropertyValues("gitnova.repo.base-path=build/test-repositories");
 
     @Test
-    void shouldBindIndependentStorageRoots() {
-        contextRunner.run(context -> {
-            assertEquals(
-                    Path.of("build/test-repositories"),
-                    context.getBean(RepositoryStorageProperties.class).basePath()
-            );
-            assertEquals(
-                    Path.of("build/test-workspaces"),
-                    context.getBean(WorkspaceStorageProperties.class).basePath()
-            );
-            assertEquals(
-                    Path.of("build/test-artifacts"),
-                    context.getBean(ArtifactStorageProperties.class).basePath()
-            );
-            assertEquals(8 * 1024 * 1024, context.getBean(ArtifactStorageProperties.class).maxArtifactBytes());
-            assertEquals(4096, context.getBean(ArtifactStorageProperties.class).maxReadBytes());
-        });
+    void shouldBindRepositoryStorageRoot() {
+        contextRunner.run(context -> assertEquals(
+                Path.of("build/test-repositories"),
+                context.getBean(RepositoryStorageProperties.class).basePath()
+        ));
     }
 
     @Test
-    void shouldRejectReadLimitLargerThanStorageLimit() {
-        contextRunner.withPropertyValues("gitnova.agent.artifact.max-artifact-bytes=100",
-                        "gitnova.agent.artifact.max-read-bytes=101")
+    void shouldRejectBlankRepositoryRoot() {
+        contextRunner.withPropertyValues("gitnova.repo.base-path=")
                 .run(context -> assertNotNull(context.getStartupFailure()));
     }
 }

@@ -38,11 +38,6 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-amqp</artifactId>
-        </dependency>
-
         <!-- Shared cache and cross-instance request rate limiting. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -124,13 +119,6 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-        </dependency>
-
-        <!-- 本地 BPE token 估计；参考编码不等同于各 Provider 的实际计费分词 -->
-        <dependency>
-            <groupId>com.knuddels</groupId>
-            <artifactId>jtokkit</artifactId>
-            <version>1.1.0</version>
         </dependency>
 
         <!-- ===== API文档 ===== -->
