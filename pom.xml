@@ -32,12 +32,6 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- WebSocket：Phase 4 review结果推送 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-websocket</artifactId>
-        </dependency>
-
         <!-- 参数校验：@Valid @NotBlank等注解 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

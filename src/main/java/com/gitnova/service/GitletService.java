@@ -192,10 +192,6 @@ public class GitletService {
         );
     }
 
-    public String getDiff(String repoPath, String commitSha1) {
-        throw new UnsupportedOperationException("Phase 4: 待实现");
-    }
-
     private PreparedPush preparePush(Repository repository) {
         List<Commit> history = readHistory(repository);
         Map<GitObjectId, byte[]> objects = new LinkedHashMap<>();
