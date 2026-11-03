@@ -83,6 +83,17 @@ export type AgentEvent=|{
         readonly type:"tools_changed";
         readonly version:number;
         readonly names:readonly string[];
+    }
+    |{
+        readonly type:"message_end";
+        readonly message:Message;
     };
 export type AgentEventSink=
-    (event:AgentEvent)=>void|Promise<void>
+    (event:AgentEvent)=>void|Promise<void>//Loop交给session的事件数据结构
+
+export interface AgentState{
+    messages:Message[];
+    readonly isStreaming:boolean;
+    readonly pendingToolCalls:ReadonlySet<string>;
+    readonly errorMessage?:string;
+}
