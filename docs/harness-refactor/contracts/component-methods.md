@@ -33,6 +33,8 @@ void stopAccepting();
 
 同一commandId已受理必先返回原receipt；不同digest拒绝。首次受理的executionId必须写入COMMAND_ACCEPTED，响应丢失后按原ID查询，不重新构造执行。初次调度失败也记录明确结束，不删除受理事实。接收handler只持短锁，不在锁中等模型、seal、下载或网络ACK。
 
+STEER在校验原命令/目标执行后调用`control.acceptSteer(() -> { var entry = store.appendHost(...); return new ExecutionControl.Steer(inputId, userMessage, entry.eventId()); })`。受理日志由该回调在Control锁内追加，返回值就是已入队Steer；Worker再按其acceptedEventId生成receipt。不得先构造带占位eventId的Steer。具体`Persistence<T>`及IOException边界见05第3.1，回调不能反向获取Inbox锁。
+
 **TaskInbox只做一次身份绑定。** 校验Q/L/E、HEAD、配置digest、deadline与活跃槽；记录原命令和executionId；创建该次Writer/Control/获授工具并交给Execution。任务线程调用 `engineFactory.apply(execution).run(submit.message(), session, execution.control(), execution.writer())`。正文逐字不变，由Core的String重载转USER Message；也可在Worker包装同一Message再调用。两者只选一条，不重复追加用户消息。取消通过taskId/attemptId找到原Execution.control，不能取消后来启动的任务。
 
 必要工作线事实由Inbox使用宿主写入接口保存HARNESS_FEEDBACK(kind=RUNTIME_CONTEXT)，随后进入模型上下文，不把命令JSON拼进USER正文。详细字段见05第2.3—2.5。Core不接AgentCommand，不生成平台任务，不把executionId当平台授权。
@@ -42,6 +44,10 @@ SessionRuntime只持本地sessionId/目录/只读history/ResultStore；Sealer与
 `AgentWorkerServer`只注册路由，依赖WorkerConfig、WorkerApplication与WorkerResources；Boot阶段不要求SessionLog/TaskInbox存在，初始化完成后从单一RuntimeServices句柄读取它们；它不new Engine。初始化PUT从request body流读取，经WorkerResources写incoming；不把zip body读成一个无限byte[]。`QueryHandlers`使用同一WorkerResources，不提前依赖具体ExportStore。
 
 **装配闭合方式：** boot先建立独立进程锁、BundleCodec/ExportStore、LocalWorkerResources与HTTP；initialize(commandId,init)完全安装目录后调用activate构建运行对象。运行图为Log/ResultStore→SessionRuntime/WorkerSession→Sealer→LocalTaskFinalizer→Inbox。WorkerAssembly同时提供每次执行的工具/Engine装配逻辑；受理后才绑定平台工具，不能在共享工具里替换currentTask。所有对象成功后单次发布RuntimeServices。具体安装重试/回执见09第3节。
+
+共享模型连接和PlatformOperationClient可在实例激活时构造；Writer、Control、平台能力、获授ToolRuntime和Engine在具体SUBMIT受理后装配。宿主先建可用实现Map，确认allowedTools每一项都有实现，再把获授子集传给ToolRuntime；缺项启动/装配失败，未获授实现不注册。Core只检查名单结构，不维护GitNova工具白名单。
+
+WorkerSession的pending索引从持久平台操作记录重建，包含原Request、executionId/origin及固定export引用。WorkerAssembly私有`reconcilePending()`取索引快照→锁外调用共享Client.get→记录引用原操作的appendHost事件→成功发布在匹配工作线安全边界安装baseline并记录确认；它不调用执行级PlatformCapabilities、不使用已关闭Writer。成功发布须结果/安装都确认才清pending；PR或明确失败只确认结果。跨epoch事件使用当前宿主信封、payload引用原操作，不伪造旧epoch新事件。详细规则见08第8.1节，不新增长期持有旧Execution的恢复服务。
 
 这里两个名字都不是要你另找的框架类：`WorkerApplication`和`RuntimeServices`都定义在现有`WorkerAssembly.java`内部，不新增顶层helper。`WorkerApplication`持有配置、进程锁、HTTP、执行器、WorkerResources及一个`AtomicReference<RuntimeServices>`；Boot时引用为空。`RuntimeServices`至少包含`SessionRuntime, WorkerSession, TaskInbox, ProcessSupervisor, SessionSealer`，其余组件已通过Inbox/装配入口等依赖图持有，不重复保存全部对象。
 
@@ -191,6 +197,8 @@ cursor绑定固定查询、Session和所查历史的through边界，内部同时
 - `ToolObservationProjector(HistoryIndex, TokenEstimator, RuntimeConfig)`：接收已提交source、对应ToolCall和原始Result；校验callId、scope及来源，生成小结果原文或大结果预览。状态、source/resultId、完整性和回读提示都计入预算；不改写durable Result，不再次执行原工具。
 - `ContextSummarizer(ModelGateway)`：`summarize(HistorySnapshot source, SessionLog.Writer events, RuntimeConfig config, ExecutionControl control, long maxSummaryTokens): Summary`。Writer已绑定本次执行，Config提供模型/thinking，Control提供取消；token上限由Coordinator决定，模型不能填来源身份。摘要器保存purpose=SUMMARY的请求/响应，只返回候选Summary；**CONTEXT_SUMMARY_CREATED由Coordinator校验后唯一追加**。
 - `DefaultContextCoordinator(SessionHistoryReader, ContextSummarizer, TokenEstimator, RuntimeConfig)`：prepare取得session、control、本次Writer、可见工具定义，重建完整候选输入，先预算再调用摘要器。摘要来源边界固定，覆盖闭合组；保留最近组与当前execution的USER原文/已应用补充。强压缩复用同一摘要器、传更严格maxSummaryTokens，不能用删除未配对消息救场。
+
+跨工作线与同线恢复使用同一Core选择链。Worker仅开放已校验恢复范围内的全部授权历史，记录环境变化；不提前给selectedGroups或按Task价值过滤。Core决定哪些组/摘要/检索片段进入请求，未选中的合法历史仍可回读；调整预算无需改Worker恢复包。详见context-handover.md。
 
 初次调用和摘要后的调用仍包含受信system instructions；迁移旧PromptAssembler中纯文本组装逻辑，去掉Server Context依赖，先放Coordinator内普通私有方法即可，不新建策略继承树。固定system与tools也必须进入计量，用户原文属于动态上下文，不免计token。
 

@@ -1164,7 +1164,7 @@
     {
       "id": "AG-CL02",
       "area": "Agent原验收",
-      "scenario": "RuntimeConfig工具集合 / 空列表无工具；重复/未知拒绝；排序后digest稳定",
+      "scenario": "RuntimeConfig工具集合 / 空列表无工具；Core拒绝缺失/空白/重复，扩展名可保存且排序稳定；宿主拒绝缺实现的获授名，只注册获授子集",
       "origin": "Agent03:CL02",
       "status": "NOT_RUN",
       "evidence": null
@@ -2278,6 +2278,78 @@
       "area": "身份/模型上下文",
       "scenario": "merge不重载Worker；下一私有Submit冻结worklineStatus=MERGED，Context诚实表示旧线，公开请求不可自填状态或权限",
       "origin": "本轮缺口修正",
+      "status": "NOT_RUN",
+      "evidence": null
+    },
+    {
+      "id": "HR-C01",
+      "area": "Core控制边界",
+      "scenario": "Steer受理持久回调抛IOException / 原异常传播、队列不变、无成功回执；不将确认未知解释为从未受理",
+      "origin": "2026-10-09边界修正",
+      "status": "NOT_RUN",
+      "evidence": null
+    },
+    {
+      "id": "HR-C02",
+      "area": "Core控制边界",
+      "scenario": "真实锁竞争两种顺序 / STOP先成功则Steer回调零调用；Steer先入队则STOP不保存answer",
+      "origin": "2026-10-09边界修正",
+      "status": "NOT_RUN",
+      "evidence": null
+    },
+    {
+      "id": "HR-C03",
+      "area": "Core控制边界",
+      "scenario": "成功Steer引用同一inputId/原文的已提交受理eventId，返回与入队对象相同；队列满时不追加日志",
+      "origin": "2026-10-09边界修正",
+      "status": "NOT_RUN",
+      "evidence": null
+    },
+    {
+      "id": "HR-C04",
+      "area": "Core控制边界",
+      "scenario": "finishIfNoSteer保存回答失败 / checked IOException传播，不报告交付成功，不继续模型循环",
+      "origin": "2026-10-09边界修正",
+      "status": "NOT_RUN",
+      "evidence": null
+    },
+    {
+      "id": "HR-L01",
+      "area": "Worker装配生命周期",
+      "scenario": "INITIALIZE无acceptedCommand也能ready；两次SUBMIT分别绑定Writer/Control/平台工具，存储与无身份Client共享，旧回调不能归属新Task",
+      "origin": "2026-10-09边界修正",
+      "status": "NOT_RUN",
+      "evidence": null
+    },
+    {
+      "id": "HR-L02",
+      "area": "Worker未决操作",
+      "scenario": "Task结束且Writer关闭后发布结果到达 / appendHost沿原operation归属记录，不改旧Task终态、不写新Task；baseline仅在正确工作线安全边界安装",
+      "origin": "2026-10-09边界修正",
+      "status": "NOT_RUN",
+      "evidence": null
+    },
+    {
+      "id": "HR-L03",
+      "area": "Worker未决操作",
+      "scenario": "平台结果确认与baseline安装之间崩溃 / 原operation仍可重建核对；安装及记录确认前不清pending，重复核对不补造第二个Tool Result",
+      "origin": "2026-10-09边界修正",
+      "status": "NOT_RUN",
+      "evidence": null
+    },
+    {
+      "id": "HR-H01",
+      "area": "历史交接与Context",
+      "scenario": "同一恢复包切换Core预算/保留策略 / Worker开放历史保持相同，Core可选择不同合法请求；未选旧结果仍可检索，不沿用旧树验证",
+      "origin": "2026-10-09边界修正",
+      "status": "NOT_RUN",
+      "evidence": null
+    },
+    {
+      "id": "HR-H02",
+      "area": "历史交接与Context",
+      "scenario": "恢复材料缺对象/摘要覆盖越界/其他Session来源 / Worker拒绝不完整或越权恢复，Core选择不能扩大已授访问范围",
+      "origin": "2026-10-09边界修正",
       "status": "NOT_RUN",
       "evidence": null
     }

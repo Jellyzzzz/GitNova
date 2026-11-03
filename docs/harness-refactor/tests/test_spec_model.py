@@ -113,4 +113,63 @@ class ModelTests(unittest.TestCase):
             if key in receipts:return receipts[key]
             state=target;receipts[key]=target;return target
         apply('close1','CLOSED');apply('reopen1','OPEN');apply('close1','CLOSED');self.assertEqual(state,'OPEN')
+@dataclass
+class ControlSpec:
+    """Sequential model of the operations under ONE lock; not a thread-safety test."""
+    open:bool=True
+    capacity:int=1
+    queue:list=field(default_factory=list)
+    def accept(self,persist):
+        if not self.open:raise ValueError('CLOSED')
+        if len(self.queue)>=self.capacity:raise ValueError('FULL')
+        steer=persist() # may raise; there is no queue mutation before success
+        self.queue.append(steer)
+        return steer
+    def finish(self,persist):
+        if not self.open:raise ValueError('CLOSED')
+        if self.queue:return None
+        answer=persist()
+        self.open=False
+        return answer
+
+class ControlModelTests(unittest.TestCase):
+    def test_accept_persistence_failure_does_not_enqueue(self):
+        control=ControlSpec();failure=OSError('force failed')
+        def persist():raise failure
+        with self.assertRaises(OSError) as caught:control.accept(persist)
+        self.assertIs(caught.exception,failure)
+        self.assertEqual(control.queue,[])
+    def test_stop_first_does_not_persist_steer(self):
+        control=ControlSpec();writes=[]
+        self.assertEqual(control.finish(lambda:'answer'),'answer')
+        with self.assertRaisesRegex(ValueError,'CLOSED'):
+            control.accept(lambda:writes.append('accepted'))
+        self.assertEqual(writes,[])
+    def test_steer_first_does_not_persist_answer(self):
+        control=ControlSpec();writes=[]
+        control.accept(lambda:('input','text','stream:1'))
+        self.assertIsNone(control.finish(lambda:writes.append('answer')))
+        self.assertTrue(control.open)
+        self.assertEqual(writes,[])
+    def test_accepted_reference_is_returned_after_append(self):
+        control=ControlSpec();log=[]
+        def persist():
+            # The model assigns identity at append, not at the accept call site.
+            log.append(dict(eventId=f'stream:{len(log)+1}',inputId='input',message='text'))
+            return ('input','text',log[-1]['eventId'])
+        accepted=control.accept(persist)
+        self.assertIs(accepted,control.queue[0])
+        self.assertEqual(accepted,('input','text',log[0]['eventId']))
+    def test_full_queue_does_not_append(self):
+        control=ControlSpec();writes=[]
+        control.accept(lambda:('input','text','stream:1'))
+        with self.assertRaisesRegex(ValueError,'FULL'):
+            control.accept(lambda:writes.append('accepted'))
+        self.assertEqual(writes,[])
+    def test_answer_persistence_failure_does_not_close_successfully(self):
+        control=ControlSpec()
+        def persist():raise OSError('force failed')
+        with self.assertRaises(OSError):control.finish(persist)
+        self.assertTrue(control.open) # caller must stop on storage failure, not continue the loop
+
 if __name__=='__main__':unittest.main(verbosity=2)

@@ -226,13 +226,103 @@ def javasc():
  out=TMP/'classes';run(['javac','--release','17','-cp',out,'-d',out,ROOT/'probes/ScopeProbe.java']);return run(['java','-cp',out,'ScopeProbe'])
 def runtimeconfig():
  # Actual reference config boundary behavior, not just a schema-only claim.
- code='''import java.util.*; import com.gitnova.agent.core.config.RuntimeConfig;
-public class ConfigProbe { static RuntimeConfig make(List<String>x){return new RuntimeConfig("m",1,1,100,1000,100,.8,.9,.6,1,100,10,1024,"{}","{}",x);}
-public static void main(String[]a){var c=make(List.of("shell","read_file")); if(!c.allowedTools().equals(List.of("read_file","shell")))throw new AssertionError();
-if(!make(List.of()).allowedTools().isEmpty())throw new AssertionError();
-for(var x:List.of(List.of("shell","shell"),List.of("sudo_anything"))){boolean fail=false;try{make(x);}catch(IllegalArgumentException e){fail=true;}if(!fail)throw new AssertionError();}
-System.out.println("ConfigProbe PASS: immutable sorted tools/empty/duplicate/unknown");}}'''
+ code='''import java.util.*;
+import com.gitnova.agent.core.config.RuntimeConfig;
+import com.gitnova.agent.core.model.ModelTypes;
+import com.gitnova.agent.core.tool.*;
+public class ConfigProbe {
+ static RuntimeConfig make(List<String> names) {
+  return new RuntimeConfig("m",1,1,100,1000,100,.8,.9,.6,1,100,10,1024,"{}","{}",names);
+ }
+ // Test-only host assembly; the Core config never contains this implementation registry.
+ static ToolRuntime assemble(RuntimeConfig config, Map<String,AgentTool> available) {
+  var granted = new ArrayList<AgentTool>();
+  for (String name : config.allowedTools()) {
+   AgentTool tool = available.get(name);
+   if (tool == null) throw new IllegalArgumentException("Missing implementation: " + name);
+   granted.add(tool);
+  }
+  return new ToolRuntime(granted);
+ }
+ public static void main(String[] args) {
+  var source = new ArrayList<>(List.of("shell","fake_echo"));
+  var config = make(source);
+  source.clear();
+  if (!config.allowedTools().equals(List.of("fake_echo","shell"))) throw new AssertionError();
+  if (!config.allowedTools().equals(make(List.of("fake_echo","shell")).allowedTools())) throw new AssertionError();
+  try { config.allowedTools().add("extra"); throw new AssertionError(); }
+  catch (UnsupportedOperationException expected) { }
+  if (!make(List.of()).allowedTools().isEmpty()) throw new AssertionError();
+  for (List<String> names : Arrays.<List<String>>asList(null,Arrays.asList((String)null),List.of(""),List.of(" "),List.of("shell","shell"))) {
+   try { make(names); throw new AssertionError("Invalid names accepted"); }
+   catch (IllegalArgumentException expected) { }
+  }
+  AgentTool echo = new AgentTool() {
+   public ModelTypes.ToolDefinition definition() { return new ModelTypes.ToolDefinition("fake_echo","probe","{}"); }
+   public ToolTypes.Result execute(String args, ToolTypes.Context context) { throw new AssertionError("Not dispatched in this probe"); }
+  };
+  var available = Map.of("fake_echo",echo);
+  var runtime = assemble(make(List.of("fake_echo")), available);
+  if (!runtime.definitions().getFirst().name().equals("fake_echo")) throw new AssertionError();
+  try { assemble(make(List.of("missing")),available); throw new AssertionError(); }
+  catch (IllegalArgumentException expected) { }
+  var denied = assemble(make(List.of()),available);
+  if (!denied.definitions().isEmpty()) throw new AssertionError();
+  var result = denied.execute(new ModelTypes.ToolCall("c","fake_echo","{}"),new ToolTypes.Context("e","c",null,null));
+  if (result.status() != ToolTypes.Status.INVALID_ARGUMENT) throw new AssertionError();
+  System.out.println("ConfigProbe PASS: extension names, immutable sorted grants, invalid lists, missing implementation, ungranted dispatch");
+ }
+}'''
  p=TMP/'ConfigProbe.java';p.write_text(code);out=TMP/'classes';run(['javac','--release','21','-cp',out,'-d',out,p]);return run(['java','-cp',out,'ConfigProbe'])
+def control_contract():
+ # Compile the real reference callback types without supplying a fake production Control.
+ code='''import java.io.IOException;
+import java.util.*;
+import com.gitnova.agent.core.engine.ExecutionControl;
+import com.gitnova.agent.core.history.SessionLog;
+import com.gitnova.agent.core.model.ModelTypes;
+public class ControlContractProbe {
+ static ExecutionControl.Steer accept(ExecutionControl control, SessionLog.Writer writer,
+                                     String inputId, ModelTypes.Message message) throws IOException {
+  return control.acceptSteer(() -> {
+   var entry = writer.append("INPUT_ACCEPTED",Map.of("inputId",inputId,"message",message));
+   return new ExecutionControl.Steer(inputId,message,entry.eventId());
+  });
+ }
+ static SessionLog.Entry finish(ExecutionControl control, SessionLog.Writer writer) throws IOException {
+  return control.finishIfNoSteer(() -> writer.append("ANSWER_DELIVERED",Map.of("responseEventId","r")));
+ }
+ public static void main(String[] args) throws Exception {
+  var accept = ExecutionControl.class.getMethod("acceptSteer",ExecutionControl.Persistence.class);
+  if (accept.getReturnType() != ExecutionControl.Steer.class) throw new AssertionError();
+  for (String name : List.of("acceptSteer","finishIfNoSteer")) {
+   var method = ExecutionControl.class.getMethod(name,ExecutionControl.Persistence.class);
+   if (!Arrays.asList(method.getExceptionTypes()).contains(IOException.class)) throw new AssertionError();
+  }
+  IOException failure = new IOException("not confirmed");
+  ExecutionControl.Persistence<ExecutionControl.Steer> failing = () -> { throw failure; };
+  try { failing.persist(); throw new AssertionError(); }
+  catch (IOException propagated) { if (propagated != failure) throw new AssertionError(); }
+  System.out.println("ControlContractProbe PASS: append-result callback compiles; checked IOException preserved; no Control implementation tested");
+ }
+}'''
+ p=TMP/'ControlContractProbe.java';p.write_text(code);out=TMP/'classes'
+ run(['javac','--release','21','-cp',out,'-d',out,p])
+ return run(['java','-cp',out,'ControlContractProbe'])
+def host_context_boundaries():
+ config=text('reference/agent-core/src/main/java/com/gitnova/agent/core/config/RuntimeConfig.java')
+ for name in ['report_progress','create_pull_request','Set.of(']:
+  require(name not in config,'Core config still owns deployment names: '+name)
+ control=text('reference/agent-core/src/main/java/com/gitnova/agent/core/engine/ExecutionControl.java')
+ require('Runnable persistAcceptance' not in control,'Steer callback discards committed identity')
+ handover=text('contracts/context-handover.md')
+ for term in ['全部已提交Entry','Core决定哪些内容进入请求','state/context-handover.json','不保存selectedGroups']:
+  require(term in handover,'handover boundary missing: '+term)
+ lifecycle=text('08_显式发布与透明回收施工单.md')
+ for term in ['实例初始化','某次SUBMIT受理后','已关闭的Writer','PLATFORM_OPERATION_RESOLVED','不能把其终态改回RUNNING']:
+  require(term in lifecycle,'execution lifecycle missing: '+term)
+ require('Client/Capabilities→工具Map/Engine' not in lifecycle,'old initialization graph remains')
+ return 'Host restore/access/lifecycle and Core selection/config boundaries; static check only'
 def specmodels():return run([sys.executable,'-m','unittest','discover','-s',ROOT/'tests','-p','test_spec_model.py','-v'])
 def transport():
  out=TMP/'transport';out.mkdir();run(['javac','--release','17','-d',out,ROOT/'probes/TransportProbe.java']);return run(['java','-cp',out,'TransportProbe'],timeout=20)
@@ -328,6 +418,8 @@ def main():
    check(n,f,k)
   check('ProtocolJson方法说明与施工顺序',protocoljson_contract,'READABILITY_STATIC')
   check('Core输入消息边界',core_message_boundary,'STATIC')
+  check('Steer持久回调契约',control_contract,'REFERENCE')
+  check('宿主与Core职责边界',host_context_boundaries,'STATIC')
   result={'createdAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'productTestsExecuted':False,'groups':REPORT,'passed':sum(x['status']=='PASS' for x in REPORT),'failed':sum(x['status']=='FAIL' for x in REPORT),'warnings':['No MySQL/RabbitMQ/OpenSandbox/user-source/real-model integration executed','Specification model != production implementation','No low-effort-model or independent-reader blind test']}
   (ROOT/'audit/check-results.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
   print(json.dumps({'passed':result['passed'],'failed':result['failed']},ensure_ascii=False))

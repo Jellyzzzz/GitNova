@@ -173,8 +173,8 @@
     "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/config/RuntimeConfig.java",
     "name": "RuntimeConfig",
     "signature": "完整record与字段校验见reference/.../core/config/RuntimeConfig.java",
-    "logic": "集中保存运行参数与受信allowedTools，不新增权限类。本地启动器提供配置；云端Worker冻结Binding配置并在受理时校验Submit引用的digest，Core输入不携带Binding。验证预算、比例和工具名；工具列表排序、拒绝重复，复制为不可变列表后计算digest。运行中不读取平台配置表，不从任务正文提权。现有阈值仍为80/90/60。",
-    "tests": "RuntimeConfigTest：非法比例/负预算拒绝；digest稳定。",
+    "logic": "集中保存运行参数与受信allowedTools，不新增权限类。Core校验预算、比例、名单非null及名称非空白/不重复，排序并复制为不可变列表，不硬编码工具名。宿主装配验证每个获授名都有实现，只注册获授子集；本地启动器与Worker遵守同一规则。云端配置由Binding冻结并校验digest，任务正文不提权。现有阈值仍为80/90/60。",
+    "tests": "RuntimeConfigTest：非法预算/比例/空白/重复拒绝，扩展工具名可保存；宿主装配缺实现拒绝，未获授工具不可见不可执行。",
     "depends": "",
     "document": "02_逐步手写开发与旧链路退役.md"
   },
@@ -183,8 +183,8 @@
     "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/engine/ExecutionControl.java",
     "name": "ExecutionControl",
     "signature": "字段与完整签名见 reference/agent-core/src/main/java/com/gitnova/agent/core/engine/ExecutionControl.java",
-    "logic": "每次执行一个控制对象；Steer(inputId,USER Message,acceptedEventId)，平台命令映射留Worker。acceptSteer同锁持久后入队；finishIfNoSteer原子决定交付；cancel是控制信号。关闭后不复用于下次执行。",
-    "tests": "ControlRaceTest：旧执行取消不影响新执行，注册竞态、Steer与STOP竞争、deadline。",
+    "logic": "每次执行一个控制对象。acceptSteer接收Persistence<Steer>，锁内检查开放/容量后调用回调，append返回真实eventId才构造Steer并入队，返回同一对象。嵌套Persistence<T>.persist可抛IOException，finishIfNoSteer复用它；错误原样传播，不入队或伪造完成。平台映射留Worker，取消是控制信号，关闭后不复用于下次执行。",
+    "tests": "ControlRaceTest：受理写入失败不入队、STOP先行不执行受理回调、Steer引用真实eventId；旧执行取消不影响新执行。",
     "depends": "",
     "document": "02_逐步手写开发与旧链路退役.md"
   },
@@ -282,9 +282,9 @@
     "step": 3,
     "path": "agent-runtime/agent-core/src/main/java/com/gitnova/agent/core/engine/DefaultExecutionControl.java",
     "name": "DefaultExecutionControl",
-    "signature": "DefaultExecutionControl(Instant deadline); implements ExecutionControl",
-    "logic": "用同一锁协调STEER接收与STOP确认。acceptSteer在锁内先耐久append再入有界队列。finishIfNoSteer在锁内检查取消/队列/输入关闭标志；无待处理消息才执行保存answer的回调并关闭输入。registerCancellable需处理注册前已经取消的竞态；取消先置标志再在锁外关闭HTTP/进程。禁止回调获取TaskInbox锁，锁顺序见05。",
-    "tests": "ControlRaceTest：取消先于注册；STEER先于STOP；STOP先于STEER；deadline。",
+    "signature": "DefaultExecutionControl(Instant deadline,int maxPendingSteers); implements ExecutionControl",
+    "logic": "同一锁协调STEER与STOP。acceptSteer先检查输入开放/取消/deadline/容量，再调用Persistence<Steer>取得真实受理引用，成功后入队并返回；回调失败不入队。finishIfNoSteer无待应用消息时先持久保存answer，成功后关闭输入；IOException向外传播。取消先置标志再锁外关闭资源，注册须处理已经取消；回调禁止反向获取TaskInbox锁，见05。",
+    "tests": "ControlRaceTest：STEER/STOP两种锁顺序、队列满不写日志、IOException传播且不入队、真实受理引用、answer保存失败不宣布完成。",
     "depends": "ExecutionControl",
     "document": "02_逐步手写开发与旧链路退役.md"
   },
@@ -694,7 +694,7 @@
     "path": "agent-runtime/agent-worker/src/main/java/com/gitnova/agent/worker/platform/HttpPlatformCapabilities.java",
     "name": "HttpPlatformCapabilities",
     "signature": "implements PlatformCapabilities",
-    "logic": "每次执行单独绑定已受理身份；按08封存PROGRESS、固定operationId、调用真实平台并核对结果。模型只填业务参数；Core执行ID不能替代平台授权。工具封装将PlatformOperation.Result转成普通Result。",
+    "logic": "每次执行单独绑定已受理身份；按08封存PROGRESS、持久保存固定operation及原归属、调用真实平台。未决操作不由本对象独占，WorkerAssembly通过共享Client/宿主日志继续核对，不使用已关闭Writer。模型只填业务参数；工具封装转普通Result，不改变已结束Task终态。",
     "tests": "ProgressCapabilityTest,PullRequestCapabilityTest",
     "depends": "SessionSealer,PlatformOperationClient",
     "document": "02_逐步手写开发与旧链路退役.md"

@@ -12,14 +12,12 @@ public record RuntimeConfig(String model, int maxModelCalls, int maxToolCalls,
  int retainGroups, int inlineTokens, int previewTokens, long maxCaptureBytes,
  String thinkingJson, String summaryThinkingJson, List<String> allowedTools) {
  public RuntimeConfig {
-  // Closed tool set for this deployment; extending it requires an implementation and tests.
-  Set<String> known = Set.of("shell", "read_file", "edit_file", "history_read", "history_search",
-                            "report_progress", "create_pull_request");
+  // Names are deployment-owned. The host must resolve every grant before assembling ToolRuntime.
   if (allowedTools == null) throw new IllegalArgumentException("allowedTools is required");
   Set<String> seen = new HashSet<>();
   for (String name : allowedTools) {
-   if (name == null || !known.contains(name) || !seen.add(name))
-    throw new IllegalArgumentException("Unknown or duplicate tool: " + name);
+   if (name == null || name.isBlank() || !seen.add(name))
+    throw new IllegalArgumentException("Blank or duplicate tool name: " + name);
   }
   List<String> sorted = new ArrayList<>(allowedTools);
   Collections.sort(sorted);

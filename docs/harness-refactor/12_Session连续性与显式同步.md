@@ -99,7 +99,7 @@ snapshot失败→保留旧实例，Sync FAILED或可重试阶段；不要先销�
 
 新baseline永远是H，不能因为W'含移植草稿就把它作为“已经发布”。新分支先只引用H，不造空Commit；若没有任何代码差异，report_progress应返回NO_CHANGES。
 
-上下文处理：原Session历史和resultId不删除。新bootstrap只保存固定切线来源，未激活不记录成功切线。平台激活后第一条授权SUBMIT在运行模型前耐久记录一次WORKLINE_SWITCHED，再构造新活动Context，列出旧L1、新L2、H、草稿是否移植；保留用户明确长期约束与未完成目标，旧工具测试结果标为旧代码证据。第一轮模型必须知道当前树已变，不能继续沿用“刚才测试已经通过”。原始历史可以检索，但不全量原样作为当前进度重放。
+历史交接：原Session历史和resultId不删除。新bootstrap保存固定切线来源及授权历史的真实覆盖，Worker不挑选近期组、未完成Task或摘要。平台激活后第一条授权SUBMIT在运行模型前耐久记录一次WORKLINE_SWITCHED，并提供旧L1、新L2、H、草稿是否移植等环境事实。Core在完整的授权历史视图中分组、选择与压缩，按来源处理显式长期约束及旧任务候选；旧测试只证明旧树。第一轮必须看到环境变化，不能把旧验证视为新树已通过。未进prompt的原始历史仍可检索。
 
 **测试**：B/H/W不同文件修改可移植；同一区域冲突不动旧树；移植后publishedHead=H；原resultId可读但带L1来源。
 
@@ -137,7 +137,7 @@ snapshot失败→保留旧实例，Sync FAILED或可重试阶段；不要先销�
 
 源分支缺失与工作线已合并是两份事实：ACTIVE线发现源缺失可标SOURCE_MISSING；MERGED线仍保留MERGED，并在查询中另返回sourceExists=false。不能用SOURCE_MISSING覆盖已合并事实、误恢复发布权。
 
-在休眠状态执行DISCARD或CARRY，旧归档必须有可证明的最新覆盖；无法证明时返回RECOVERY_UNAVAILABLE。原始结果的跨线目录/索引/Context选择结构按05第16节实现，不把旧进程句柄或旧控制token装到新实例。
+在休眠状态执行DISCARD或CARRY，旧归档必须有可证明的最新覆盖；无法证明时返回RECOVERY_UNAVAILABLE。原始结果的跨线目录/索引/交接来源按05第16节实现，Context选择仍由Core负责；不把旧进程句柄或旧控制token装到新实例。
 
 跨线Context文件及首次记录的精确规则见[Context交接合同](contracts/context-handover.md)。
 
