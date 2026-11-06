@@ -4,7 +4,9 @@ import {PiGateway}from "./model/pi-gateway.js";
 import type{Request}from "./model/types.js";
 import {ToolRegistry} from "./tools/registry.js";
 import {BashTool} from "./tools/bash.js";
-
+import {AgentLoop} from "./agent/loop.js";
+import {AgentSession} from "./agent/session.js";
+import type{LoopOptions} from "./agent/types.js";
 async function main():Promise<void>{
     const apiKey=process.env.DEEPSEEK_API_KEY;
     const modelId=process.env.DEEPSEEK_MODEL;
@@ -34,82 +36,69 @@ async function main():Promise<void>{
     }
 
     // 将已装配的模型入口交给 Gateway
-    const gateway=new PiGateway(models);
-    const controller=new AbortController();
-
-    const onInterrupt=()=>{
-        controller.abort();
-    };
-    process.once("SIGINT",onInterrupt);
-
+        const gateway=new PiGateway(models);
     const registry=new ToolRegistry();
     registry.register(BashTool);
 
-    const request:Request={
-        modelCallId:crypto.randomUUID(),
-        model:{
-            providerId:"deepseek",
-            modelId:modelId,
-        },
-        messages:[{
-            role:"user",
-            content:[{
-                type:"text",
-                text:process.argv.slice(2).join(" ")||"请只回答：通信成功",
-            }],
-            timestamp:Date.now(),
-        }],
-        tools:registry.definitions(),
-        maxOutputTokens:1024,
+    const loop=new AgentLoop(gateway,registry);
+    const session=new AgentSession(loop);
+
+    const options:LoopOptions={
+        cwd:process.cwd(),
+        model:{providerId:"deepseek",modelId},
         thinkingJson:thinkingMode==="enabled"
             ?JSON.stringify({reasoning:"high"})
             :"{}",
+        maxOutputTokens:1024,
+        maxModelCalls:4,
+        maxConcurrentTools:1,
+        ToolExecutionMode:"sequential",
     };
 
+    const unsubscribe=session.subscribe(event=>{
+        if(event.type==="model_event"){
+            const modelEvent=event.event;
+
+            if(modelEvent.type==="done"){
+                process.stdout.write("\n");
+                console.log("termination:",modelEvent.response.termination.kind);
+                console.log("usage:",modelEvent.response.usage);
+            }else{
+                process.stdout.write(modelEvent.delta);
+            }
+        }else if(event.type==="tool_start"){
+            console.log("\n工具调用：",event.call.name,event.call.argumentsJson);
+        }else if(event.type==="tool_end"){
+            console.dir(event.result,{depth:null});
+        }
+    });
+
+    const onInterrupt=()=>{
+        session.abort();
+    };
+    process.once("SIGINT",onInterrupt);
+
     try{
-        for await(const event of gateway.stream(
-            request,
-            controller.signal
-        )){
-            switch(event.type){
-                case "text_delta":
-                    process.stdout.write(event.delta);
-                    break;
+        const text=process.argv.slice(2).join(" ")||"请只回答：通信成功";
+        const result=await session.prompt(text,options);
 
-                case "reasoning_delta":
-                    process.stdout.write(event.delta);
-                    break;
+        console.log("run:",{
+            stopReason:result.stopReason,
+            modelCalls:result.modelCalls,
+        });
 
-                case "done":
-                    process.stdout.write("\n");
-                    console.log("termination:",event.response.termination);
-                    console.log("usage:",event.response.usage);
-
-                    if(event.response.termination.kind==="ERROR"){
-                        process.exitCode=1;
-                    }
-                    if(event.response.termination.kind==="TOOL_CALLS"){
-    for(const block of event.response.message.content){
-        if(block.type!=="tool_call"){
-            continue;
+        if(result.errMessage!==undefined){
+            console.error(result.errMessage);
         }
 
-        console.log("工具调用：",block.name,block.argumentsJson);
-
-        const result=await registry.execute(
-            block,
-            process.cwd(),
-            controller.signal,
-        );
-
-        console.dir(result,{depth:null});
-    }
-}
-                    break;
-            }
+        if(result.stopReason==="cancelled"){
+            process.exitCode=130;
+        }else if(result.stopReason!=="stop"){
+            process.exitCode=1;
         }
     }finally{
         process.removeListener("SIGINT",onInterrupt);
+        unsubscribe();
     }
 }
 

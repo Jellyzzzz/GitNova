@@ -14,7 +14,7 @@ export type InputMode="steering"|"follow_up";
 export interface LoopOptions{
     readonly cwd:string;
     readonly model:ModelRef;
-    readonly thingkingMode:string;
+    readonly thinkingJson:string;
     readonly maxOutputTokens:number;
     readonly maxModelCalls:number;
     readonly maxConcurrentTools:number;
@@ -44,7 +44,6 @@ export type AgentEvent=|{
     |{
         readonly type:"turn_start";
         readonly modelCallId:string;
-        readonly toolVersion:number;
     }
     |{
         readonly type:"turn_end";
@@ -81,7 +80,6 @@ export type AgentEvent=|{
     }
     |{
         readonly type:"tools_changed";
-        readonly version:number;
         readonly names:readonly string[];
     }
     |{

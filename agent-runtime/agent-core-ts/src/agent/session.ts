@@ -1,6 +1,7 @@
 import type{Message} from "../model/types.js";
-import type{AgentState,AgentEvent,LoopResult} from "./types.js";
+import type{AgentState,AgentEvent,LoopResult,LoopOptions} from "./types.js";
 import {InputQueue} from "./input-queue.js";
+import type{AgentLoop} from "./loop.js";
 
 type MutableAgentState=Omit<AgentState,"isStreaming"|"pendingToolCalls"|"errorMessage">&{
     isStreaming:boolean;
@@ -17,9 +18,11 @@ export class AgentSession{
     private readonly _state:MutableAgentState;
     private readonly inputQueue:InputQueue=new InputQueue();
     private readonly listeners:Set<AgentEventListener> =new Set<AgentEventListener>();
+    private readonly loop:AgentLoop;
     private activeRun:ActiveRun|undefined;
 
-    constructor(InitialMessage:Message[]=[]){
+    constructor(loop:AgentLoop,InitialMessage:Message[]=[]){
+        this.loop=loop;
         let messages=InitialMessage.slice();
         this._state={
             get messages(){return messages},
@@ -55,6 +58,14 @@ export class AgentSession{
     const unsubscribe=session.subcribe((event,signal))=>{};此时注册监听
     unsubscribe();此时取消监听
     */
+    }
+    prompt(text:string,options:LoopOptions):Promise<LoopResult>{
+        const input:Message={
+            role:"user",
+            content:[{type:"text",text:text}],
+            timestamp:Date.now(),
+        };
+        return this.runWithLifecycle((signal)=>this.loop.run(input,this._state.messages,options,signal,(event)=>this.processEvents(event),this.inputQueue));
     }
     private async processEvents(event:AgentEvent):Promise<void>{
         switch(event.type){
@@ -96,5 +107,37 @@ export class AgentSession{
             await listener(event,signal);
         }
     }
-    private runWithLifeCycle()
+    private async runWithLifecycle(executor:(siganl:AbortSignal)=>Promise<LoopResult>):Promise<LoopResult>{
+        if(this.activeRun!==undefined){
+            throw new Error("Agent is already processing.");
+        }
+        const abortController=new AbortController();
+        let resolvePromise=()=>{};
+        const promise=new Promise<void>((resolve)=>{
+            resolvePromise=resolve;
+        })
+        this.activeRun={
+            promise,
+            resolve:resolvePromise,
+            abortController,
+        };
+        this._state.isStreaming=true;
+        this._state.errorMessage=undefined;
+        try{
+            return await executor(abortController.signal);
+        }catch(error){
+            if(!abortController.signal.aborted){
+                this._state.errorMessage=error instanceof Error?error.message:String(error);
+            }
+            throw error;
+        }finally{
+            this.finishRun();
+        }
+    }
+    private finishRun():void{
+        this._state.isStreaming=false;
+        this._state.pendingToolCalls=new Set<string>();
+        this.activeRun?.resolve();
+        this.activeRun=undefined;
+    }
 }

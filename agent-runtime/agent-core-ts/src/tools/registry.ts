@@ -1,7 +1,7 @@
 import {validateToolArguments} from "@earendil-works/pi-ai";
 import type{JsonObject as PiJsonObject} from "@earendil-works/pi-ai";
 import type{ToolDefinition,ToolCallBlock,Message,JsonValue,ToolResultBlock}from "../model/types.js";
-import type{AgentTool,ToolUpdateCallback}from "./types.js";
+import type{AgentTool,ToolUpdateCallback,ToolExecutionMode}from "./types.js";
 import {toPiTools} from "../model/pi-request.js";
 export class ToolRegistry{
     private readonly tools=new Map<string,AgentTool>();
@@ -75,23 +75,14 @@ export class ToolRegistry{
             if(error instanceof Error&&error.name==="AbortError"){
                 throw error;
             }
-            const resultBlock:ToolResultBlock={
-                type:"tool_result",
-                callId:call.callId,
-                name:call.name,
-                content:error instanceof Error?error.message:String(error),
-                isError:true,
-            };
-            return {
-                message:{
-                    role:"tool",
-                    content:[resultBlock],
-                    timestamp:Date.now(),
-                },
-            };
+            return createToolErrorResult(call,error instanceof Error?error.message:String(error));
         } finally {
             acceptingUpdates=false;
         }
+    }
+    
+    executionMode(name:string):ToolExecutionMode{
+        return this.tools.get(name)?.mode??"sequential";
     }
 
     private parseArguments(tool:AgentTool,call:ToolCallBlock):unknown{
@@ -118,6 +109,24 @@ export class ToolRegistry{
     )
     return validated;
     }
+}
+export function createToolErrorResult(
+    call:ToolCallBlock,
+    text:string,
+):ToolExecutionResult{
+    return {
+        message:{
+            role:"tool",
+            content:[{
+                type:"tool_result",
+                callId:call.callId,
+                name:call.name,
+                content:text,
+                isError:true,
+            }],
+            timestamp:Date.now(),
+        },
+    };
 }
 export interface ToolExecutionResult{
         readonly message:Message;
