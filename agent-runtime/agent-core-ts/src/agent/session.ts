@@ -2,7 +2,6 @@ import type{Message} from "../model/types.js";
 import type{AgentState,AgentEvent,LoopResult,LoopOptions} from "./types.js";
 import {InputQueue} from "./input-queue.js";
 import type{AgentLoop} from "./loop.js";
-
 type MutableAgentState=Omit<AgentState,"isStreaming"|"pendingToolCalls"|"errorMessage">&{
     isStreaming:boolean;
     pendingToolCalls:Set<string>;
@@ -20,9 +19,10 @@ export class AgentSession{
     private readonly listeners:Set<AgentEventListener> =new Set<AgentEventListener>();
     private readonly loop:AgentLoop;
     private activeRun:ActiveRun|undefined;
-
-    constructor(loop:AgentLoop,InitialMessage:Message[]=[]){
+    private persistMessage?:(message:Message)=>Promise<void>;
+    constructor(loop:AgentLoop,InitialMessage:Message[]=[],persistMessage?:(message:Message)=>Promise<void>){
         this.loop=loop;
+        this.persistMessage=persistMessage;
         let messages=InitialMessage.slice();
         this._state={
             get messages(){return messages},
@@ -70,6 +70,7 @@ export class AgentSession{
     private async processEvents(event:AgentEvent):Promise<void>{
         switch(event.type){
             case "message_end":
+                await this.persistMessage?.(event.message);
                 this._state.messages.push(event.message);
                 break;
             case "tool_start":{

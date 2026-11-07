@@ -1,11 +1,17 @@
+import {randomUUID} from "node:crypto";
+import {homedir} from "node:os";
+import {join,resolve} from "node:path";
+import {createInterface} from "node:readline";
+import {parseArgs} from "node:util";
 import {createModels}from "@earendil-works/pi-ai";
 import {deepseekProvider}from "@earendil-works/pi-ai/providers/deepseek";
 import {PiGateway}from "./model/pi-gateway.js";
-import type{Request}from "./model/types.js";
+import type{Message}from "./model/types.js";
 import {ToolRegistry} from "./tools/registry.js";
 import {BashTool} from "./tools/bash.js";
 import {AgentLoop} from "./agent/loop.js";
 import {AgentSession} from "./agent/session.js";
+import {appendSessionMessage,loadSessionMessages} from "./agent/session-log.js";
 import type{LoopOptions} from "./agent/types.js";
 async function main():Promise<void>{
     const apiKey=process.env.DEEPSEEK_API_KEY;
@@ -41,7 +47,28 @@ async function main():Promise<void>{
     registry.register(BashTool);
 
     const loop=new AgentLoop(gateway,registry);
-    const session=new AgentSession(loop);
+    const {values,positionals:args}=parseArgs({
+        options:{session:{type:"string"}},
+        allowPositionals:true,
+    });
+    if(values.session===""){
+        throw new Error("--session requires a file path");
+    }
+    const sessionPath=values.session===undefined
+        ?join(homedir(),".gitnova","sessions",`${randomUUID()}.jsonl`)
+        :resolve(values.session);
+    const messages=values.session===undefined?[]:await loadSessionMessages(sessionPath);
+    let persistenceError:Error|undefined;
+    const persistMessage=async(message:Message)=>{
+        try{
+            await appendSessionMessage(sessionPath,message);
+        }catch(error:unknown){
+            persistenceError=error instanceof Error?error:new Error(String(error));
+            throw persistenceError;
+        }
+    };
+    const session=new AgentSession(loop,messages,persistMessage);
+    console.error("session:",sessionPath);
 
     const options:LoopOptions={
         cwd:process.cwd(),
@@ -50,8 +77,8 @@ async function main():Promise<void>{
             ?JSON.stringify({reasoning:"high"})
             :"{}",
         maxOutputTokens:1024,
-        maxModelCalls:4,
-        maxConcurrentTools:1,
+        maxModelCalls:50,
+        maxConcurrentTools:5,
         ToolExecutionMode:"sequential",
     };
 
@@ -73,14 +100,12 @@ async function main():Promise<void>{
         }
     });
 
-    const onInterrupt=()=>{
-        session.abort();
-    };
-    process.once("SIGINT",onInterrupt);
-
-    try{
-        const text=process.argv.slice(2).join(" ")||"请只回答：通信成功";
+    const runPrompt=async(text:string)=>{
         const result=await session.prompt(text,options);
+        // 取消收尾也可能写入工具回执，写入失败时应退出 CLI。
+        if(persistenceError!==undefined){
+            throw persistenceError;
+        }
 
         console.log("run:",{
             stopReason:result.stopReason,
@@ -90,13 +115,60 @@ async function main():Promise<void>{
         if(result.errMessage!==undefined){
             console.error(result.errMessage);
         }
+        return result;
+    };
 
-        if(result.stopReason==="cancelled"){
+    const terminal=process.stdin.isTTY===true&&process.stdout.isTTY===true;
+    const input=args.length===0?createInterface({
+        input:process.stdin,
+        output:process.stdout,
+        terminal,
+        prompt:"gitnova> ",
+    }):undefined;
+    let inputClosed=false;
+    input?.once("close",()=>{
+        inputClosed=true;
+    });
+
+    const onInterrupt=()=>{
+        if(session.signal!==undefined){
+            session.abort();
+        }else{
             process.exitCode=130;
-        }else if(result.stopReason!=="stop"){
-            process.exitCode=1;
+            input?.close();
+        }
+    };
+    process.on("SIGINT",onInterrupt);
+    input?.on("SIGINT",onInterrupt);
+
+    try{
+        if(input===undefined){
+            const result=await runPrompt(args.join(" ")||"请只回答：通信成功");
+            if(result.stopReason==="cancelled"){
+                process.exitCode=130;
+            }else if(result.stopReason!=="stop"){
+                process.exitCode=1;
+            }
+            return;
+        }
+
+        if(terminal){
+            input.prompt();
+        }
+        for await(const line of input){
+            const text=line.trim();
+            if(text==="/exit"||text==="/quit"){
+                break;
+            }
+            if(text.length>0){
+                await runPrompt(text);
+            }
+            if(terminal&&!inputClosed){
+                input.prompt();
+            }
         }
     }finally{
+        input?.close();
         process.removeListener("SIGINT",onInterrupt);
         unsubscribe();
     }
