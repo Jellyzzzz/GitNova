@@ -4,6 +4,7 @@ import com.gitnova.interceptor.JwtInterceptor;
 import com.gitnova.ratelimit.RateLimitInterceptor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.lang.NonNull;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -28,10 +29,10 @@ public class JwtInterceptorConfig implements WebMvcConfigurer {
     }
 
     @Override
-    public void addInterceptors(InterceptorRegistry registry) {
+    public void addInterceptors(@NonNull InterceptorRegistry registry) {
         registry.addInterceptor(jwtInterceptor)
                 .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/auth/**")
+                .excludePathPatterns("/api/auth/login", "/api/auth/register")
                 .order(0);
         registry.addInterceptor(rateLimitInterceptor)
                 .addPathPatterns("/api/**")

@@ -2,7 +2,6 @@ package com.gitnova.controller;
 
 import com.gitnova.config.JwtInterceptorConfig;
 import com.gitnova.config.GlobalExceptionHandler;
-import io.jsonwebtoken.Claims;
 import com.gitnova.interceptor.JwtInterceptor;
 import com.gitnova.ratelimit.RateLimitInterceptor;
 import com.gitnova.service.RepoService;
@@ -19,7 +18,6 @@ import java.nio.charset.StandardCharsets;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -62,10 +60,7 @@ class WorkbenchWebTest {
     }
     @Test
     void shouldReturnNotFoundForRetiredAgentRoutes() throws Exception {
-        Claims claims = mock(Claims.class);
-        when(claims.getSubject()).thenReturn("developer");
-        when(claims.get("userId", Long.class)).thenReturn(1L);
-        when(jwtUtil.parseToken("test-token")).thenReturn(claims);
+        when(jwtUtil.verifyAndGetUserId("test-token")).thenReturn(1L);
         when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
 
         mvc.perform(get("/api/repos/42/agent/sessions")

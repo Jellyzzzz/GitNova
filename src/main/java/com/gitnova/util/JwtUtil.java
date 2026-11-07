@@ -2,53 +2,67 @@ package com.gitnova.util;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
 import java.util.Date;
 /**
  * JWT 工具类 — 生成 Token / 解析 Token
  *
- * @author TODO
+ * @author zhaoguodong
  */
 @Component
 public class JwtUtil {
-
-    // TODO: Phase 1 — 构造函数（接收 secret + expireMs，构建 SecretKey）
-    @Value("${gitnova.jwt.secret}")
-    private  String secret;
-    @Value("${gitnova.jwt.expire}")
-    private long expire;
-
-
-    private  SecretKey getSecretKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+    private final SecretKey key;
+    private final long expire;
+    public JwtUtil(
+        @Value ("${gitnova.jwt.secret}")
+        String secret,
+        @Value ("${gitnova.jwt.expire}")
+        long expire
+    ) {
+        this.key=Keys.hmacShaKeyFor(
+                Decoders.BASE64.decode(secret));
+        this.expire = expire;
     }
-    // TODO: Phase 1 — generateToken(Long userId, String username) → String
-        public  String generateToken(Long userId,String username){
+
+        public String generateToken(Long userId){
+        if(userId==null||userId<=0){
+            throw new IllegalArgumentException("Invalid userId");
+        }
         return Jwts.builder()
-                .subject(username)
-                .claim("userId",userId)
+                .subject(userId.toString())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis()+ expire))
-                .signWith(getSecretKey())
+                .signWith(key)
                 .compact();
         }
-    // TODO: Phase 1 — parseToken(String token) → Claims
-        public  Claims parseToken(String token){
+    
+        public Claims parseToken(String token){
                 return Jwts.parser()
-                        .verifyWith(getSecretKey())
+                        .verifyWith(key)
                         .build()
                         .parseSignedClaims(token)
                         .getPayload();
         }
-    // TODO: Phase 1 — getUserId(String token) → Long
+        
+        public Long verifyAndGetUserId(String token) {
+                Claims claims = parseToken(token);
 
-    // TODO: Phase 1 — getUsername(String token) → String
-
-    // TODO: Phase 1 — validateToken(String token) → boolean
-}
+                if (claims.getExpiration() == null) {
+                    throw new IllegalArgumentException("Token missing expiration");
+            }
+                String subject = claims.getSubject();
+                if (subject == null || subject.isBlank()) {
+                    throw new IllegalArgumentException("Token missing subject");
+            }
+                long userId = Long.parseLong(subject);
+                if (userId <= 0) {
+                throw new IllegalArgumentException("Invalid userId");
+            }
+                return userId;
+            }
+        }

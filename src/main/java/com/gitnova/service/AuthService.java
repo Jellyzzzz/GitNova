@@ -91,7 +91,7 @@ public class AuthService {
 
         if(!passwordEncoder.matches(password,user.getPassword())) return ApiResponse.error(401,"用户名或密码错误");
 
-        String token=jwtUtil.generateToken(user.getId(),user.getUsername());
+        String token=jwtUtil.generateToken(user.getId());
         return ApiResponse.success(token);
     }
 }

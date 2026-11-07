@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gitnova.common.UserContext;
 import com.gitnova.util.JwtUtil;
-import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -29,17 +28,13 @@ class JwtInterceptorTest {
     }
 
     @Test
-    void shouldLoadUsernameFromTheSignedSubject() throws Exception {
-        Claims claims = mock(Claims.class);
-        when(claims.getSubject()).thenReturn("alice");
-        when(claims.get("userId", Long.class)).thenReturn(7L);
-        when(jwtUtil.parseToken("valid-token")).thenReturn(claims);
+    void shouldLoadUserIdFromTheVerifiedToken() throws Exception {
+        when(jwtUtil.verifyAndGetUserId("valid-token")).thenReturn(7L);
         MockHttpServletRequest request = requestWithBearer("valid-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         assertTrue(interceptor.preHandle(request, response, new Object()));
         assertEquals(7L, UserContext.getUserId());
-        assertEquals("alice", UserContext.getUsername());
     }
 
     @Test
@@ -57,7 +52,7 @@ class JwtInterceptorTest {
 
     @Test
     void shouldReturnSafeJson401ForAnInvalidToken() throws Exception {
-        when(jwtUtil.parseToken("invalid-token"))
+        when(jwtUtil.verifyAndGetUserId("invalid-token"))
                 .thenThrow(new JwtException("provider detail must not be exposed"));
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -73,10 +68,8 @@ class JwtInterceptorTest {
 
     @Test
     void shouldRejectSignedTokensWithoutRequiredIdentityClaims() throws Exception {
-        Claims claims = mock(Claims.class);
-        when(claims.getSubject()).thenReturn("alice");
-        when(claims.get("userId", Long.class)).thenReturn(null);
-        when(jwtUtil.parseToken("incomplete-token")).thenReturn(claims);
+        when(jwtUtil.verifyAndGetUserId("incomplete-token"))
+                .thenThrow(new IllegalArgumentException("Invalid userId"));
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         assertFalse(interceptor.preHandle(
