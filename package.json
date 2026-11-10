@@ -1,6 +1,9 @@
 {
   "private": true,
   "type": "module",
+  "scripts": {
+    "owl": "node --env-file-if-exists=.env.local --import tsx agent-runtime/agent-core-ts/src/cli.ts"
+  },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "tsx": "^4.23.15",

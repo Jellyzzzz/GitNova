@@ -1,7 +1,9 @@
-import type{Message} from "../model/types.js";
+import type{Message,Usage} from "../model/types.js";
 import type{AgentState,AgentEvent,LoopResult,LoopOptions} from "./types.js";
 import {InputQueue} from "./input-queue.js";
 import type{AgentLoop} from "./loop.js";
+import { createUsageTotals,addUsageTotals } from "./usage.js";
+import type{UsageTotals} from "./usage.js";
 type MutableAgentState=Omit<AgentState,"isStreaming"|"pendingToolCalls"|"errorMessage">&{
     isStreaming:boolean;
     pendingToolCalls:Set<string>;
@@ -20,9 +22,14 @@ export class AgentSession{
     private readonly loop:AgentLoop;
     private activeRun:ActiveRun|undefined;
     private persistMessage?:(message:Message)=>Promise<void>;
-    constructor(loop:AgentLoop,InitialMessage:Message[]=[],persistMessage?:(message:Message)=>Promise<void>){
+    private _runUsage=createUsageTotals();
+    private _sessionUsage:UsageTotals;
+    private readonly persistUsage?:SessionUsageOptions["persist"];
+    constructor(loop:AgentLoop,InitialMessage:Message[]=[],persistMessage?:(message:Message)=>Promise<void>,usageOptions:SessionUsageOptions={},){
         this.loop=loop;
         this.persistMessage=persistMessage;
+        this.persistUsage=usageOptions.persist;
+        this._sessionUsage=usageOptions.initialTotals??createUsageTotals();
         let messages=InitialMessage.slice();
         this._state={
             get messages(){return messages},
@@ -42,6 +49,13 @@ export class AgentSession{
     get signal():AbortSignal|undefined{
         return this.activeRun?.abortController.signal;
     }
+    get runUsage(){
+        return this._runUsage;
+    }
+    get sessionUsage(){
+        return this._sessionUsage;
+    }
+
     abort():void{
         return this.activeRun?.abortController.abort();
     }
@@ -85,10 +99,19 @@ export class AgentSession{
                 this._state.pendingToolCalls=pending;
                 break;
             }
+            case "run_start":{
+                this._runUsage=createUsageTotals();
+                break;
+            }
             case "model_event":{
                 const modelEvent=event.event;
-                if(modelEvent.type=="done"&&modelEvent.response.termination.kind==="ERROR"){
-                    this._state.errorMessage=modelEvent.response.termination.failure.message;
+                if(modelEvent.type!=="done") break;
+                const {usage,termination}=modelEvent.response;
+                await this.persistUsage?.(event.modelCallId,usage);
+                this._runUsage=addUsageTotals(this._runUsage,usage);
+                this._sessionUsage=addUsageTotals(this._sessionUsage,usage);
+                if(termination.kind==="ERROR"){
+                    this._state.errorMessage=termination.failure.message;
                 }
                 break;
             }
@@ -142,3 +165,7 @@ export class AgentSession{
         this.activeRun=undefined;
     }
 }
+type SessionUsageOptions={
+    readonly initialTotals?:UsageTotals;
+    readonly persist?:(modelCallId:string,usage:Usage|null)=>Promise<void>;
+};
