@@ -48,3 +48,6 @@ data/
 .env
 .env.local
 gitnova-files.txt
+
+# Owl 本地依赖
+/node_modules/
