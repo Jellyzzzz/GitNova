@@ -13,7 +13,9 @@ import {
     type TUI,
 } from "@earendil-works/pi-tui";
 import type { AgentEvent } from "../agent/types.js";
+import type { UsageTotals } from "../agent/usage.js";
 import type { ContentBlock, Message } from "../model/types.js";
+import { readToolResult } from "../model/tool-result.js";
 import { createOwlLogo } from "./owl-logo.js";
 import { owl, owlEditorTheme, owlSelectTheme } from "./theme.js";
 import {
@@ -32,8 +34,8 @@ export interface OwlTuiHooks {
     readonly cwd: string;
     readonly modelId: string;
     readonly contextWindow: number;
-    /** Session token total shown in the status bar. */
-    readonly sessionTokens: () => number;
+    readonly runUsage: () => UsageTotals;
+    readonly sessionUsage: () => UsageTotals;
     /** Runs one submitted prompt/command. Rejects on failure. */
     readonly onSubmit: (text: string) => Promise<void>;
     /** Abort the running agent. Returns false when nothing was running. */
@@ -102,7 +104,8 @@ export class OwlTui {
             model: this.hooks.modelId,
             contextTokens: this.contextTokens,
             contextWindow: this.hooks.contextWindow,
-            sessionTokens: this.hooks.sessionTokens(),
+            runUsage: this.hooks.runUsage(),
+            sessionUsage: this.hooks.sessionUsage(),
             busy: this.busy,
             queued: this.queue.length,
         }));
@@ -169,10 +172,10 @@ export class OwlTui {
     }
 
     /** Replace the transcript with a new session's history. */
-    reset(sessionLabel: string, history: readonly Message[], hasCompaction = false): void {
+    reset(sessionLabel: string, history: readonly Message[], hasCompaction = false, contextTokens: number | null = null): void {
         this.sessionLabel = sessionLabel;
         this.transcript.clear();
-        this.contextTokens = null;
+        this.contextTokens = contextTokens;
         this.currentAssistant = undefined;
         this.currentReasoning = undefined;
         this.compactionNote = undefined;
@@ -285,6 +288,10 @@ export class OwlTui {
                 this.contextTokens = event.contextBudget.estimatedInputTokens;
                 break;
 
+            case "context_update":
+                this.contextTokens = event.contextBudget.estimatedInputTokens;
+                break;
+
             case "model_event": {
                 const modelEvent = event.event;
                 if (modelEvent.type === "reasoning_delta") {
@@ -371,13 +378,12 @@ export class OwlTui {
     }
 
     private showToolResult(message: Message, createView = true): void {
-        const result = message.content.find(block => block.type === "tool_result");
-        if (result === undefined) return;
+        const { result, content } = readToolResult(message);
         const pending = this.toolViews.get(result.callId);
         if (pending === undefined && !createView) return;
         const view = pending ?? this.addToolView(result.name);
         this.toolViews.delete(result.callId);
-        view.setOutput(textFrom(message.content));
+        view.setOutput(textFrom(content.filter(block => block.type !== "text" || block.text !== "")));
         view.setState(result.isError ? "error" : "ok");
     }
 

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {setTimeout} from "node:timers/promises";
 import type{ToolCallBlock} from "../model/types.js";
 import {toPiToolResultMessage} from "../model/pi-messages.js";
+import {readToolResult} from "../model/tool-result.js";
 import {ToolRegistry} from "./registry.js";
 import type{ToolExecutionResult} from "./registry.js";
 import type{AgentTool,ToolContext,ToolResult,ToolUpdateCallback} from "./types.js";
@@ -42,11 +43,11 @@ function assertFailure(execution:ToolExecutionResult,call:ToolCallBlock):string{
     assert.equal(message.toolCallId,call.callId);
     assert.equal(message.toolName,call.name);
     assert.equal(message.isError,true);
-    const block=execution.message.content[0];
-    assert.equal(block.type,"tool_result");
-    assert.ok(block.type==="tool_result");
-    assert.ok(block.content.length>0);
-    return block.content;
+    const {result,content}=readToolResult(execution.message);
+    assert.equal(result.content,"");
+    const text=content.filter(block=>block.type==="text").map(block=>block.text).join("");
+    assert.ok(text.length>0);
+    return text;
 }
 
 test("registry: validates arguments and preserves context, content order and details",async()=>{
