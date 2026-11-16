@@ -22,7 +22,7 @@ export class AgentLoop{
         this.registry = registry;
     }
 
-    async run(input:Message,history:readonly Message[],options:LoopOptions,signal:AbortSignal,emit:AgentEventSink,InputQueue:InputQueue,contextUsage:ContextUsageState={},initialCheckpoint?:CompactionCheckpoint):Promise<LoopResult>{
+    async run(input:Message,history:readonly Message[],options:LoopOptions,signal:AbortSignal,notify:AgentEventSink,InputQueue:InputQueue,contextUsage:ContextUsageState={},initialCheckpoint?:CompactionCheckpoint):Promise<LoopResult>{
         if(input.role!=="user"){
             throw new Error("AgentLoop input must be a user message");
         }
@@ -36,6 +36,12 @@ export class AgentLoop{
 
         const messages:Message[]=history.slice();
         let checkpoint = initialCheckpoint;
+        const emit:AgentEventSink=async event=>{
+            await notify(event);
+            if(event.type==="message_end"){
+                await notify({type:"context_update",contextBudget:this.estimateContext(messages,options,contextUsage,checkpoint)});
+            }
+        };
         const reserveTokens = options.reserveTokens ?? options.maxOutputTokens;
         let overflowRetryUsed = false;
         let modelCalls=0;
@@ -127,6 +133,7 @@ export class AgentLoop{
                                 tools:request.tools,
                                 prefix:[...request.messages,message],
                             };
+                            await emit({type:"context_update",contextBudget:this.estimateContext(messages,options,contextUsage,checkpoint)});
                         }
                         if(expectedToolCalls){
                             await this.executeToolCalls(calls,messages,options,signal,emit);
@@ -207,6 +214,14 @@ export class AgentLoop{
         }
         throw new Error("Model stream ended without a final response");
     }
+    estimateContext(
+        messages:readonly Message[],options:LoopOptions,contextUsage:ContextUsageState,
+        checkpoint?:CompactionCheckpoint,
+    ):ContextBudget{
+        const request=this.createRequest(buildModelContext(messages,checkpoint),options);
+        return measureContext(request,options.contextWindow,options.reserveTokens??options.maxOutputTokens,contextUsage.lastUsage);
+    }
+
     private createRequest(messages:readonly Message[],options:LoopOptions):Request{
         return {
             modelCallId:randomUUID(),

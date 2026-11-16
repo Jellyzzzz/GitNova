@@ -1,9 +1,11 @@
 import {appendFile,readFile,mkdir,readdir,stat} from "node:fs/promises";
-import type{Message,Usage} from "../model/types.js";
+import type{Message,ModelRef,Request,Usage} from "../model/types.js";
+import {readToolResult} from "../model/tool-result.js";
 import {dirname,join} from "node:path";
 import type{UsageTotals} from "./usage.js";
 import {createUsageTotals,addUsageTotals} from "./usage.js";
-import {createCheckpoint,type CompactionCheckpoint,type CompactionRecord} from "./compaction.js";
+import {buildModelContext,createCheckpoint,type CompactionCheckpoint,type CompactionRecord} from "./compaction.js";
+import type {ContextUsageAnchor} from "./context-budget.js";
 type MessageEntry={
     readonly type:"message";
     readonly message:Message;
@@ -19,6 +21,60 @@ export type LoadedSession={
     readonly messages:Message[];
     readonly usageTotals:UsageTotals;
     readonly checkpoint?:CompactionCheckpoint;
+    readonly lastAssistantUsage?:{
+        readonly message:Message;
+        readonly model:ModelRef;
+        readonly totalTokens:number;
+    };
+}
+
+function replayUsage(message:Message):LoadedSession["lastAssistantUsage"]{
+    if(message.role!=="assistant"||message.providerReplay?.adapter!=="pi") return undefined;
+    const asRecord=(value:unknown):Record<string,unknown>|undefined=>
+        typeof value==="object"&&value!==null&&!Array.isArray(value)
+            ?value as Record<string,unknown>:undefined;
+    const response=asRecord(message.providerReplay.response);
+    if(!response) return undefined;
+    if(response.stopReason!=="stop"&&response.stopReason!=="toolUse") return undefined;
+    if(typeof response.provider!=="string"||!response.provider.trim()
+        ||typeof response.model!=="string"||!response.model.trim()) return undefined;
+    const usage=asRecord(response.usage);
+    if(!usage) return undefined;
+    const validCount=(value:unknown):value is number=>
+        typeof value==="number"&&Number.isSafeInteger(value)&&value>=0;
+    let totalTokens=usage.totalTokens;
+    if(!validCount(totalTokens)||totalTokens===0){
+        const counts=[usage.input,usage.output,usage.cacheRead,usage.cacheWrite];
+        if(!counts.every(validCount)) return undefined;
+        totalTokens=counts.reduce((total,count)=>total+count,0);
+    }
+    if(!validCount(totalTokens)||totalTokens===0) return undefined;
+    return {
+        message,
+        model:{providerId:response.provider,modelId:response.model},
+        totalTokens,
+    };
+}
+
+/** Bind a recovered usage to the restored messages and the current request settings.
+ * Old logs do not record the original tools or system prompt, so they cannot be compared here.
+ */
+export function restoreContextUsageAnchor(
+    session:LoadedSession,request:Pick<Request,"model"|"systemPrompt"|"tools">,
+):ContextUsageAnchor|undefined{
+    const usage=session.lastAssistantUsage;
+    if(!usage||usage.model.providerId!==request.model.providerId
+        ||usage.model.modelId!==request.model.modelId) return undefined;
+    const messages=buildModelContext(session.messages,session.checkpoint);
+    const index=messages.indexOf(usage.message);
+    if(index<0) return undefined;
+    return {
+        totalTokens:usage.totalTokens,
+        model:usage.model,
+        systemPrompt:request.systemPrompt,
+        tools:request.tools,
+        prefix:messages.slice(0,index+1),
+    };
 }
 export async function appendSessionEntry(filePath:string,entry:SessionLogEntry):Promise<void>{
     await mkdir(dirname(filePath),{recursive:true});
@@ -80,6 +136,7 @@ function isStoredCompaction(
 export async function loadSessionLog(filePath:string,mustExist:boolean):Promise<LoadedSession>{
     const messages:Message[]=[];
     let checkpoint:CompactionCheckpoint|undefined;
+    let lastAssistantUsage:LoadedSession["lastAssistantUsage"];
     let usageTotals=createUsageTotals();
     const countedCalls=new Set<string>();
     let text:string;
@@ -118,18 +175,22 @@ export async function loadSessionLog(filePath:string,mustExist:boolean):Promise<
                     throw new Error("Invalid compaction checkpoint");
                 }
                 checkpoint=createCheckpoint(entry);
+                // Usage from before this checkpoint measured a different context.
+                lastAssistantUsage=undefined;
                 continue;
             }
             const message=entry?.type==="message"?entry.message:undefined;
             if(entry?.type!=="message"||!message||!["user","assistant","tool","system"].includes(message.role)||!Array.isArray(message.content) || !Number.isFinite(message.timestamp)){
                 throw new Error("Invalid message entry");
             }
+            if(message.role==="tool") readToolResult(message);
             messages.push(message);
+            lastAssistantUsage=replayUsage(message)??lastAssistantUsage;
         } catch(cause){
             throw new Error(`Invalid session record at ${filePath}:${index + 1}`, { cause });
         }
     }
-    return {messages,usageTotals,checkpoint};
+    return {messages,usageTotals,checkpoint,lastAssistantUsage};
 }
 function isNotFound(error:unknown):boolean{
     return typeof error==="object"

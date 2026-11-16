@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ModelGateway } from "../model/gateway.js";
 import type { Message, Request, Response, ToolCallBlock } from "../model/types.js";
+import { readToolResult } from "../model/tool-result.js";
 import { truncateTail } from "../tools/truncate.js";
 import { estimateMessageTokens, measureContext } from "./context-budget.js";
 import type { AgentEventSink, LoopOptions } from "./types.js";
@@ -79,10 +80,9 @@ export function findPendingToolCalls(
         if (message.role === "system") continue;
 
         if (message.role === "tool") {
-            const results = message.content.filter(block => block.type === "tool_result");
-            if (results.length !== 1) return undefined;
-
-            const [result] = results;
+            let result;
+            try { result = readToolResult(message).result; }
+            catch { return undefined; }
             const call = pending.get(result.callId);
             if (!call || call.name !== result.name) return undefined;
             pending.delete(result.callId);
@@ -151,6 +151,14 @@ function findTurnStart(messages: readonly Message[], cutIndex: number): number |
 }
 
 function serializeMessage(message: Message): string {
+    if (message.role === "tool") {
+        const { result, content } = readToolResult(message);
+        const text = content.map(block => block.type === "text"
+            ? block.text : `[Image: ${block.mimeType}]`).filter(Boolean).join("\n");
+        const output = truncateTail(text, { maxBytes: 2000 });
+        const marker = output.truncated ? "[Earlier tool output truncated]\n" : "";
+        return `[tool ${result.name} id=${result.callId} status=${result.isError ? "error" : "ok"}]\n${marker}${output.content}`;
+    }
     const parts: string[] = [];
     for (const block of message.content) {
         switch (block.type) {
@@ -177,15 +185,7 @@ function serializeMessage(message: Message): string {
         }
     }
 
-    const text = parts.filter(Boolean).join("\n");
-    if (message.role !== "tool") return `[${message.role}]\n${text}`;
-
-    const result = message.content.find(block => block.type === "tool_result");
-    const status = result === undefined ? "unknown" : result.isError ? "error" : "ok";
-    const output = truncateTail(text, { maxBytes: 2000 });
-    const marker = output.truncated ? "[Earlier tool output truncated]\n" : "";
-
-    return `[tool ${result?.name ?? "?"} id=${result?.callId ?? "?"} status=${status}]\n${marker}${output.content}`;
+    return `[${message.role}]\n${parts.filter(Boolean).join("\n")}`;
 }
 function collectFiles(messages: readonly Message[], previous?: CompactionRecord) {
     const read = new Set(previous?.readFiles);
@@ -201,8 +201,7 @@ function collectFiles(messages: readonly Message[], previous?: CompactionRecord)
         }
         if (message.role !== "tool") continue;
 
-        const result = message.content.find(block => block.type === "tool_result");
-        if (!result) continue;
+        const { result } = readToolResult(message);
 
         const call = calls.get(result.callId);
         calls.delete(result.callId);

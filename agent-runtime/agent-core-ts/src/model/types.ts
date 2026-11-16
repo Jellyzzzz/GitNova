@@ -17,6 +17,7 @@ export interface ToolResultBlock{
     readonly type:"tool_result";
     readonly name:string;
     readonly callId:string;
+    /** Legacy inline text; use readToolResult(message) for the complete output. */
     readonly content:string;
     readonly isError:boolean;
 }

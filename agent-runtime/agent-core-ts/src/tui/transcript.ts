@@ -256,7 +256,8 @@ export interface StatusState {
     readonly model: string;
     readonly contextTokens: number | null;
     readonly contextWindow: number;
-    readonly sessionTokens: number;
+    readonly runUsage: import("../agent/usage.js").UsageTotals;
+    readonly sessionUsage: import("../agent/usage.js").UsageTotals;
     readonly busy: boolean;
     readonly queued: number;
 }
@@ -269,21 +270,24 @@ export class StatusBar implements Component {
         const state = this.read();
 
         const dot = state.busy ? owl.warning("◍") : owl.accent("●");
-        const left = `${dot} ${owl.accentBold("owl")} ${owl.dim("·")} ${owl.muted(state.model)}${
+        let left = `${dot} ${owl.accentBold("owl")} ${owl.dim("·")} ${owl.muted(state.model)}${
             state.queued > 0 ? ` ${owl.warning(`+${state.queued} queued`)}` : ""
         }`;
 
         const context =
             state.contextTokens === null
-                ? owl.dim(`ctx —/${formatTokens(state.contextWindow)}`)
-                : owl.dim(
-                      `ctx ${formatTokens(state.contextTokens)}/${formatTokens(state.contextWindow)} ${(
-                          (state.contextTokens / state.contextWindow) *
-                          100
-                      ).toFixed(1)}%`,
-                  );
+                ? `ctx —/${formatTokens(state.contextWindow)}`
+                : `ctx≈${formatTokens(state.contextTokens)}/${formatTokens(state.contextWindow)}`;
 
-        const right = `${context} ${owl.dim("·")} ${owl.dim(`↑${formatTokens(state.sessionTokens)}`)}`;
+        const run = `${formatTokens(state.runUsage.reportedTokens)}${state.runUsage.missingTotals ? "?" : ""}`;
+        const session = `${formatTokens(state.sessionUsage.reportedTokens)}${state.sessionUsage.missingTotals ? "?" : ""}`;
+        let right = owl.dim(`${context} · 本轮 +${run} · 会话累计 ${session}`);
+        if (visibleWidth(left) + 1 + visibleWidth(right) > width) {
+            left = `${dot} ${owl.accentBold("owl")}${state.queued > 0 ? ` ${owl.warning(`+${state.queued}`)}` : ""}`;
+        }
+        if (visibleWidth(left) + 1 + visibleWidth(right) > width) {
+            right = owl.dim(`${context} 轮+${run} 会${session}`);
+        }
         const padding = " ".repeat(Math.max(1, width - visibleWidth(left) - visibleWidth(right)));
         return [truncateToWidth(`${left}${padding}${right}`, width, "…")];
     }

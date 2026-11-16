@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import type { Message, Request,ModelRef} from "../model/types.js";
+import { readToolResult } from "../model/tool-result.js";
 export type ContextBudget={
     readonly estimatedInputTokens: number;
     readonly inputBudgetTokens:number;
@@ -7,6 +8,15 @@ export type ContextBudget={
 export function estimateMessageTokens(message:Message):number{
     let bytes=Buffer.byteLength(message.role);
     let imageTokens=0;
+    if(message.role==="tool"){
+        const {result,content}=readToolResult(message);
+        bytes+=Buffer.byteLength(result.name)+Buffer.byteLength(result.callId);
+        for(const block of content){
+            if(block.type==="text") bytes+=Buffer.byteLength(block.text);
+            else imageTokens+=1200;
+        }
+        return Math.ceil(bytes/4)+imageTokens;
+    }
     for(const block of message.content){
         switch(block.type){
             case "text":
