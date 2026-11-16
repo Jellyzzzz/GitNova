@@ -27,7 +27,12 @@ export interface LoopOptions{
     readonly reserveTokens?:number;
     readonly keepRecentTokens?:number;
 }
-export type CompactionReason = "threshold" | "overflow";
+export type CompactionReason = "threshold" | "overflow" | "manual";
+export interface CompactionResult {
+    readonly checkpoint:CompactionCheckpoint;
+    readonly estimatedTokensBefore:number;
+    readonly contextBudget:ContextBudget;
+}
 export type LoopStopReason=|"stop"
     |"cancelled"
     |"max_model_calls"

@@ -1,5 +1,5 @@
 import type{Message,Usage} from "../model/types.js";
-import type{AgentState,AgentEvent,LoopResult,LoopOptions} from "./types.js";
+import type{AgentState,AgentEvent,CompactionResult,LoopResult,LoopOptions} from "./types.js";
 import {InputQueue} from "./input-queue.js";
 import type{AgentLoop} from "./loop.js";
 import { createUsageTotals,addUsageTotals } from "./usage.js";
@@ -16,9 +16,12 @@ type MutableAgentState=Omit<AgentState,"isStreaming"|"pendingToolCalls"|"errorMe
     errorMessage?:string;
 }
 type ActiveRun={
+    kind:"prompt"|"compaction";
     promise:Promise<void>;
     resolve:()=>void;
     abortController:AbortController;
+    failed?:boolean;
+    failure?:unknown;
 }
 type AgentEventListener=(event:AgentEvent,signal:AbortSignal)=>void|Promise<void>;//session内部更新后通知订阅者的数据结构
 export class AgentSession{
@@ -95,7 +98,23 @@ export class AgentSession{
             content:[{type:"text",text:text}],
             timestamp:Date.now(),
         };
-        return this.runWithLifecycle((signal)=>this.loop.run(input,this._state.messages,options,signal,(event)=>this.processEvents(event),this.inputQueue,this.contextUsage,this.checkpoint));
+        return this.runWithLifecycle("prompt",(signal)=>this.loop.run(input,this._state.messages,options,signal,(event)=>this.processEvents(event),this.inputQueue,this.contextUsage,this.checkpoint));
+    }
+    async compact(options:LoopOptions,customInstructions?:string):Promise<CompactionResult>{
+        if(this.activeRun?.kind==="compaction") throw new Error("上下文压缩正在进行");
+        const previous=this.activeRun;
+        if(previous){
+            this.abort();
+            await previous.promise;
+            if(previous.failed) throw previous.failure;
+        }
+        return this.runWithLifecycle("compaction",async signal=>{
+            this._runUsage=createUsageTotals();
+            return this.loop.compact(
+                this._state.messages,this.checkpoint,options,this.contextUsage,signal,
+                event=>this.processEvents(event),customInstructions,
+            );
+        });
     }
     private async processEvents(event:AgentEvent):Promise<void>{
         switch(event.type){
@@ -155,7 +174,7 @@ export class AgentSession{
         this._runUsage = addUsageTotals(this._runUsage, usage);
         this._sessionUsage = addUsageTotals(this._sessionUsage, usage);
     }
-    private async runWithLifecycle(executor:(siganl:AbortSignal)=>Promise<LoopResult>):Promise<LoopResult>{
+    private async runWithLifecycle<T>(kind:ActiveRun["kind"],executor:(signal:AbortSignal)=>Promise<T>):Promise<T>{
         if(this.activeRun!==undefined){
             throw new Error("Agent is already processing.");
         }
@@ -165,6 +184,7 @@ export class AgentSession{
             resolvePromise=resolve;
         })
         this.activeRun={
+            kind,
             promise,
             resolve:resolvePromise,
             abortController,
@@ -174,6 +194,10 @@ export class AgentSession{
         try{
             return await executor(abortController.signal);
         }catch(error){
+            if(this.activeRun){
+                this.activeRun.failed=true;
+                this.activeRun.failure=error;
+            }
             if(!abortController.signal.aborted){
                 this._state.errorMessage=error instanceof Error?error.message:String(error);
             }

@@ -4,7 +4,7 @@ import type { Message, Request, Response, ToolCallBlock } from "../model/types.j
 import { readToolResult } from "../model/tool-result.js";
 import { truncateTail } from "../tools/truncate.js";
 import { estimateMessageTokens, measureContext } from "./context-budget.js";
-import type { AgentEventSink, LoopOptions } from "./types.js";
+import type { AgentEventSink, CompactionReason, LoopOptions } from "./types.js";
 export interface CompactionRecord{
     readonly type:"compaction";
     readonly firstKeptMessageIndex:number;
@@ -232,10 +232,11 @@ export async function compact(
     previous: CompactionCheckpoint | undefined,
     request: Request,
     options: LoopOptions,
-    recoveringOverflow: boolean,
+    reason: CompactionReason,
     gateway: ModelGateway,
     signal: AbortSignal,
     emit: AgentEventSink,
+    customInstructions?: string,
 ): Promise<CompactionCheckpoint> {
     signal.throwIfAborted();
 
@@ -263,9 +264,20 @@ export async function compact(
         Math.max(1, Math.floor(available / 4)),
     );
     const recentTarget = Math.min(keepRecentTokens, available - preferredSummaryTokens);
-    const keepTokens = recoveringOverflow ? Math.floor(recentTarget / 2) : recentTarget;
+    const keepTokens = reason === "overflow" ? Math.floor(recentTarget / 2) : recentTarget;
     const old = previous?.record;
     const start = old?.firstKeptMessageIndex ?? 0;
+    if (reason === "manual") {
+        if (old && rawMessages.length === old.messageCount) {
+            throw new CompactionError("没有新增内容可压缩");
+        }
+        const recentTokens = rawMessages.slice(start)
+            .filter(message => message.role !== "system")
+            .reduce((total, message) => total + estimateMessageTokens(message), 0);
+        if (recentTokens <= keepTokens) {
+            throw new CompactionError("会话内容不足，无需压缩");
+        }
+    }
     const cut = findCutPoint(rawMessages, start, keepTokens, available);
 
     switch (cut.kind) {
@@ -377,6 +389,8 @@ export async function compact(
         const text = [
             instructions,
             "Keep exact paths, identifiers, command results, and errors when relevant. Mark uncertain tool outcomes as unknown.",
+            "Preserve conclusions, constraints, decisions, verification results, and unfinished work. Do not reproduce lengthy reasoning; distinguish facts from guesses.",
+            customInstructions?.trim() ? `Additional focus from the user:\n${customInstructions.trim()}` : "",
             prior
                 ? `Update this checkpoint with the supplied messages.\n<previous-summary>\n${prior}\n</previous-summary>`
                 : "",

@@ -25,6 +25,7 @@ import type{SelectItem} from "@earendil-works/pi-tui";
 const SESSION_ID_PATTERN=/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const LOCAL_COMMANDS={
     "/resume":"恢复会话",
+    "/compact":"压缩上下文，可附加摘要要求",
     "/help":"查看命令",
     "/exit":"退出 Owl",
 };
@@ -343,6 +344,12 @@ async function main():Promise<void>{
         return result;
     };
 
+    async function runCompact(customInstructions?:string):Promise<void>{
+        if(activeSession===undefined) throw new Error("当前没有会话可压缩");
+        await activeSession.compact(options,customInstructions);
+        if(persistenceError!==undefined) throw persistenceError;
+    }
+
     function sessionLabelOf(filePath:string|undefined):string{
         if(filePath===undefined) return "新会话";
         const name=filePath.split(/[\\/]/).pop()??filePath;
@@ -396,7 +403,7 @@ async function main():Promise<void>{
                 const [token]=text.split(/\s+/,1);
                 const command=token==="/quit"?"/exit":token;
 
-                if(Object.hasOwn(LOCAL_COMMANDS,command)&&text!==token){
+                if(command!=="/compact"&&Object.hasOwn(LOCAL_COMMANDS,command)&&text!==token){
                     ui.note(`${token} 不接受参数。`,"warning");
                     return;
                 }
@@ -410,6 +417,16 @@ async function main():Promise<void>{
                 }
                 if(command==="/resume"){
                     await pickSessionInTui(ui);
+                    return;
+                }
+                if(command==="/compact"){
+                    try{
+                        await runCompact(text.slice(token.length).trim()||undefined);
+                    }catch(error:unknown){
+                        if(persistenceError!==undefined){ finish(); return; }
+                        if(error instanceof Error&&error.name==="AbortError") ui.note("已取消压缩","warning");
+                        else ui.note(`压缩失败：${error instanceof Error?error.message:String(error)}`,"warning");
+                    }
                     return;
                 }
                 if(/^\/[a-z][a-z0-9-]*$/i.test(text)){
@@ -507,7 +524,23 @@ async function main():Promise<void>{
 
         if(args.length>0){
             input?.close();
-            const result=await runPrompt(args.join(" ")||"请只回答：通信成功");
+            const text=args.join(" ").trim();
+            if(/^\/compact(?:\s|$)/.test(text)){
+                try{
+                    await runCompact(text.slice("/compact".length).trim()||undefined);
+                }catch(error:unknown){
+                    if(persistenceError!==undefined) throw persistenceError;
+                    if(error instanceof Error&&error.name==="AbortError"){
+                        console.error("已取消压缩");
+                        process.exitCode=130;
+                    }else{
+                        console.error(`压缩失败：${error instanceof Error?error.message:String(error)}`);
+                        process.exitCode=1;
+                    }
+                }
+                return;
+            }
+            const result=await runPrompt(text||"请只回答：通信成功");
             if(result.stopReason==="cancelled"){
                 process.exitCode=130;
             }else if(result.stopReason!=="stop"){
@@ -527,7 +560,7 @@ async function main():Promise<void>{
 
             const [token]=text.split(/\s+/,1);
             const command=token==="/quit"?"/exit":token;
-            if(Object.hasOwn(LOCAL_COMMANDS,command)&&text!==token){
+            if(command!=="/compact"&&Object.hasOwn(LOCAL_COMMANDS,command)&&text!==token){
                 console.error(`${token} 不接受参数。`);
                 continue;
             }
@@ -543,6 +576,16 @@ async function main():Promise<void>{
                     await resumeSession(lines);
                 }catch(error:unknown){
                     console.error(error instanceof Error?error.message:String(error));
+                }
+                continue;
+            }
+            if(command==="/compact"){
+                try{
+                    await runCompact(text.slice(token.length).trim()||undefined);
+                }catch(error:unknown){
+                    if(persistenceError!==undefined) throw persistenceError;
+                    if(error instanceof Error&&error.name==="AbortError") console.log("已取消压缩");
+                    else console.error(`压缩失败：${error instanceof Error?error.message:String(error)}`);
                 }
                 continue;
             }

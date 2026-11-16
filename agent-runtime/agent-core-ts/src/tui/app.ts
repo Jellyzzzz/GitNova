@@ -81,6 +81,8 @@ export class OwlTui {
 
     private readonly queue: string[] = [];
     private busy = false;
+    private compactQueued = false;
+    private compactActive = false;
     private expanded = false;
     private contextTokens: number | null = null;
     private sessionLabel = "新会话";
@@ -267,7 +269,8 @@ export class OwlTui {
                 this.clearCompactionNote();
                 this.contextTokens = event.estimatedTokensBefore;
                 this.compactionNote = new NoteView(
-                    event.reason === "overflow" ? "模型报告上下文溢出，正在压缩…" : "正在压缩上下文…",
+                    event.reason === "overflow" ? "模型报告上下文溢出，正在压缩…"
+                        : event.reason === "manual" ? "正在手动压缩上下文…" : "正在压缩上下文…",
                     "info",
                 );
                 this.transcript.addChild(this.compactionNote);
@@ -397,13 +400,28 @@ export class OwlTui {
         const trimmed = text.trim();
         if (this.stopped || trimmed.length === 0) return;
 
+        const isCompact = /^\/compact(?:\s|$)/.test(trimmed);
         if (this.busy) {
-            this.queue.push(trimmed);
+            if (isCompact) {
+                if (this.compactQueued || this.compactActive) {
+                    this.note("压缩已在进行或等待中。", "warning");
+                    return;
+                }
+                this.compactQueued = true;
+                this.queue.unshift(trimmed);
+                this.note(this.hooks.onInterrupt()
+                    ? "正在停止当前任务，随后压缩上下文…"
+                    : "将在当前操作结束后压缩上下文…", "info");
+            } else {
+                this.queue.push(trimmed);
+            }
             this.requestRender();
             return;
         }
 
         this.busy = true;
+        this.compactActive = isCompact;
+        if (isCompact) this.compactQueued = false;
         this.currentAssistant = undefined;
         this.currentReasoning = undefined;
         this.requestRender();
@@ -416,6 +434,7 @@ export class OwlTui {
             }
         } finally {
             this.busy = false;
+            this.compactActive = false;
             this.clearCompactionNote();
             this.currentAssistant = undefined;
             this.currentReasoning = undefined;

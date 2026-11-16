@@ -1,14 +1,14 @@
 import type{ModelGateway} from "../model/gateway.js";
 import type{Request,Response,Message,ToolCallBlock} from "../model/types.js";
 import {ToolRegistry} from "../tools/registry.js";
-import type {AgentEventSink,CompactionReason,LoopOptions,LoopStopReason,LoopResult} from "./types.js";
+import type {AgentEventSink,CompactionReason,CompactionResult,LoopOptions,LoopStopReason,LoopResult} from "./types.js";
 import{ToolExecutionResult,createToolErrorResult} from "../tools/registry.js";
 import type { InputQueue } from "./input-queue.js";
 import {randomUUID} from "node:crypto";
 import {measureContext,type ContextBudget,type ContextUsageState} from "./context-budget.js";
 import {
     buildModelContext,
-    compact,
+    compact as createCompaction,
     CompactionError,
     findPendingToolCalls,
     type CompactionCheckpoint,
@@ -49,27 +49,15 @@ export class AgentLoop{
         let stopReason:LoopStopReason="max_model_calls";
         let errMessage:string|undefined;
         const applyCompaction = async (
-            request: Request, contextBudget: ContextBudget, reason: CompactionReason,
+            request: Request, reason: CompactionReason,
         ) => {
-            signal.throwIfAborted();
-            const estimatedTokensBefore = contextBudget.estimatedInputTokens;
-            await emit({ type: "context_compaction_start", reason, estimatedTokensBefore });
-
-            const next = await compact(
-                messages, checkpoint, request, options, reason === "overflow", this.gateway, signal, emit,
-            );
-            const nextRequest = { ...request, messages: buildModelContext(messages, next) };
-            const nextBudget = measureContext(nextRequest, options.contextWindow, reserveTokens);
-            signal.throwIfAborted();
-            await emit({
-                type: "context_compaction",
-                checkpoint: next,
-                estimatedTokensBefore,
-                contextBudget: nextBudget,
-            });
-            checkpoint = next;
+            const result = await this.applyCompaction(messages,checkpoint,request,options,reason,signal,emit);
+            checkpoint = result.checkpoint;
             contextUsage.lastUsage = undefined;
-            return { request: nextRequest, contextBudget: nextBudget };
+            return {
+                request: { ...request, messages: buildModelContext(messages, checkpoint) },
+                contextBudget: result.contextBudget,
+            };
         };
 
         try{
@@ -96,7 +84,7 @@ export class AgentLoop{
                 let request=this.createRequest(buildModelContext(messages,checkpoint),options);
                 let contextBudget=measureContext(request,options.contextWindow,reserveTokens,contextUsage.lastUsage);
                 if(contextBudget.estimatedInputTokens>contextBudget.inputBudgetTokens){
-                    ({request,contextBudget}=await applyCompaction(request,contextBudget,"threshold"));
+                    ({request,contextBudget}=await applyCompaction(request,"threshold"));
                 }
                 signal.throwIfAborted();
                 const modelCallId=request.modelCallId;
@@ -150,7 +138,7 @@ export class AgentLoop{
                     const overflow=termination.failure.code==="CONTEXT_OVERFLOW";
                     if(overflow&&!overflowRetryUsed&&modelCalls<options.maxModelCalls){
                         overflowRetryUsed=true;
-                        await applyCompaction(request,contextBudget,"overflow");
+                        await applyCompaction(request,"overflow");
                         continue;
                     }
                     stopReason=overflow?"context_limit":"model_error";
@@ -179,7 +167,7 @@ export class AgentLoop{
         }catch(error){
             const abortError=error instanceof Error&&error.name==="AbortError";
 
-            if(signal.aborted||abortError){
+            if(abortError||(signal.aborted&&error===signal.reason)){
                 stopReason="cancelled";
                 errMessage=undefined;
             }else if(error instanceof CompactionError){
@@ -214,6 +202,43 @@ export class AgentLoop{
         }
         throw new Error("Model stream ended without a final response");
     }
+    async compact(
+        history:readonly Message[],checkpoint:CompactionCheckpoint|undefined,options:LoopOptions,
+        contextUsage:ContextUsageState,signal:AbortSignal,notify:AgentEventSink,customInstructions?:string,
+    ):Promise<CompactionResult>{
+        const messages=history.slice();
+        const emit:AgentEventSink=async event=>{
+            await notify(event);
+            if(event.type==="message_end"){
+                await notify({type:"context_update",contextBudget:this.estimateContext(messages,options,contextUsage,checkpoint)});
+            }
+        };
+        await this.recoverPendingToolCalls(messages,signal,emit);
+        const request=this.createRequest(buildModelContext(messages,checkpoint),options);
+        return this.applyCompaction(messages,checkpoint,request,options,"manual",signal,emit,customInstructions);
+    }
+
+    private async applyCompaction(
+        messages:readonly Message[],checkpoint:CompactionCheckpoint|undefined,request:Request,
+        options:LoopOptions,reason:CompactionReason,signal:AbortSignal,emit:AgentEventSink,
+        customInstructions?:string,
+    ):Promise<CompactionResult>{
+        signal.throwIfAborted();
+        const reserveTokens=options.reserveTokens??options.maxOutputTokens;
+        // Compare before and after using the same full local estimate.
+        const estimatedTokensBefore=measureContext(request,options.contextWindow,reserveTokens).estimatedInputTokens;
+        await emit({type:"context_compaction_start",reason,estimatedTokensBefore});
+        const next=await createCompaction(
+            messages,checkpoint,request,options,reason,this.gateway,signal,emit,customInstructions,
+        );
+        const nextRequest={...request,messages:buildModelContext(messages,next)};
+        const contextBudget=measureContext(nextRequest,options.contextWindow,reserveTokens);
+        signal.throwIfAborted();
+        const result={checkpoint:next,estimatedTokensBefore,contextBudget};
+        await emit({type:"context_compaction",...result});
+        return result;
+    }
+
     estimateContext(
         messages:readonly Message[],options:LoopOptions,contextUsage:ContextUsageState,
         checkpoint?:CompactionCheckpoint,
