@@ -14,7 +14,7 @@ import {AgentLoop} from "./agent/loop.js";
 import {AgentSession} from "./agent/session.js";
 import {
     appendSessionEntry,appendSessionMessage,appendSessionUsage,listSessions,
-    loadSessionLog,type LoadedSession,
+    loadSessionLog,restoreContextUsageAnchor,type LoadedSession,
 } from "./agent/session-log.js";
 import {createUsageTotals} from "./agent/usage.js";
 import type{AgentEvent,LoopOptions} from "./agent/types.js";
@@ -224,6 +224,9 @@ async function main():Promise<void>{
         {
             initialTotals:usageTotals,
             initialCheckpoint:checkpoint,
+            initialContextAnchor:restoreContextUsageAnchor(loaded,{
+                model:options.model,systemPrompt:options.systemPrompt,tools:registry.definitions(),
+            }),
             persistCompaction:record=>persist(appendSessionEntry(filePath,record)),
             persist:(modelCallId,usage,purpose)=>
                 persist(appendSessionUsage(filePath,modelCallId,usage,purpose)),
@@ -369,7 +372,10 @@ async function main():Promise<void>{
 
         const loaded=await loadSessionLog(picked.value,true);
         activateSession(picked.value,loaded);
-        ui.reset(sessionLabelOf(picked.value),loaded.messages,loaded.checkpoint!==undefined);
+        ui.reset(
+            sessionLabelOf(picked.value),loaded.messages,loaded.checkpoint!==undefined,
+            loaded.messages.length ? activeSession?.estimateContext(options).estimatedInputTokens ?? null : null,
+        );
         ui.note("已切换会话","success");
         return true;
     }
@@ -384,7 +390,8 @@ async function main():Promise<void>{
             cwd,
             modelId,
             contextWindow:options.contextWindow,
-            sessionTokens:()=>activeSession?.sessionUsage.reportedTokens??0,
+            runUsage:()=>activeSession?.runUsage??createUsageTotals(),
+            sessionUsage:()=>activeSession?.sessionUsage??createUsageTotals(),
             onSubmit:async text=>{
                 const [token]=text.split(/\s+/,1);
                 const command=token==="/quit"?"/exit":token;
@@ -435,6 +442,7 @@ async function main():Promise<void>{
                 ui.reset(
                     sessionLabelOf(activeSessionPath),activeSession.state.messages,
                     activeSession.compactionCheckpoint!==undefined,
+                    activeSession.state.messages.length ? activeSession.estimateContext(options).estimatedInputTokens : null,
                 );
             }
             await ui.start(openPicker?"/resume":undefined);

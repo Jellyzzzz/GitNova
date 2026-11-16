@@ -1,7 +1,8 @@
 import type{AssistantMessage as PiAssistantMessage,UserMessage as PiUserMessage,SystemMessage as PiSystemMessage,ToolResultMessage as PiToolResultMessage,ImageContent as PiImageContent,
     TextContent as PiTextContent,JsonObject as PiJsonObject,ThinkingContent as PiThinkingContent,
     ToolCall as PiToolCall,StopReason as PiStopReason,Usage as PiUsage,ModelThinkingLevel}from "@earendil-works/pi-ai";
-import type { JsonValue,ToolResultBlock,Message } from "./types.js";
+import type { JsonValue,Message } from "./types.js";
+import { readToolResult } from "./tool-result.js";
 export function toPiAssistantMessage(message:Message):PiAssistantMessage{
     if(message.role!=="assistant"){
         throw new Error(`Cannot convert non-assistant message to Pi assistant message`);
@@ -105,51 +106,12 @@ export function toPiSystemMessage(message:Message):PiSystemMessage{
     }
 }
 export function toPiToolResultMessage(message:Message):PiToolResultMessage{
-    if(message.role!=="tool"){
-        throw new Error(`Invalid message role: expected "tool", got "${message.role}"`);
-    }
-    let toolResult:ToolResultBlock|undefined;
-    const content:Array<PiTextContent|PiImageContent>=[];
-    for(const block of message.content){
-        switch(block.type){
-            case "tool_result":
-                if(toolResult!==undefined){
-                    throw new Error(`Invalid message content: multiple tool_result blocks found`);
-                }
-                toolResult=block;
-                content.push({
-                    type:"text",
-                    text:block.content
-                    }
-                )
-                break;
-            case "text":
-                content.push({
-                    type:"text",
-                    text:block.text
-                })
-                break;
-            case "image":
-                content.push({
-                    type:"image",
-                    data:block.data,
-                    mimeType:block.mimeType
-                })
-                break;
-        case "reasoning":
-        case "tool_call":
-            throw new Error(
-                `Unsupported block type "${block.type}" in tool message`,
-            );
-        }
-    }if(toolResult===undefined){
-            throw new Error(`Invalid message content: no tool_result block found`);
-        }
+    const {result:toolResult,content}=readToolResult(message);
         return {
             role:"toolResult",
             toolCallId:toolResult.callId,
             toolName:toolResult.name,
-            content:content,
+            content:[...content],
             isError:toolResult.isError,
             timestamp:message.timestamp
         };

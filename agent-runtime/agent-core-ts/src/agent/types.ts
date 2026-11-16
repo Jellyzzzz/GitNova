@@ -59,6 +59,10 @@ export type AgentEvent=|{
         readonly modelCallId:string;
     }
     |{
+        readonly type:"context_update";
+        readonly contextBudget:ContextBudget;
+    }
+    |{
         readonly type:"model_event";
         readonly modelCallId:string;
         readonly event:ModelEvent;

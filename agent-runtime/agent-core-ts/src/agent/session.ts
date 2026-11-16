@@ -68,6 +68,9 @@ export class AgentSession{
     get compactionCheckpoint(): CompactionCheckpoint | undefined {
         return this.checkpoint;
     }
+    estimateContext(options:LoopOptions){
+        return this.loop.estimateContext(this._state.messages,options,this.contextUsage,this.checkpoint);
+    }
 
     abort():void{
         return this.activeRun?.abortController.abort();

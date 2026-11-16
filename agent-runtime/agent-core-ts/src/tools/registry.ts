@@ -121,9 +121,9 @@ export function createToolErrorResult(
                 type:"tool_result",
                 callId:call.callId,
                 name:call.name,
-                content:text,
+                content:"",
                 isError:true,
-            }],
+            },{type:"text",text}],
             timestamp:Date.now(),
         },
     };
