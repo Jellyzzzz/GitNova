@@ -4,6 +4,12 @@ import {InputQueue} from "./input-queue.js";
 import type{AgentLoop} from "./loop.js";
 import { createUsageTotals,addUsageTotals } from "./usage.js";
 import type{UsageTotals} from "./usage.js";
+import type { ContextUsageAnchor,ContextUsageState } from "./context-budget.js";
+import {
+    buildModelContext,
+    type CompactionCheckpoint,
+    type CompactionRecord,
+} from "./compaction.js";
 type MutableAgentState=Omit<AgentState,"isStreaming"|"pendingToolCalls"|"errorMessage">&{
     isStreaming:boolean;
     pendingToolCalls:Set<string>;
@@ -25,25 +31,26 @@ export class AgentSession{
     private _runUsage=createUsageTotals();
     private _sessionUsage:UsageTotals;
     private readonly persistUsage?:SessionUsageOptions["persist"];
+    private readonly contextUsage:ContextUsageState;
+    private checkpoint?:CompactionCheckpoint;
+    private readonly persistCompaction?: SessionUsageOptions["persistCompaction"];
     constructor(loop:AgentLoop,InitialMessage:Message[]=[],persistMessage?:(message:Message)=>Promise<void>,usageOptions:SessionUsageOptions={},){
         this.loop=loop;
         this.persistMessage=persistMessage;
         this.persistUsage=usageOptions.persist;
+        this.contextUsage={lastUsage:usageOptions.initialContextAnchor};
         this._sessionUsage=usageOptions.initialTotals??createUsageTotals();
-        let messages=InitialMessage.slice();
         this._state={
-            get messages(){return messages},
-
-            set messages(nextMessages:Message[]){
-                messages=nextMessages.slice();
-            },
+            messages:InitialMessage.slice(),
             isStreaming:false,
             pendingToolCalls:new Set<string>(),
             errorMessage:undefined,
         };
+        this.checkpoint=usageOptions.initialCheckpoint;
+        this.persistCompaction = usageOptions.persistCompaction;
     }
     get state():AgentState{
-        return this._state;
+        return {...this._state,messages:this._state.messages.slice()};
     }
 
     get signal():AbortSignal|undefined{
@@ -54,6 +61,12 @@ export class AgentSession{
     }
     get sessionUsage(){
         return this._sessionUsage;
+    }
+    get modelMessages(): readonly Message[] {
+        return buildModelContext(this._state.messages, this.checkpoint);
+    }
+    get compactionCheckpoint(): CompactionCheckpoint | undefined {
+        return this.checkpoint;
     }
 
     abort():void{
@@ -79,7 +92,7 @@ export class AgentSession{
             content:[{type:"text",text:text}],
             timestamp:Date.now(),
         };
-        return this.runWithLifecycle((signal)=>this.loop.run(input,this._state.messages,options,signal,(event)=>this.processEvents(event),this.inputQueue));
+        return this.runWithLifecycle((signal)=>this.loop.run(input,this._state.messages,options,signal,(event)=>this.processEvents(event),this.inputQueue,this.contextUsage,this.checkpoint));
     }
     private async processEvents(event:AgentEvent):Promise<void>{
         switch(event.type){
@@ -104,22 +117,23 @@ export class AgentSession{
                 break;
             }
             case "model_event":{
-                const modelEvent=event.event;
-                if(modelEvent.type!=="done") break;
-                const {usage,termination}=modelEvent.response;
-                await this.persistUsage?.(event.modelCallId,usage);
-                this._runUsage=addUsageTotals(this._runUsage,usage);
-                this._sessionUsage=addUsageTotals(this._sessionUsage,usage);
-                if(termination.kind==="ERROR"){
-                    this._state.errorMessage=termination.failure.message;
+                if(event.event.type==="done"){
+                    await this.recordUsage(event.modelCallId,event.event.response.usage);
                 }
                 break;
             }
+            case "compaction_usage":{
+                await this.recordUsage(event.modelCallId,event.usage,"compaction");
+                break;
+            }
+            case "context_compaction":{
+                await this.persistCompaction?.(event.checkpoint.record);
+                this.checkpoint = event.checkpoint;
+                this.contextUsage.lastUsage = undefined;
+                break;
+            }
             case "run_end":{
-                const result=event.result;
-                if(result.errMessage!==undefined){
-                    this._state.errorMessage=result.errMessage;
-                }
+                this._state.errorMessage=event.result.errMessage;
                 break;
             }
         }
@@ -130,6 +144,13 @@ export class AgentSession{
         for(const listener of this.listeners){
             await listener(event,signal);
         }
+    }
+    private async recordUsage(
+        modelCallId: string, usage: Usage | null, purpose?: "compaction",
+        ): Promise<void> {
+        await this.persistUsage?.(modelCallId, usage, purpose);
+        this._runUsage = addUsageTotals(this._runUsage, usage);
+        this._sessionUsage = addUsageTotals(this._sessionUsage, usage);
     }
     private async runWithLifecycle(executor:(siganl:AbortSignal)=>Promise<LoopResult>):Promise<LoopResult>{
         if(this.activeRun!==undefined){
@@ -165,7 +186,12 @@ export class AgentSession{
         this.activeRun=undefined;
     }
 }
-type SessionUsageOptions={
-    readonly initialTotals?:UsageTotals;
-    readonly persist?:(modelCallId:string,usage:Usage|null)=>Promise<void>;
+type SessionUsageOptions = {
+    readonly initialTotals?: UsageTotals;
+    readonly initialContextAnchor?: ContextUsageAnchor;
+    readonly initialCheckpoint?: CompactionCheckpoint;
+    readonly persistCompaction?: (record: CompactionRecord) => Promise<void>;
+    readonly persist?: (
+        modelCallId: string, usage: Usage | null, purpose?: "compaction",
+    ) => Promise<void>;
 };

@@ -1,10 +1,18 @@
 import type{ModelGateway} from "../model/gateway.js";
 import type{Request,Response,Message,ToolCallBlock} from "../model/types.js";
 import {ToolRegistry} from "../tools/registry.js";
-import {AgentEventSink,LoopOptions,LoopStopReason,LoopResult} from "./types.js";
+import type {AgentEventSink,CompactionReason,LoopOptions,LoopStopReason,LoopResult} from "./types.js";
 import{ToolExecutionResult,createToolErrorResult} from "../tools/registry.js";
 import type { InputQueue } from "./input-queue.js";
 import {randomUUID} from "node:crypto";
+import {measureContext,type ContextBudget,type ContextUsageState} from "./context-budget.js";
+import {
+    buildModelContext,
+    compact,
+    CompactionError,
+    findPendingToolCalls,
+    type CompactionCheckpoint,
+} from "./compaction.js";
 export class AgentLoop{
     private readonly gateway:ModelGateway;
     private readonly registry:ToolRegistry;
@@ -14,7 +22,7 @@ export class AgentLoop{
         this.registry = registry;
     }
 
-    async run(input:Message,history:readonly Message[],options:LoopOptions,signal:AbortSignal,emit:AgentEventSink,InputQueue:InputQueue):Promise<LoopResult>{
+    async run(input:Message,history:readonly Message[],options:LoopOptions,signal:AbortSignal,emit:AgentEventSink,InputQueue:InputQueue,contextUsage:ContextUsageState={},initialCheckpoint?:CompactionCheckpoint):Promise<LoopResult>{
         if(input.role!=="user"){
             throw new Error("AgentLoop input must be a user message");
         }
@@ -27,72 +35,102 @@ export class AgentLoop{
         }
 
         const messages:Message[]=history.slice();
+        let checkpoint = initialCheckpoint;
+        const reserveTokens = options.reserveTokens ?? options.maxOutputTokens;
+        let overflowRetryUsed = false;
         let modelCalls=0;
         let lastResponse:Response|null=null;
         let stopReason:LoopStopReason="max_model_calls";
         let errMessage:string|undefined;
-        
+        const applyCompaction = async (
+            request: Request, contextBudget: ContextBudget, reason: CompactionReason,
+        ) => {
+            signal.throwIfAborted();
+            const estimatedTokensBefore = contextBudget.estimatedInputTokens;
+            await emit({ type: "context_compaction_start", reason, estimatedTokensBefore });
+
+            const next = await compact(
+                messages, checkpoint, request, options, reason === "overflow", this.gateway, signal, emit,
+            );
+            const nextRequest = { ...request, messages: buildModelContext(messages, next) };
+            const nextBudget = measureContext(nextRequest, options.contextWindow, reserveTokens);
+            signal.throwIfAborted();
+            await emit({
+                type: "context_compaction",
+                checkpoint: next,
+                estimatedTokensBefore,
+                contextBudget: nextBudget,
+            });
+            checkpoint = next;
+            contextUsage.lastUsage = undefined;
+            return { request: nextRequest, contextBudget: nextBudget };
+        };
+
         try{
             await emit({
                 type:"run_start",
             });
             signal.throwIfAborted();
+            await this.recoverPendingToolCalls(messages,signal,emit);
+            signal.throwIfAborted();
             await this.appendMessage(messages,input,emit);
             while(modelCalls<options.maxModelCalls){
                 signal.throwIfAborted();
-                let queued=InputQueue.takeSteering();
-                if(queued.length===0&&lastResponse?.termination.kind==="STOP"){
-                    queued=InputQueue.takeFollowUps();
+                // Overflow recovery retries the same input before draining the queue.
+                if(lastResponse?.termination.kind!=="ERROR"){
+                    let queued=InputQueue.takeSteering();
+                    if(queued.length===0&&lastResponse?.termination.kind==="STOP"){
+                        queued=InputQueue.takeFollowUps();
+                    }
+                    for(const message of queued){
+                        await this.appendMessage(messages,message,emit);
+                    }
                 }
-                for(const message of queued){
-                    await this.appendMessage(messages,message,emit);
+
+                let request=this.createRequest(buildModelContext(messages,checkpoint),options);
+                let contextBudget=measureContext(request,options.contextWindow,reserveTokens,contextUsage.lastUsage);
+                if(contextBudget.estimatedInputTokens>contextBudget.inputBudgetTokens){
+                    ({request,contextBudget}=await applyCompaction(request,contextBudget,"threshold"));
                 }
-                const request=this.createRequest(messages,options);
+                signal.throwIfAborted();
                 const modelCallId=request.modelCallId;
                 await emit({
                     type:"turn_start",
                     modelCallId:modelCallId,
+                    contextBudget:contextBudget,
                 });
+                let response:Response;
                 try{
                     signal.throwIfAborted();
                     modelCalls++;
-                    
-                    const response=await this.callModel(request,signal,emit);
+                    response=await this.callModel(request,signal,emit);
                     lastResponse=response;
                     signal.throwIfAborted();
 
                     const {termination,message}=response;
-                    if(termination.kind==="ERROR"){
-                        stopReason="model_error";
-                        errMessage=termination.failure.message;
-                        break;
-                    }
-                    if(termination.kind==="LENGTH"){
-                        stopReason="output_limit";
-                        errMessage="Model output reached its token limit";
-                        break;
-                    }
-                    if(termination.kind==="CONTINUE"){
-                        stopReason="protocol_error"
-                        errMessage="Deferred response requires a provider continuation handler";
-                        break;
-                    }
-                    const calls:ToolCallBlock[]=[];
-                    for(const block of message.content){
-                        if(block.type==="tool_call"){
-                            calls.push(block);
+                    if(termination.kind==="STOP"||termination.kind==="TOOL_CALLS"){
+                        const calls=message.content.filter(block=>block.type==="tool_call");
+                        const expectedToolCalls=termination.kind==="TOOL_CALLS";
+                        if(message.role!=="assistant"||expectedToolCalls!==(calls.length>0)
+                            ||findPendingToolCalls([message],0)===undefined){
+                            stopReason="protocol_error";
+                            errMessage="Model response has an invalid role or tool call list";
+                            break;
                         }
-                    }
-                    const expectedToolCalls=termination.kind==="TOOL_CALLS";
-                    if(message.role!=="assistant"||expectedToolCalls!==(calls.length>0)){
-                        stopReason="protocol_error";
-                        errMessage="Model response has an invalid role or tool call list";
-                        break;
-                    }
-                    await this.appendMessage(messages,message,emit);
-
-                    if(expectedToolCalls){
-                        await this.executeToolCalls(calls,messages,options,signal,emit);
+                        await this.appendMessage(messages,message,emit);
+                        const totalTokens=response.usage?.totalTokens;
+                        if(typeof totalTokens==="number"&&Number.isSafeInteger(totalTokens)&&totalTokens>0){
+                            contextUsage.lastUsage={
+                                totalTokens,
+                                model:request.model,
+                                systemPrompt:request.systemPrompt,
+                                tools:request.tools,
+                                prefix:[...request.messages,message],
+                            };
+                        }
+                        if(expectedToolCalls){
+                            await this.executeToolCalls(calls,messages,options,signal,emit);
+                        }
                     }
                 }finally{
                     await emit({
@@ -100,7 +138,32 @@ export class AgentLoop{
                         modelCallId:modelCallId,
                     });
                 }
-                if(lastResponse?.termination.kind==="STOP"&&!InputQueue.hasPending()){
+                const {termination}=response;
+                if(termination.kind==="ERROR"){
+                    const overflow=termination.failure.code==="CONTEXT_OVERFLOW";
+                    if(overflow&&!overflowRetryUsed&&modelCalls<options.maxModelCalls){
+                        overflowRetryUsed=true;
+                        await applyCompaction(request,contextBudget,"overflow");
+                        continue;
+                    }
+                    stopReason=overflow?"context_limit":"model_error";
+                    errMessage=overflow&&overflowRetryUsed
+                        ? `Context overflow persisted after one compaction retry: ${termination.failure.message}`
+                        : termination.failure.message;
+                    break;
+                }
+                if(termination.kind==="LENGTH"){
+                    stopReason="output_limit";
+                    errMessage="Model output reached its token limit";
+                    break;
+                }
+                if(termination.kind==="CONTINUE"){
+                    stopReason="protocol_error";
+                    errMessage="Deferred response requires a provider continuation handler";
+                    break;
+                }
+                overflowRetryUsed=false;
+                if(termination.kind==="STOP"&&!InputQueue.hasPending()){
                     stopReason="stop";
                     break;
                 }
@@ -109,12 +172,15 @@ export class AgentLoop{
         }catch(error){
             const abortError=error instanceof Error&&error.name==="AbortError";
 
-            if(!signal.aborted&&!abortError){
+            if(signal.aborted||abortError){
+                stopReason="cancelled";
+                errMessage=undefined;
+            }else if(error instanceof CompactionError){
+                stopReason="context_limit";
+                errMessage=error.message;
+            }else{
                 throw error;
             }
-
-            stopReason="cancelled";
-            errMessage=undefined;
         }
         const result:LoopResult={
             stopReason,
@@ -149,6 +215,7 @@ export class AgentLoop{
             tools:this.registry.definitions(),
             maxOutputTokens:options.maxOutputTokens,
             thinkingJson:options.thinkingJson,
+            systemPrompt:options.systemPrompt,
         };
     }
     private async appendMessage(messages:Message[],message:Message,emit:AgentEventSink):Promise<void>{
@@ -157,6 +224,22 @@ export class AgentLoop{
             type:"message_end",
             message:message,
         });
+    }
+    private async recoverPendingToolCalls(
+        messages:Message[],signal:AbortSignal,emit:AgentEventSink,
+    ):Promise<void>{
+        let start=messages.length-1;
+        while(messages[start]?.role==="tool"||messages[start]?.role==="system") start--;
+        const pending=findPendingToolCalls(messages,Math.max(0,start));
+        if(pending===undefined) throw new Error("Session ends with an invalid tool call/result batch");
+
+        for(const call of pending.values()){
+            signal.throwIfAborted();
+            const {message}=createToolErrorResult(
+                call,"No tool result was recorded before the session ended. The tool may have made changes.",
+            );
+            await this.appendMessage(messages,message,emit);
+        }
     }
     private async executeToolCall(call:ToolCallBlock,cwd:string,signal:AbortSignal,emit:AgentEventSink):Promise<ToolExecutionResult>{
         signal.throwIfAborted();

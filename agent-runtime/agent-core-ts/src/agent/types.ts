@@ -4,12 +4,15 @@ import type{
     ModelEvent,
     Response,
     ToolCallBlock,
+    Usage
 } from "../model/types.js";
+import type { ContextBudget } from "./context-budget.js";
 import type{
     ToolResult,
     ToolExecutionMode,
 } from "../tools/types.js";
 import type{ToolExecutionResult} from "../tools/registry.js";
+import type{CompactionCheckpoint} from "./compaction.js";
 export type InputMode="steering"|"follow_up";
 export interface LoopOptions{
     readonly cwd:string;
@@ -19,7 +22,12 @@ export interface LoopOptions{
     readonly maxModelCalls:number;
     readonly maxConcurrentTools:number;
     readonly ToolExecutionMode:ToolExecutionMode;
+    readonly contextWindow:number;
+    readonly systemPrompt?:string;
+    readonly reserveTokens?:number;
+    readonly keepRecentTokens?:number;
 }
+export type CompactionReason = "threshold" | "overflow";
 export type LoopStopReason=|"stop"
     |"cancelled"
     |"max_model_calls"
@@ -44,6 +52,7 @@ export type AgentEvent=|{
     |{
         readonly type:"turn_start";
         readonly modelCallId:string;
+        readonly contextBudget:ContextBudget;
     }
     |{
         readonly type:"turn_end";
@@ -85,6 +94,22 @@ export type AgentEvent=|{
     |{
         readonly type:"message_end";
         readonly message:Message;
+    }
+    |{
+        readonly type:"compaction_usage";
+        readonly modelCallId:string;
+        readonly usage:Usage|null;
+    }
+    |{
+        readonly type:"context_compaction_start";
+        readonly reason:CompactionReason;
+        readonly estimatedTokensBefore:number;
+    }
+    |{
+        readonly type:"context_compaction";
+        readonly checkpoint:CompactionCheckpoint;
+        readonly estimatedTokensBefore:number;
+        readonly contextBudget:ContextBudget;
     };
 export type AgentEventSink=
     (event:AgentEvent)=>void|Promise<void>//Loop交给session的事件数据结构

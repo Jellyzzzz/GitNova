@@ -1,4 +1,5 @@
 import type{AssistantMessage as PiAssistantMessage}from "@earendil-works/pi-ai";
+import { isContextOverflow } from "@earendil-works/pi-ai";
 import type { ContentBlock,JsonValue,Response,Termination } from "./types.js";
 export function toTermination(message:PiAssistantMessage):Termination{
     const rawReason=message.rawStopReason??null;
@@ -28,7 +29,7 @@ export function toTermination(message:PiAssistantMessage):Termination{
                 kind:"ERROR",
                 rawReason:rawReason,
                 failure:{
-                    code:"MODEL_ERROR",
+                    code: isContextOverflow(message) ? "CONTEXT_OVERFLOW" : "MODEL_ERROR",
                     message:message.errorMessage??"Model request failed",
                     httpStatus:null
                 },

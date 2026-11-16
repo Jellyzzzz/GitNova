@@ -72,6 +72,7 @@ export interface Request{
     readonly tools:readonly ToolDefinition[];
     readonly maxOutputTokens:number;
     readonly thinkingJson:string;
+    readonly systemPrompt?:string;
 }
 export interface Response{
     readonly termination:Termination;

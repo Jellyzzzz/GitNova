@@ -3,6 +3,7 @@ import type{Message,Usage} from "../model/types.js";
 import {dirname,join} from "node:path";
 import type{UsageTotals} from "./usage.js";
 import {createUsageTotals,addUsageTotals} from "./usage.js";
+import {createCheckpoint,type CompactionCheckpoint,type CompactionRecord} from "./compaction.js";
 type MessageEntry={
     readonly type:"message";
     readonly message:Message;
@@ -11,11 +12,13 @@ type UsageEntry={
     readonly type:"usage";
     readonly modelCallId:string;
     readonly usage:Usage|null;
+    readonly purpose?:"compaction";
 }
-type SessionLogEntry=MessageEntry|UsageEntry;
+type SessionLogEntry=MessageEntry|UsageEntry|CompactionRecord;
 export type LoadedSession={
     readonly messages:Message[];
     readonly usageTotals:UsageTotals;
+    readonly checkpoint?:CompactionCheckpoint;
 }
 export async function appendSessionEntry(filePath:string,entry:SessionLogEntry):Promise<void>{
     await mkdir(dirname(filePath),{recursive:true});
@@ -30,11 +33,14 @@ export function appendSessionMessage(filePath:string,message:Message):Promise<vo
         message,
     });
 }
-export function appendSessionUsage(filePath:string,modelCallId:string,usage:Usage|null):Promise<void>{
+export function appendSessionUsage(
+    filePath:string,modelCallId:string,usage:Usage|null,purpose?:UsageEntry["purpose"],
+):Promise<void>{
     return appendSessionEntry(filePath,{
         type:"usage",
         modelCallId,
         usage,
+        purpose,
     });
 }
 function isStoredUsage(value:unknown):value is Usage|null{
@@ -53,8 +59,27 @@ function isStoredUsage(value:unknown):value is Usage|null{
             ||(typeof count==="number"&&Number.isSafeInteger(count)&&count>=0);
     });
 }
+function isStoredCompaction(
+    record:Partial<CompactionRecord>,messages:readonly Message[],previous?:CompactionCheckpoint,
+):record is CompactionRecord{
+    const {firstKeptMessageIndex,messageCount,summary,turnPrefixSummary,readFiles,modifiedFiles,timestamp}=record;
+    if(typeof firstKeptMessageIndex!=="number"||!Number.isSafeInteger(firstKeptMessageIndex)
+        ||firstKeptMessageIndex<=(previous?.record.firstKeptMessageIndex??0)
+        ||firstKeptMessageIndex>=messages.length||messageCount!==messages.length){
+        return false;
+    }
+    const role=messages[firstKeptMessageIndex].role;
+    return (role==="user"||role==="assistant")
+        &&typeof summary==="string"
+        &&(turnPrefixSummary===undefined||(role==="assistant"&&typeof turnPrefixSummary==="string"))
+        &&Boolean(summary.trim()||turnPrefixSummary?.trim())
+        &&Array.isArray(readFiles)&&readFiles.every(path=>typeof path==="string")
+        &&Array.isArray(modifiedFiles)&&modifiedFiles.every(path=>typeof path==="string")
+        &&typeof timestamp==="number"&&Number.isFinite(timestamp);
+}
 export async function loadSessionLog(filePath:string,mustExist:boolean):Promise<LoadedSession>{
     const messages:Message[]=[];
+    let checkpoint:CompactionCheckpoint|undefined;
     let usageTotals=createUsageTotals();
     const countedCalls=new Set<string>();
     let text:string;
@@ -78,13 +103,21 @@ export async function loadSessionLog(filePath:string,mustExist:boolean):Promise<
         try{
             const entry=JSON.parse(line) as Partial<SessionLogEntry>|null;
             if(entry?.type==="usage"){
-                if(typeof entry.modelCallId!=="string"||!entry.modelCallId.trim()||!isStoredUsage(entry.usage)){
+                if(typeof entry.modelCallId!=="string"||!entry.modelCallId.trim()||!isStoredUsage(entry.usage)
+                    ||(entry.purpose!==undefined&&entry.purpose!=="compaction")){
                     throw new Error("Invalid usage entry");
                 }
                 if(!countedCalls.has(entry.modelCallId)){
                     usageTotals=addUsageTotals(usageTotals,entry.usage);
                     countedCalls.add(entry.modelCallId);
                 }
+                continue;
+            }
+            if(entry?.type==="compaction"){
+                if(!isStoredCompaction(entry,messages,checkpoint)){
+                    throw new Error("Invalid compaction checkpoint");
+                }
+                checkpoint=createCheckpoint(entry);
                 continue;
             }
             const message=entry?.type==="message"?entry.message:undefined;
@@ -96,7 +129,7 @@ export async function loadSessionLog(filePath:string,mustExist:boolean):Promise<
             throw new Error(`Invalid session record at ${filePath}:${index + 1}`, { cause });
         }
     }
-    return {messages,usageTotals};
+    return {messages,usageTotals,checkpoint};
 }
 function isNotFound(error:unknown):boolean{
     return typeof error==="object"

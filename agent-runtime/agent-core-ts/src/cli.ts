@@ -13,11 +13,14 @@ import {BashTool} from "./tools/bash.js";
 import {AgentLoop} from "./agent/loop.js";
 import {AgentSession} from "./agent/session.js";
 import {
-    appendSessionMessage,appendSessionUsage,listSessions,
+    appendSessionEntry,appendSessionMessage,appendSessionUsage,listSessions,
     loadSessionLog,type LoadedSession,
 } from "./agent/session-log.js";
 import {createUsageTotals} from "./agent/usage.js";
 import type{AgentEvent,LoopOptions} from "./agent/types.js";
+import {OwlTui} from "./tui/app.js";
+import {formatTokens} from "./tui/transcript.js";
+import type{SelectItem} from "@earendil-works/pi-tui";
 
 const SESSION_ID_PATTERN=/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const LOCAL_COMMANDS={
@@ -36,6 +39,12 @@ function showCommands():void{
     for(const [name,description] of Object.entries(LOCAL_COMMANDS)){
         console.log(`${name.padEnd(9)}${description}`);
     }
+}
+
+function commandsText():string{
+    return Object.entries(LOCAL_COMMANDS)
+        .map(([name,description])=>`${name.padEnd(9)}${description}`)
+        .join("\n");
 }
 
 function showHome(cwd:string):void{
@@ -110,15 +119,16 @@ async function findSessionById(id:string,dirs:SessionDirs):Promise<string>{
 
 async function main():Promise<void>{
     const apiKey=process.env.DEEPSEEK_API_KEY;
-    const modelId=process.env.DEEPSEEK_MODEL;
+    const configuredModelId=process.env.DEEPSEEK_MODEL;
     const thinkingMode=process.env.DEEPSEEK_THINKING_MODE;
 
     if(!apiKey){
         throw new Error("Missing DEEPSEEK_API_KEY");
     }
-    if(!modelId){
+    if(!configuredModelId){
         throw new Error("Missing DEEPSEEK_MODEL");
     }
+    const modelId:string=configuredModelId;
     if(thinkingMode!=="enabled"&&thinkingMode!=="disabled"){
         throw new Error("DEEPSEEK_THINKING_MODE must be enabled or disabled");
     }
@@ -127,7 +137,8 @@ async function main():Promise<void>{
     const models=createModels();
     models.setProvider(deepseekProvider());
 
-    if(models.getModel("deepseek",modelId)===undefined){
+    const model=models.getModel("deepseek",modelId);
+    if(model===undefined){
         const available=models.getModels("deepseek")
             .map(model=>model.id)
             .join(", ");
@@ -141,6 +152,9 @@ async function main():Promise<void>{
             session:{type:"string"},
             resume:{type:"boolean",default:false},
             "parallel-tools":{type:"boolean",default:false},
+            "compact-at":{type:"string"},
+            tui:{type:"boolean",default:false},
+            "no-tui":{type:"boolean",default:false},
         },
         allowPositionals:true,
     });
@@ -149,6 +163,12 @@ async function main():Promise<void>{
     }
     if(values.resume&&values.session!==undefined){
         throw new Error("Choose either --resume or --session");
+    }
+    const maxOutputTokens=Math.min(8192,model.maxTokens);
+    const maxInputTokens=model.contextWindow-maxOutputTokens;
+    const compactAt=values["compact-at"]===undefined?undefined:Number(values["compact-at"]);
+    if(compactAt!==undefined&&(!Number.isSafeInteger(compactAt)||compactAt<1||compactAt>maxInputTokens)){
+        throw new Error(`--compact-at requires an integer from 1 to ${maxInputTokens}`);
     }
     const parallelTools=values["parallel-tools"];
 
@@ -175,20 +195,24 @@ async function main():Promise<void>{
         legacyRoot,
     };
     let activeSession:AgentSession|undefined;
+    let activeSessionPath:string|undefined;
     let unsubscribe:(()=>void)|undefined;
     let persistenceError:Error|undefined;
+    let tui:OwlTui|undefined;
+    let tuiMode=false;
 
     function activateSession(
     filePath:string,
     loaded:LoadedSession={messages:[],usageTotals:createUsageTotals()},
 ):AgentSession{
-    const {messages,usageTotals}=loaded;
+    const {messages,usageTotals,checkpoint}=loaded;
 
     async function persist(operation:Promise<void>):Promise<void>{
         try{
             await operation;
         }catch(error:unknown){
-            persistenceError=error instanceof Error?error:new Error(String(error));
+            const detail=error instanceof Error?error.message:String(error);
+            persistenceError=new Error(`无法保存会话 ${filePath}：${detail}`,{cause:error});
             throw persistenceError;
         }
     }
@@ -199,20 +223,26 @@ async function main():Promise<void>{
         message=>persist(appendSessionMessage(filePath,message)),
         {
             initialTotals:usageTotals,
-            persist:(modelCallId,usage)=>
-                persist(appendSessionUsage(filePath,modelCallId,usage)),
+            initialCheckpoint:checkpoint,
+            persistCompaction:record=>persist(appendSessionEntry(filePath,record)),
+            persist:(modelCallId,usage,purpose)=>
+                persist(appendSessionUsage(filePath,modelCallId,usage,purpose)),
         },
     );
 
     unsubscribe?.();
     persistenceError=undefined;
     activeSession=session;
+    activeSessionPath=filePath;
     unsubscribe=session.subscribe(event=>onAgentEvent(event,session));
-    console.error("session:",filePath);
 
-    if(args.length===0){
-        renderHistory(messages);
-        if(session.sessionUsage.responses>0) renderUsage(session);
+    if(!tuiMode){
+        console.error("session:",filePath);
+        if(args.length===0){
+            renderHistory(messages);
+            if(checkpoint!==undefined) console.log("已恢复压缩后的模型上下文");
+            if(session.sessionUsage.responses>0) renderSessionUsage(session);
+        }
     }
     return session;
 }
@@ -230,37 +260,62 @@ async function main():Promise<void>{
         thinkingJson:thinkingMode==="enabled"
             ?JSON.stringify({reasoning:"high"})
             :"{}",
-        maxOutputTokens:1024,
+        systemPrompt:[
+            "You are Owl, a coding agent working in the user's repository.",
+            `Working directory: ${cwd}`,
+            "Use the available tools to inspect, edit, and verify code as needed.",
+            "Distinguish checks that passed, failed, and were not run.",
+            ].join("\n"),
+        maxOutputTokens,
+        reserveTokens:compactAt===undefined?16384:model.contextWindow-compactAt,
+        contextWindow:model.contextWindow,
         maxModelCalls:50,
         maxConcurrentTools:5,
         ToolExecutionMode:parallelTools?"parallel":"sequential",
     };
 
     function onAgentEvent(event:AgentEvent,session:AgentSession):void{
-        if(event.type==="model_event"){
+        if(tui!==undefined){
+            tui.handleAgentEvent(event);
+            return;
+        }
+        if(event.type==="turn_start"){
+            const {estimatedInputTokens}=event.contextBudget;
+            const {contextWindow}=options;
+            const percent=100*estimatedInputTokens/contextWindow;
+            console.log(
+                `本次请求预计输入 ${formatTokens(estimatedInputTokens)} / ${formatTokens(contextWindow)} tokens（占窗口 ${percent.toFixed(1)}%）`,
+            );
+        }else if(event.type==="model_event"){
             const modelEvent=event.event;
 
             if(modelEvent.type==="done"){
                 process.stdout.write("\n");
-                const usage=session.sessionUsage;
-                const missing=usage.missingTotals>0?`（${usage.missingTotals} 次未报告总量）`:"";
-                console.log(`会话已使用 ${formatTokens(usage.reportedTokens)} tokens${missing}`);
+                renderSessionUsage(session);
             }else{
                 process.stdout.write(modelEvent.delta);
             }
+        }else if(event.type==="context_compaction_start"){
+            console.log(event.reason==="overflow"?"模型报告上下文溢出，正在压缩…":"正在压缩上下文…");
+        }else if(event.type==="context_compaction"){
+            console.log(
+                `上下文已压缩 · 预计输入 ${formatTokens(event.estimatedTokensBefore)} → ${formatTokens(event.contextBudget.estimatedInputTokens)} tokens`,
+            );
+        }else if(event.type==="compaction_usage"){
+            renderSessionUsage(session);
         }else if(event.type==="tool_start"){
             console.log("\n工具调用：",event.call.name,event.call.argumentsJson);
         }else if(event.type==="tool_end"){
             console.dir(event.result,{depth:null});
         }
     }
-    function renderUsage(session:AgentSession):void{
-    const usage=session.sessionUsage;
-    const missing=usage.missingTotals>0
-        ?`（${usage.missingTotals} 次未报告总量）`
-        :"";
-    console.log(`会话已使用 ${formatTokens(usage.reportedTokens)} tokens${missing}`);
-}
+    function renderSessionUsage(session:AgentSession):void{
+        const usage=session.sessionUsage;
+        const missing=usage.missingTotals>0
+            ?`（${usage.missingTotals} 次未报告总量）`
+            :"";
+        console.log(`会话累计用量 ${formatTokens(usage.reportedTokens)} tokens${missing}`);
+    }
 
     const runPrompt=async(text:string)=>{
         const session=activeSession??activateSession(
@@ -272,19 +327,133 @@ async function main():Promise<void>{
             throw persistenceError;
         }
 
-        console.log("run:",{
-            stopReason:result.stopReason,
-            modelCalls:result.modelCalls,
-        });
+        if(!tuiMode){
+            console.log("run:",{
+                stopReason:result.stopReason,
+                modelCalls:result.modelCalls,
+            });
 
-        if(result.errMessage!==undefined){
-            console.error(result.errMessage);
+            if(result.errMessage!==undefined){
+                console.error(result.errMessage);
+            }
         }
         return result;
     };
 
+    function sessionLabelOf(filePath:string|undefined):string{
+        if(filePath===undefined) return "新会话";
+        const name=filePath.split(/[\\/]/).pop()??filePath;
+        return name.replace(/\.jsonl$/,"").slice(0,8);
+    }
+
+    async function pickSessionInTui(ui:OwlTui):Promise<boolean>{
+        const [current,legacyProject,legacyFlat]=await Promise.all([
+            listSessions(sessionDirs.current),
+            listSessions(sessionDirs.legacyProject),
+            listSessions(sessionDirs.legacyRoot),
+        ]);
+        const rows=[...current,...legacyProject]
+            .sort((a,b)=>b.mtimeMs-a.mtimeMs)
+            .concat(legacyFlat);
+        if(rows.length===0){
+            ui.note("当前工作目录还没有已保存的会话。","dim");
+            return false;
+        }
+        const items:SelectItem[]=rows.map(session=>({
+            value:session.path,
+            label:session.id,
+            description:new Date(session.mtimeMs).toLocaleString(),
+        }));
+        const picked=await ui.select("恢复会话",items);
+        if(picked===undefined) return false;
+
+        const loaded=await loadSessionLog(picked.value,true);
+        activateSession(picked.value,loaded);
+        ui.reset(sessionLabelOf(picked.value),loaded.messages,loaded.checkpoint!==undefined);
+        ui.note("已切换会话","success");
+        return true;
+    }
+
+    async function runTuiFlow(openPicker:boolean):Promise<void>{
+        let resolveDone:()=>void=()=>{};
+        const done=new Promise<void>(resolve=>{
+            resolveDone=resolve;
+        });
+
+        const ui=new OwlTui({
+            cwd,
+            modelId,
+            contextWindow:options.contextWindow,
+            sessionTokens:()=>activeSession?.sessionUsage.reportedTokens??0,
+            onSubmit:async text=>{
+                const [token]=text.split(/\s+/,1);
+                const command=token==="/quit"?"/exit":token;
+
+                if(Object.hasOwn(LOCAL_COMMANDS,command)&&text!==token){
+                    ui.note(`${token} 不接受参数。`,"warning");
+                    return;
+                }
+                if(command==="/exit"){
+                    finish();
+                    return;
+                }
+                if(command==="/help"){
+                    ui.note(commandsText(),"dim");
+                    return;
+                }
+                if(command==="/resume"){
+                    await pickSessionInTui(ui);
+                    return;
+                }
+                if(/^\/[a-z][a-z0-9-]*$/i.test(text)){
+                    ui.note(`未知命令 ${text}。输入 /help 查看命令。`,"warning");
+                    return;
+                }
+                try{
+                    await runPrompt(text);
+                }catch(error){
+                    if(persistenceError===undefined) throw error;
+                    finish();
+                }
+            },
+            onInterrupt:()=>{
+                if(activeSession?.signal===undefined) return false;
+                activeSession.abort();
+                return true;
+            },
+            onExit:finish,
+        });
+
+        function finish():void{
+            ui.stop();
+            resolveDone();
+        }
+
+        tui=ui;
+        try{
+            if(activeSession!==undefined){
+                ui.reset(
+                    sessionLabelOf(activeSessionPath),activeSession.state.messages,
+                    activeSession.compactionCheckpoint!==undefined,
+                );
+            }
+            await ui.start(openPicker?"/resume":undefined);
+            await done;
+            if(persistenceError!==undefined) throw persistenceError;
+        }finally{
+            ui.stop();
+            tui=undefined;
+        }
+    }
+
     const terminal=process.stdin.isTTY===true&&process.stdout.isTTY===true;
-    const input=(args.length===0||values.resume)?createInterface({
+    if(values.tui&&values["no-tui"]){
+        throw new Error("Choose either --tui or --no-tui");
+    }
+    const useTui=args.length===0&&terminal&&(values.tui||!values["no-tui"]);
+    tuiMode=useTui;
+
+    const input=(!useTui&&(args.length===0||values.resume))?createInterface({
         input:process.stdin,
         output:process.stdout,
         terminal,
@@ -308,6 +477,17 @@ async function main():Promise<void>{
     input?.on("SIGINT",onInterrupt);
 
     try{
+        if(useTui){
+            if(values.session!==undefined){
+                const target=values.session;
+                const isId=SESSION_ID_PATTERN.test(target);
+                const filePath=isId?await findSessionById(target,sessionDirs):resolve(cwd,target);
+                activateSession(filePath,await loadSessionLog(filePath,isId));
+            }
+            await runTuiFlow(values.resume);
+            return;
+        }
+
         if(values.resume&&lines!==undefined){
             if(!await resumeSession(lines)) return;
         }else if(values.session!==undefined){
@@ -381,8 +561,3 @@ main().catch((error:unknown)=>{
     console.error(error instanceof Error?error.message:String(error));
     process.exitCode=1;
 });
-function formatTokens(tokens:number):string{
-    if(tokens>=1_000_000) return `${(tokens/1_000_000).toFixed(1)}M`;
-    if(tokens>=1_000) return `${(tokens/1_000).toFixed(1)}k`;
-    return String(tokens);
-}

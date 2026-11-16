@@ -59,6 +59,7 @@ export function toPiTools(tools:readonly ToolDefinition[]):PiTool[]{
 }
 export function toPiContext(request:Request):PiContext{
     return {
+        systemPrompt:request.systemPrompt,
         messages:toPiMessages(request.messages),
         tools:toPiTools(request.tools),
     }

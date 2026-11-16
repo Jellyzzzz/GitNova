@@ -2,7 +2,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "owl": "node --env-file-if-exists=.env.local --import tsx agent-runtime/agent-core-ts/src/cli.ts"
+    "owl": "node --env-file-if-exists=.env.local --import tsx agent-runtime/agent-core-ts/src/cli.ts",
+    "owl:text": "node --env-file-if-exists=.env.local --import tsx agent-runtime/agent-core-ts/src/cli.ts --no-tui"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
@@ -10,6 +11,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^1.1.0"
+    "@earendil-works/pi-ai": "^1.1.0",
+    "@earendil-works/pi-tui": "^1.5.2"
   }
 }
