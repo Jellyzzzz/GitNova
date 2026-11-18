@@ -1,0 +1,120 @@
+{
+  "audit_date": "2026-11-06",
+  "head": "27c0487bb14f9d9eff25561dddffb9ca55cdb92a",
+  "source_root": "/Users/zhaoguodong/code/GitNova",
+  "target_root": "/Users/zhaoguodong/code/GitNova-go",
+  "source_files_inventoried": 505,
+  "wip_files": [
+    "agent-runtime/agent-core-ts/src/agent/loop.ts",
+    "agent-runtime/agent-core-ts/src/agent/session.ts",
+    "agent-runtime/agent-core-ts/src/agent/types.ts",
+    "agent-runtime/agent-core-ts/src/tools/registry.ts",
+    "src/main/java/com/gitnova/config/JwtInterceptorConfig.java",
+    "src/main/java/com/gitnova/controller/UserController.java",
+    "src/main/java/com/gitnova/interceptor/JwtInterceptor.java",
+    "src/main/java/com/gitnova/service/AuthService.java",
+    "src/main/java/com/gitnova/util/JwtUtil.java"
+  ],
+  "checks": [
+    {
+      "name": "java-main-compile",
+      "tree": "/Users/zhaoguodong/code/GitNova",
+      "command": "env MAVEN_OPTS='-Xmx384m -XX:MaxMetaspaceSize=192m' mvn -o -Punit-test -DskipTests test",
+      "status": "passed",
+      "log": "/tmp/gitnova-audit-java-compile-20261106.log"
+    },
+    {
+      "name": "java-main-unit",
+      "tree": "/Users/zhaoguodong/code/GitNova",
+      "command": "env MAVEN_OPTS='-Xmx384m -XX:MaxMetaspaceSize=192m' mvn -o -Punit-test -DforkCount=1 -DreuseForks=true '-DargLine=-Xmx256m -XX:MaxMetaspaceSize=192m' test",
+      "status": "failed",
+      "tests": 87,
+      "failures": 2,
+      "errors": 0,
+      "failures_detail": [
+        "JwtInterceptorTest.shouldLoadUsernameFromTheSignedSubject: expected true, got false",
+        "WorkbenchWebTest.shouldReturnNotFoundForRetiredAgentRoutes: expected 404, got 401"
+      ],
+      "explanation": "Mocks still use parseToken/username contract while WIP interceptor uses verifyAndGetUserId.",
+      "log": "/tmp/gitnova-audit-java-unit-20261106.log"
+    },
+    {
+      "name": "java-base-unit",
+      "tree": "/Users/zhaoguodong/code/GitNova-go",
+      "command": "env MAVEN_OPTS='-Xmx384m -XX:MaxMetaspaceSize=192m' mvn -o -Punit-test -DforkCount=1 -DreuseForks=true '-DargLine=-Xmx256m -XX:MaxMetaspaceSize=192m' test",
+      "status": "passed",
+      "tests": 87,
+      "failures": 0,
+      "errors": 0,
+      "log": "/tmp/gitnova-audit-base-unit-20261106.log"
+    },
+    {
+      "name": "ts-typecheck-live-wip",
+      "tree": "/Users/zhaoguodong/code/GitNova",
+      "command": "env NODE_OPTIONS=--max-old-space-size=384 ./node_modules/.bin/tsc -p agent-runtime/agent-core-ts/tsconfig.json",
+      "status": "failed",
+      "error": "loop.ts(126,13): TS1472: 'catch' or 'finally' expected",
+      "limits": "Loop changed during audit; this result belongs to the observed editing snapshot."
+    },
+    {
+      "name": "ts-existing-tests",
+      "tree": "/Users/zhaoguodong/code/GitNova",
+      "command": "node --max-old-space-size=384 --import tsx --test --test-concurrency=1 agent-runtime/agent-core-ts/src/model/pi-messages.test.ts agent-runtime/agent-core-ts/src/tools/registry.test.ts agent-runtime/agent-core-ts/src/tools/bash-process.test.ts",
+      "status": "passed",
+      "tests": 25,
+      "failures": 0,
+      "limits": "No complete Loop/Session or live provider exercise."
+    },
+    {
+      "name": "java-protocol-unit",
+      "tree": "/Users/zhaoguodong/code/GitNova",
+      "command": "env MAVEN_OPTS='-Xmx384m -XX:MaxMetaspaceSize=192m' mvn -o -f agent-runtime/pom.xml -pl agent-protocol -DforkCount=1 '-DargLine=-Xmx256m' test",
+      "status": "passed",
+      "tests": 72,
+      "failures": 0,
+      "log": "/tmp/gitnova-audit-protocol-20261106.log"
+    }
+  ],
+  "native_git_probe": {
+    "git_version": "git version 2.50.1 (Apple Git-155)",
+    "results": [
+      {
+        "check": "bare init and standard local push",
+        "status": "pass"
+      },
+      {
+        "check": "read immutable commit blob",
+        "status": "pass"
+      },
+      {
+        "check": "three-way merge, two-parent commit, ref CAS rejects stale target",
+        "status": "pass"
+      },
+      {
+        "check": "git-http-backend CGI fetch advertisement",
+        "status": "pass"
+      },
+      {
+        "check": "merge conflict returns non-success",
+        "status": "pass"
+      }
+    ],
+    "limits": "Temporary local repositories and direct CGI only; no Go HTTP authentication, network push, database or sandbox integration tested."
+  },
+  "not_run": [
+    "Go implementation tests (no Go application exists)",
+    "MySQL/Redis integration",
+    "Go Smart HTTP authorization and network Push",
+    "Docker task isolation",
+    "new browser flow",
+    "live model round trip",
+    "full application deployment"
+  ],
+  "source_mutations_by_audit": [],
+  "notes": [
+    "Existing Go worktree reused; no new branch necessary.",
+    "Only documentation and inventory artifacts written to target tree.",
+    "Original Loop was being edited concurrently; no audit operation edited it.",
+    "No application data migration, backup, deletion, commit or push executed."
+  ]
+}
