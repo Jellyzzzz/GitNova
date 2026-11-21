@@ -1,42 +1,33 @@
 package gittransport
 
 import (
+	"fmt"
 	"net/http"
-	"net/http/cgi"
-	"strings"
 )
 
-func New(repoRoot, gitBackend string) http.Handler {
-	return &transportHandler{
-		cgi: &cgi.Handler{
-			Path: gitBackend,
-			Root: "/git",
-			Env:  []string{"GIT_PROJECT_ROOT=" + repoRoot},
-		},
-	}
+type executor interface {
+	Serve(http.ResponseWriter, *http.Request, Invocation)
 }
 
 type transportHandler struct {
-	cgi http.Handler
+	backend      executor
+	repositoryID int64
 }
 
-func (t *transportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	service := r.URL.Query().Get("service")
+// ReadOnlyRepository exposes one explicitly public repository. Private reads and
+// writes must resolve credentials and ACL before calling Serve.
+func (b *Backend) ReadOnlyRepository(repositoryID int64) http.Handler {
+	return &transportHandler{backend: b, repositoryID: repositoryID}
+}
 
-	// 当前阶段只开放只读的 fetch/clone，push 走 receive-pack，先拒绝。
-	const uploadPack = "git-upload-pack"
-	isDiscovery := r.Method == http.MethodGet &&
-		strings.HasSuffix(r.URL.Path, "/info/refs") &&
-		service == uploadPack
-	isTransfer := r.Method == http.MethodPost &&
-		strings.HasSuffix(r.URL.Path, "/"+uploadPack)
-	if !isDiscovery && !isTransfer {
-		http.Error(
-			w,
-			"Git operation not allowed",
-			http.StatusForbidden,
-		)
+func (h *transportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	prefix := fmt.Sprintf("/git/%d.git", h.repositoryID)
+	discovery := r.Method == http.MethodGet &&
+		r.URL.Path == prefix+"/info/refs" && r.URL.Query().Get("service") == "git-upload-pack"
+	transfer := r.Method == http.MethodPost && r.URL.Path == prefix+"/git-upload-pack"
+	if !discovery && !transfer {
+		reject(w, r, http.StatusForbidden, "Git operation not allowed")
 		return
 	}
-	t.cgi.ServeHTTP(w, r)
+	h.backend.Serve(w, r, Invocation{RepositoryID: h.repositoryID, Service: UploadPack, Discovery: discovery})
 }

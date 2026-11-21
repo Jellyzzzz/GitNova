@@ -33,7 +33,7 @@ GitNova 是面向个人与小团队的轻量级 Git 代码托管与协作平台�
 
 ### 2.1 用户与认证（已确定）
 
-1. 开放注册，邮箱验证后才能正常使用；`username` 在当前范围内不可修改；邮箱默认不公开。
+1. 开放注册，邮箱验证后才能正常使用；`username` 在当前范围内不可修改；邮箱默认不公开。`username` 保留输入大小写，唯一性与 URL 查找区分大小写及重音；当前只允许 3–64 位 ASCII 字母、数字、`_`、`-`，首位须为字母或数字。注册时 `display_name` 默认使用该用户名，后续展示名不参与账号或仓库 URL 的身份解析。
 2. 用户可以用用户名或已验证邮箱登录；支持多设备 Web 登录，可撤销指定会话。
 3. 登出要使服务端 Web Session 失效；修改密码要求旧密码并撤销全部 Web Session，但**不自动撤销 PAT、SSH Key**。
 4. 管理员可以封禁、解封账号，并留存关键管理操作记录；账号被禁用后，Web/PAT/SSH 均不得继续获得授权。
@@ -139,7 +139,7 @@ GitNova 是面向个人与小团队的轻量级 Git 代码托管与协作平台�
 | `personal_access_tokens` | `id`, `user_id`, `name`, `token_verifier`, `scopes`, `created_at`, `expires_at`, `revoked_at?` | 账号级持久化；高熵 Token 不存明文 |
 | `ssh_keys` | `id`, `user_id`, `title`, `public_key`, `fingerprint`, `created_at` | 账号级持久化；仅公钥，公钥身份去重 |
 | WebSession（逻辑对象） | `session_identity`, `user_id`, `token_verifier`, `created_at`, `expires_at`, `revocation/validity` | **独立 Session Store，介质未定**；1 User : N Session |
-| EmailVerification（临时凭据） | 用户关联、单次校验值、有效期、消耗状态 | 临时存储，尚不决定是否建永久表 |
+| EmailVerification（临时凭据） | 用户关联、单次校验值、有效期、消耗状态 | 通过数据库进行存储|
 
 **不建立通用的 `credentials` 大表**。凭据有效不等于具备仓库权限。PAT 的读写 Scope、当前账号状态、仓库权限、分支保护必须综合验证。修改密码撤销所有 Web Session，而 PAT/SSH Key 保留；封禁用户会阻断三种认证路径。若密码状态与 Session Store 分开，如何保证立即撤销应在实现前验证。
 

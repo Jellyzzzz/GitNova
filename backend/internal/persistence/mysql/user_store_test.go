@@ -19,6 +19,9 @@ import (
 )
 
 type requestContextKey struct{}
+type cancelContextKey struct{}
+
+var errTestDatabase = errors.New("test database failure")
 
 type testDriver struct{}
 
@@ -31,7 +34,8 @@ func (testDriver) Open(scenario string) (driver.Conn, error) {
 }
 
 type testConnection struct {
-	scenario string
+	scenario          string
+	cancelAfterCommit context.CancelFunc
 }
 
 func (*testConnection) Prepare(string) (driver.Stmt, error) {
@@ -40,7 +44,9 @@ func (*testConnection) Prepare(string) (driver.Stmt, error) {
 
 func (*testConnection) Close() error { return nil }
 
-func (*testConnection) Begin() (driver.Tx, error) { return testTransaction{}, nil }
+func (connection *testConnection) Begin() (driver.Tx, error) {
+	return testTransaction{connection: connection}, nil
+}
 
 func (connection *testConnection) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	if ctx.Value(requestContextKey{}) != "request" {
@@ -51,6 +57,18 @@ func (connection *testConnection) ExecContext(ctx context.Context, query string,
 	}
 	if connection.scenario == "duplicate" {
 		return nil, &mysqldriver.MySQLError{Number: 1062, Message: "duplicate"}
+	}
+	switch connection.scenario {
+	case "lost-deadline":
+		<-ctx.Done()
+		return nil, fmt.Errorf("%v; %w", ctx.Err(), sql.ErrTxDone)
+	case "lost-cancel":
+		ctx.Value(cancelContextKey{}).(context.CancelFunc)()
+		return nil, fmt.Errorf("%v; %w", ctx.Err(), sql.ErrTxDone)
+	case "database-error":
+		return nil, errTestDatabase
+	case "commit-then-cancel":
+		connection.cancelAfterCommit = ctx.Value(cancelContextKey{}).(context.CancelFunc)
 	}
 	return testResult{}, nil
 }
@@ -81,9 +99,14 @@ func (connection *testConnection) QueryContext(ctx context.Context, query string
 	return &testRows{hasUser: true}, nil
 }
 
-type testTransaction struct{}
+type testTransaction struct{ connection *testConnection }
 
-func (testTransaction) Commit() error   { return nil }
+func (transaction testTransaction) Commit() error {
+	if transaction.connection.cancelAfterCommit != nil {
+		transaction.connection.cancelAfterCommit()
+	}
+	return nil
+}
 func (testTransaction) Rollback() error { return nil }
 
 type testResult struct{}
@@ -147,8 +170,8 @@ func TestUserStore(t *testing.T) {
 
 	t.Run("duplicate", func(t *testing.T) {
 		err := newTestUserStore(t, "duplicate").Create(ctx, &identity.User{Username: "alice"})
-		if !errors.Is(err, gorm.ErrDuplicatedKey) {
-			t.Fatalf("Create error = %v, want duplicated key", err)
+		if !errors.Is(err, identity.ErrUserAlreadyExists) {
+			t.Fatalf("Create error = %v, want user already exists", err)
 		}
 	})
 
@@ -178,6 +201,43 @@ func TestUserStore(t *testing.T) {
 		_, err := newTestUserStore(t, "missing").FindUserByName(ctx, "missing")
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			t.Fatalf("lookup error = %v, want record not found", err)
+		}
+	})
+}
+
+func TestCreatePreservesCancellationAndDatabaseErrors(t *testing.T) {
+	base := context.WithValue(context.Background(), requestContextKey{}, "request")
+	t.Run("deadline formatted away by transaction cleanup", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(base, 30*time.Millisecond)
+		defer cancel()
+		err := newTestUserStore(t, "lost-deadline").Create(ctx, &identity.User{Username: "alice"})
+		if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, sql.ErrTxDone) {
+			t.Fatalf("Create did not preserve deadline and rollback errors: %v", err)
+		}
+	})
+	t.Run("cancellation formatted away by transaction cleanup", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(base)
+		defer cancel()
+		ctx = context.WithValue(ctx, cancelContextKey{}, cancel)
+		err := newTestUserStore(t, "lost-cancel").Create(ctx, &identity.User{Username: "alice"})
+		if !errors.Is(err, context.Canceled) || !errors.Is(err, sql.ErrTxDone) {
+			t.Fatalf("Create did not preserve cancellation and rollback errors: %v", err)
+		}
+	})
+	t.Run("unrelated database failure remains identifiable", func(t *testing.T) {
+		err := newTestUserStore(t, "database-error").Create(base, &identity.User{Username: "alice"})
+		if !errors.Is(err, errTestDatabase) || errors.Is(err, context.Canceled) {
+			t.Fatalf("unexpected database error mapping: %v", err)
+		}
+	})
+	t.Run("successful commit remains successful after cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(base)
+		defer cancel()
+		ctx = context.WithValue(ctx, cancelContextKey{}, cancel)
+		user := &identity.User{Username: "alice"}
+		err := newTestUserStore(t, "commit-then-cancel").Create(ctx, user)
+		if err != nil || ctx.Err() != context.Canceled || user.ID != 42 {
+			t.Fatalf("committed insert changed to failure: error=%v id=%d context=%v", err, user.ID, ctx.Err())
 		}
 	})
 }

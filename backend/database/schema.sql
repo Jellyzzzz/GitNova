@@ -7,7 +7,7 @@ USE gitnova_go_dev;
 CREATE TABLE users (
     id BIGINT NOT NULL AUTO_INCREMENT,
 
-    username VARCHAR(64) NOT NULL,
+    username VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs NOT NULL,
     email VARCHAR(254) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
 

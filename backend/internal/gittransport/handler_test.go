@@ -6,6 +6,12 @@ import (
 	"testing"
 )
 
+type executorFunc func(http.ResponseWriter, *http.Request, Invocation)
+
+func (fn executorFunc) Serve(w http.ResponseWriter, r *http.Request, invocation Invocation) {
+	fn(w, r, invocation)
+}
+
 func TestReadOnlyGitEndpoints(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -43,6 +49,8 @@ func TestReadOnlyGitEndpoints(t *testing.T) {
 			"/git/100.git/HEAD",
 			false,
 		},
+		{"nested repository", http.MethodPost, "/git/100.git/other.git/git-upload-pack", false},
+		{"different repository", http.MethodPost, "/git/101.git/git-upload-pack", false},
 	}
 
 	for _, tc := range cases {
@@ -50,9 +58,13 @@ func TestReadOnlyGitEndpoints(t *testing.T) {
 			called := false
 
 			h := &transportHandler{
-				cgi: http.HandlerFunc(
-					func(w http.ResponseWriter, r *http.Request) {
+				repositoryID: 100,
+				backend: executorFunc(
+					func(w http.ResponseWriter, r *http.Request, invocation Invocation) {
 						called = true
+						if invocation.RepositoryID != 100 || invocation.Service != UploadPack || invocation.UserID != 0 {
+							t.Fatal("untrusted invocation")
+						}
 						w.WriteHeader(http.StatusNoContent)
 					},
 				),

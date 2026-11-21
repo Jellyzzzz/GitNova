@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Jellyzzzz/GitNova/backend/internal/identity"
@@ -17,10 +18,20 @@ func NewUserStore(db *gorm.DB) *UserStore {
 }
 
 func (s *UserStore) Create(ctx context.Context, user *identity.User) error {
-	if err := s.db.WithContext(ctx).Create(user).Error; err != nil {
-		return fmt.Errorf("create user: %w", err)
+	err := s.db.WithContext(ctx).Create(user).Error
+	if err == nil {
+		return nil
 	}
-	return nil
+
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return identity.ErrUserAlreadyExists
+	}
+	// GORM can format the original operation error as text when adding a
+	// rollback error. Preserve the request's cancellation alongside both.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		err = errors.Join(ctxErr, err)
+	}
+	return fmt.Errorf("create user: %w", err)
 }
 
 func (s *UserStore) FindUserByName(ctx context.Context, username string) (*identity.User, error) {
