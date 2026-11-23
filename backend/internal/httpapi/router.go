@@ -7,16 +7,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func NewRouter(registerService *identity.RegisterService) *gin.Engine{
-	r:=gin.Default()
-	api:=r.Group("api/")
-
-	api.GET("/ping",func(c *gin.Context){
-		c.JSON(http.StatusOK, gin.H{
-            "message": "pong",
-        })
+func NewRouter(registerService *identity.RegisterService, secureCookie bool) *gin.Engine {
+	r := gin.Default()
+	api := r.Group("/api")
+	api.GET("/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
-	handler:=NewRegisterHandler(registerService)
-	api.POST("auth/register",handler.Handle)
-	return r;
+	h := NewRegisterHandler(registerService, secureCookie)
+	api.POST("/auth/registration/email", h.RequestEmail)
+	api.POST("/auth/registration/verify", h.VerifyEmail)
+	api.GET("/auth/registration/status", h.Status)
+	api.POST("/auth/register", h.Handle)
+	return r
 }

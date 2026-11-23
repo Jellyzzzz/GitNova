@@ -3,86 +3,102 @@ package identity
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
-type registerStoreFunc func(context.Context, *User) error
+type fakeStore struct {
+	created *User
+	err     error
+}
 
-func (fn registerStoreFunc) Create(ctx context.Context, user *User) error { return fn(ctx, user) }
+func (s *fakeStore) Create(_ context.Context, u *User) error {
+	if s.err != nil {
+		return s.err
+	}
+	u.ID = 42
+	s.created = u
+	return nil
+}
 
-func TestRegisterPreservesUsernameAndDisplayName(t *testing.T) {
-	store := registerStoreFunc(func(ctx context.Context, user *User) error {
-		if user.Username != "Jelly_User-42" || user.DisplayName != "Jelly_User-42" || user.Email != "jelly@example.test" {
-			t.Fatal("stored username spelling or normalized email differs from input")
-		}
-		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte("Register-Password-2026")); err != nil {
-			t.Fatal("stored hash does not verify the supplied password")
-		}
-		user.ID = 42
-		return nil
-	})
-	result, err := NewRegisterService(store).Register(context.Background(), RegisterInput{
-		Username: "  Jelly_User-42  ", Email: "  Jelly@Example.Test  ", Password: "Register-Password-2026",
-	})
+type fakeTokens struct {
+	proof   RegistrationProof
+	deleted bool
+}
+
+func (f *fakeTokens) Issue(context.Context, string) (string, error) { return "secret-email-token", nil }
+func (f *fakeTokens) Verify(context.Context, string, string) (string, error) {
+	return "verified-ticket", nil
+}
+func (f *fakeTokens) Read(_ context.Context, ticket string) (RegistrationProof, error) {
+	if ticket != "verified-ticket" || f.deleted {
+		return RegistrationProof{}, ErrInvalidTicket
+	}
+	return f.proof, nil
+}
+func (f *fakeTokens) Delete(_ context.Context, _ string) error {
+	f.deleted = true
+	return nil
+}
+
+type fakeMailer struct{ to, token string }
+
+func (m *fakeMailer) SendVerification(_ context.Context, email, token string) error {
+	m.to, m.token = email, token
+	return nil
+}
+
+func TestRegistrationRequiresProof(t *testing.T) {
+	ctx := context.Background()
+	store := &fakeStore{}
+	now := time.Now().UTC()
+	tokens := &fakeTokens{proof: RegistrationProof{Email: "alice@example.test", VerifiedAt: now, ExpiresAt: now.Add(time.Minute)}}
+	mailer := &fakeMailer{}
+	svc := NewRegisterService(store, tokens, mailer)
+
+	if err := svc.RequestEmail(ctx, " Alice@Example.Test "); err != nil {
+		t.Fatal(err)
+	}
+	if mailer.to != "alice@example.test" || mailer.token == "" || store.created != nil {
+		t.Fatal("requesting verification must not create a user")
+	}
+	if _, err := svc.Register(ctx, "", RegisterInput{Username: "alice", Password: "Password-2026"}); !errors.Is(err, ErrInvalidTicket) {
+		t.Fatalf("register without ticket = %v", err)
+	}
+	result, err := svc.Register(ctx, "verified-ticket", RegisterInput{Username: "alice", Password: "Password-2026"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.ID != 42 || result.Username != "Jelly_User-42" || result.DisplayName != "Jelly_User-42" || result.Email != "jelly@example.test" {
-		t.Fatal("response account identifiers differ from stored values")
+	if result.ID != 42 || store.created.Email != "alice@example.test" || store.created.EmailVerifiedAt == nil || !store.created.EmailVerifiedAt.Equal(now) {
+		t.Fatal("email and verification time must come from Redis proof")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(store.created.PasswordHash), []byte("Password-2026")); err != nil {
+		t.Fatal(err)
+	}
+	if !tokens.deleted {
+		t.Fatal("successful registration should remove ticket")
 	}
 }
 
-func TestRegisterRejectsUnsafeUsernamesBeforePersistence(t *testing.T) {
-	for _, name := range []string{"", "ab", strings.Repeat("a", 65), "a/b", "a\\b", "../", "a\nb", "a\x00b", "a\u202eb", "中文名", "Kelvin", "résumé", "re\u0301sume\u0301", "-alice", "_alice", "alice smith", "API", "Git", "AdMiN"} {
-		t.Run(name, func(t *testing.T) {
-			service := NewRegisterService(registerStoreFunc(func(context.Context, *User) error {
-				t.Fatal("invalid username reached persistence")
-				return nil
-			}))
-			_, err := service.Register(context.Background(), RegisterInput{Username: name, Email: "alice@example.test", Password: "Register-Password-2026"})
-			if !errors.Is(err, ErrInvalidRegistration) {
-				t.Fatalf("error=%v, want invalid registration", err)
-			}
-		})
+func TestRegistrationRejectsInvalidInput(t *testing.T) {
+	ctx := context.Background()
+	svc := NewRegisterService(&fakeStore{}, &fakeTokens{}, &fakeMailer{})
+	if _, err := svc.Register(ctx, "verified-ticket", RegisterInput{Username: "../", Password: "Password-2026"}); !errors.Is(err, ErrInvalidRegistration) {
+		t.Fatalf("invalid username = %v", err)
+	}
+	if _, err := svc.Register(ctx, "verified-ticket", RegisterInput{Username: "alice", Password: "short"}); !errors.Is(err, ErrInvalidRegistration) {
+		t.Fatalf("invalid password = %v", err)
 	}
 }
 
-func TestRegisterUsernameLengthBoundaries(t *testing.T) {
-	for _, name := range []string{"Ab1", "A" + strings.Repeat("b", 63), "jellyzzz", "JellyZZZ", "resume"} {
-		service := NewRegisterService(registerStoreFunc(func(ctx context.Context, user *User) error {
-			if user.Username != name || user.DisplayName != name {
-				t.Fatal("username or display name lost the supplied spelling")
-			}
-			user.ID = 1
-			return nil
-		}))
-		if _, err := service.Register(context.Background(), RegisterInput{Username: name, Email: "alice@example.test", Password: "Register-Password-2026"}); err != nil {
-			t.Fatal(err)
-		}
+func TestRegistrationRetainsTicketOnDatabaseFailure(t *testing.T) {
+	ctx := context.Background()
+	tokens := &fakeTokens{proof: RegistrationProof{Email: "alice@example.test", VerifiedAt: time.Now(), ExpiresAt: time.Now().Add(time.Minute)}}
+	svc := NewRegisterService(&fakeStore{err: ErrUserAlreadyExists}, tokens, &fakeMailer{})
+	_, err := svc.Register(ctx, "verified-ticket", RegisterInput{Username: "alice", Password: "Password-2026"})
+	if !errors.Is(err, ErrUserAlreadyExists) || tokens.deleted {
+		t.Fatalf("error=%v; proof deleted=%v", err, tokens.deleted)
 	}
-}
-
-func TestRegisterCancellationAndStoreErrors(t *testing.T) {
-	t.Run("already cancelled", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		service := NewRegisterService(registerStoreFunc(func(context.Context, *User) error {
-			t.Fatal("cancelled registration reached persistence")
-			return nil
-		}))
-		_, err := service.Register(ctx, RegisterInput{Username: "Alice", Email: "alice@example.test", Password: "Register-Password-2026"})
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("error=%v, want cancellation", err)
-		}
-	})
-	t.Run("duplicate remains a business error", func(t *testing.T) {
-		service := NewRegisterService(registerStoreFunc(func(context.Context, *User) error { return ErrUserAlreadyExists }))
-		result, err := service.Register(context.Background(), RegisterInput{Username: "Alice", Email: "alice@example.test", Password: "Register-Password-2026"})
-		if !errors.Is(err, ErrUserAlreadyExists) || result.ID != 0 {
-			t.Fatalf("error=%v result ID=%d", err, result.ID)
-		}
-	})
 }

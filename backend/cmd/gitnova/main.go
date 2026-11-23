@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -19,7 +20,10 @@ import (
 	"github.com/Jellyzzzz/GitNova/backend/internal/gittransport"
 	"github.com/Jellyzzzz/GitNova/backend/internal/httpapi"
 	"github.com/Jellyzzzz/GitNova/backend/internal/identity"
+	"github.com/Jellyzzzz/GitNova/backend/internal/mailer"
 	mysqlstore "github.com/Jellyzzzz/GitNova/backend/internal/persistence/mysql"
+	redisstore "github.com/Jellyzzzz/GitNova/backend/internal/persistence/redis"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -40,16 +44,14 @@ func run() error {
 	maxDuration := flag.Duration("git-max-duration", 30*time.Minute, "maximum lifetime of one Git RPC")
 	idleTimeout := flag.Duration("git-idle-timeout", 5*time.Minute, "maximum period without Git RPC progress")
 	flag.Parse()
+
 	lookupCtx, lookupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer lookupCancel()
 	gitExecPath, err := exec.CommandContext(lookupCtx, "git", "--exec-path").Output()
 	if err != nil {
 		return fmt.Errorf("find Git executable directory: %w", err)
 	}
-	gitBackend := filepath.Join(
-		strings.TrimSpace(string(gitExecPath)),
-		"git-http-backend",
-	)
+	gitBackend := filepath.Join(strings.TrimSpace(string(gitExecPath)), "git-http-backend")
 	repoRoot, err := filepath.Abs(*repositoryRoot)
 	if err != nil {
 		return fmt.Errorf("resolve repository root: %w", err)
@@ -76,55 +78,65 @@ func run() error {
 			log.Printf("Git shutdown: %v", err)
 		}
 	}()
-	mux := http.NewServeMux()
+
+	// Initialize the single shared MySQL and Redis clients at startup.
 	dsn := os.Getenv("GITNOVA_MYSQL_DSN")
-if dsn == "" {
-    log.Fatal("GITNOVA_MYSQL_DSN is not set")
-}
+	if dsn == "" {
+		return fmt.Errorf("GITNOVA_MYSQL_DSN is not set")
+	}
+	startupCtx, startupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer startupCancel()
+	db, err := database.OpenMySQL(startupCtx, dsn)
+	if err != nil {
+		return err
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	defer sqlDB.Close()
 
-startupCtx, cancel := context.WithTimeout(
-    context.Background(),
-    5*time.Second,
-)
+	redisAddr := os.Getenv("GITNOVA_REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "127.0.0.1:6379"
+	}
+	rdb := redis.NewClient(&redis.Options{
+		Addr: redisAddr, Password: os.Getenv("GITNOVA_REDIS_PASSWORD"),
+	})
+	defer rdb.Close()
+	if err := rdb.Ping(startupCtx).Err(); err != nil {
+		return fmt.Errorf("connect Redis: %w", err)
+	}
+	mailSender, err := mailer.NewFromEnv()
+	if err != nil {
+		return err
+	}
+	secureCookie := false
+	if raw := os.Getenv("GITNOVA_COOKIE_SECURE"); raw != "" {
+		secureCookie, err = strconv.ParseBool(raw)
+		if err != nil {
+			return fmt.Errorf("invalid GITNOVA_COOKIE_SECURE: %w", err)
+		}
+	}
 
-db, err := database.OpenMySQL(startupCtx, dsn)
-cancel()
+	userStore := mysqlstore.NewUserStore(db)
+	tokenStore := redisstore.NewRegistrationStore(rdb)
+	registerService := identity.NewRegisterService(userStore, tokenStore, mailSender)
 
-if err != nil {
-    log.Fatal(err)
-}
+	mux := http.NewServeMux()
+	mux.Handle("/api/", httpapi.NewRouter(registerService, secureCookie))
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	mux.Handle("/git/100.git/", transport.ReadOnlyRepository(100))
 
-sqlDB, err := db.DB()
-if err != nil {
-    log.Fatal(err)
-}
-defer sqlDB.Close()
-
-userStore := mysqlstore.NewUserStore(db)
-registerService := identity.NewRegisterService(userStore)
-	apiRouter:=httpapi.NewRouter(registerService)
-	mux.Handle("/api/",apiRouter)
-	mux.HandleFunc("GET /health",
-		func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte("ok\n"))
-		},
-	)
-	mux.Handle(
-		"/git/100.git/",
-		transport.ReadOnlyRepository(100),
-	)
 	addr := os.Getenv("GITNOVA_ADDR")
 	if addr == "" {
 		addr = "127.0.0.1:8080"
 	}
-
 	server := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       90 * time.Second,
+		Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 90 * time.Second,
 	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	serverErrors := make(chan error, 1)

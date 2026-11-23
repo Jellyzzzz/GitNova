@@ -14,7 +14,10 @@ import (
 	"github.com/gin-gonic/gin/binding"
 )
 
-const maxRegisterBodyBytes = 16 << 10
+const (
+	maxRegisterBodyBytes     = 16 << 10
+	maxVerificationBodyBytes = 4 << 10
+)
 
 var (
 	errRegisterMediaType = errors.New("registration requires application/json")
@@ -24,89 +27,105 @@ var (
 
 type registerRequest struct {
 	Username string `json:"username" binding:"required,min=3,max=64"`
-	Email    string `json:"email" binding:"required,email,max=254"`
 	Password string `json:"password" binding:"required,min=8"`
 }
 
+type requestEmailRequest struct {
+	Email string `json:"email" binding:"required,email,max=254"`
+}
+
+type verifyEmailRequest struct {
+	Email string `json:"email" binding:"required,email,max=254"`
+	Token string `json:"token" binding:"required,max=256"`
+}
+
 func readRegisterRequest(w http.ResponseWriter, r *http.Request, timeout time.Duration) (request registerRequest, err error) {
+	err = readRegistrationJSON(w, r, timeout, maxRegisterBodyBytes, map[string]*string{
+		"username": &request.Username,
+		"password": &request.Password,
+	}, &request)
+	return request, err
+}
+
+func readEmailRequest(w http.ResponseWriter, r *http.Request, timeout time.Duration) (request requestEmailRequest, err error) {
+	err = readRegistrationJSON(w, r, timeout, maxVerificationBodyBytes, map[string]*string{
+		"email": &request.Email,
+	}, &request)
+	return request, err
+}
+
+func readVerifyEmailRequest(w http.ResponseWriter, r *http.Request, timeout time.Duration) (request verifyEmailRequest, err error) {
+	err = readRegistrationJSON(w, r, timeout, maxVerificationBodyBytes, map[string]*string{
+		"email": &request.Email,
+		"token": &request.Token,
+	}, &request)
+	return request, err
+}
+
+func readRegistrationJSON(w http.ResponseWriter, r *http.Request, timeout time.Duration, limit int64, fields map[string]*string, target any) (err error) {
 	controller := http.NewResponseController(w)
 	if err := controller.SetReadDeadline(time.Now().Add(timeout)); err != nil {
-		return request, fmt.Errorf("%w: %w", errRegisterDeadline, err)
+		return fmt.Errorf("%w: %w", errRegisterDeadline, err)
 	}
 	defer func() {
 		if err != nil && r.ProtoMajor == 1 {
 			w.Header().Set("Connection", "close")
-			// Body.Close may drain an unfinished HTTP/1 upload. Bound that
-			// cleanup before clearing the deadline for the rest of the RPC.
 			_ = controller.SetReadDeadline(time.Now())
 		}
 		_ = r.Body.Close()
 		_ = controller.SetReadDeadline(time.Time{})
 	}()
-
 	mediaType, _, parseErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if parseErr != nil || mediaType != "application/json" {
-		return request, errRegisterMediaType
+		return errRegisterMediaType
 	}
-	if r.ContentLength > maxRegisterBodyBytes {
-		return request, &http.MaxBytesError{Limit: maxRegisterBodyBytes}
+	if r.ContentLength > limit {
+		return &http.MaxBytesError{Limit: limit}
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRegisterBodyBytes))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 	if err != nil {
-		return request, err
+		return err
 	}
-	// The body has reached EOF. Do not leave a network read deadline armed
-	// while decoding or validating the already-buffered JSON.
 	_ = controller.SetReadDeadline(time.Time{})
-	request, err = decodeRegisterRequest(body)
-	if err != nil {
-		return request, err
+	if err := decodeRegistrationJSON(body, fields); err != nil {
+		return err
 	}
-	// Preserve the validation ShouldBindJSON previously performed. Business
-	// username rules and normalization remain in identity.RegisterService.
-	return request, binding.Validator.ValidateStruct(&request)
+	return binding.Validator.ValidateStruct(target)
 }
 
-func decodeRegisterRequest(body []byte) (request registerRequest, err error) {
+func decodeRegistrationJSON(body []byte, fields map[string]*string) error {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	token, err := decoder.Token()
 	if err != nil || token != json.Delim('{') {
-		return request, errRegisterJSON
+		return errRegisterJSON
 	}
-	seen := make(map[string]bool, 3)
+	seen := make(map[string]bool, len(fields))
 	for decoder.More() {
 		token, err := decoder.Token()
 		if err != nil {
-			return request, errRegisterJSON
+			return errRegisterJSON
 		}
 		name, ok := token.(string)
 		if !ok || seen[name] {
-			return request, errRegisterJSON
+			return errRegisterJSON
 		}
 		seen[name] = true
-		var field *string
-		switch name {
-		case "username":
-			field = &request.Username
-		case "email":
-			field = &request.Email
-		case "password":
-			field = &request.Password
-		default:
-			return request, errRegisterJSON
+		field, ok := fields[name]
+		if !ok {
+			return errRegisterJSON
 		}
 		if err := decoder.Decode(field); err != nil {
-			return request, errRegisterJSON
+			return errRegisterJSON
 		}
 	}
 	if token, err := decoder.Token(); err != nil || token != json.Delim('}') {
-		return request, errRegisterJSON
+		return errRegisterJSON
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return request, errRegisterJSON
+		return errRegisterJSON
 	}
-	return request, nil
+	return nil
 }
 
 func registerRequestError(err error) (int, string) {
