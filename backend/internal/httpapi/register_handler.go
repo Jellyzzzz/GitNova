@@ -123,8 +123,10 @@ func (h *RegisterHandler) Handle(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "email verification expired"})
 		case errors.Is(err, identity.ErrInvalidRegistration):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid registration input"})
+		case errors.Is(err, identity.ErrEmailExists):
+			c.JSON(http.StatusConflict, gin.H{"error": "email already exists"})
 		case errors.Is(err, identity.ErrUserAlreadyExists):
-			c.JSON(http.StatusConflict, gin.H{"error": "username or email already exists"})
+			c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
 		case errors.Is(err, context.DeadlineExceeded):
 			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "registration timed out"})
 		default:
