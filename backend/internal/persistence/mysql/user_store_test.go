@@ -55,7 +55,7 @@ func (connection *testConnection) ExecContext(ctx context.Context, query string,
 	if !strings.Contains(query, "INSERT INTO `users`") {
 		return nil, fmt.Errorf("unexpected insert query: %s", query)
 	}
-	if connection.scenario == "duplicate" {
+	if strings.HasPrefix(connection.scenario, "duplicate") {
 		return nil, &mysqldriver.MySQLError{Number: 1062, Message: "duplicate"}
 	}
 	switch connection.scenario {
@@ -79,6 +79,20 @@ func (connection *testConnection) QueryContext(ctx context.Context, query string
 	}
 	if connection.scenario == "missing" {
 		return &testRows{}, nil
+	}
+	if strings.HasPrefix(connection.scenario, "duplicate") {
+		if !strings.Contains(query, "WHERE username = ?") || !strings.Contains(query, "WHERE email = ?") ||
+			len(args) != 2 || args[0].Value != "alice" || args[1].Value != "alice@example.test" {
+			return nil, fmt.Errorf("unexpected duplicate lookup query or arguments: %s", query)
+		}
+		if connection.scenario == "duplicate-query-error" {
+			return nil, errTestDatabase
+		}
+		if connection.scenario == "duplicate-query-cancel" {
+			ctx.Value(cancelContextKey{}).(context.CancelFunc)()
+			return nil, errTestDatabase
+		}
+		return &conflictRows{scenario: connection.scenario}, nil
 	}
 
 	var column string
@@ -116,6 +130,30 @@ func (testResult) RowsAffected() (int64, error) { return 1, nil }
 
 type testRows struct {
 	hasUser bool
+}
+
+type conflictRows struct {
+	scenario string
+	read     bool
+}
+
+func (*conflictRows) Columns() []string { return []string{"username_exists", "email_exists"} }
+func (*conflictRows) Close() error      { return nil }
+func (rows *conflictRows) Next(values []driver.Value) error {
+	if rows.read {
+		return io.EOF
+	}
+	rows.read = true
+	values[0], values[1] = int64(0), int64(0)
+	switch rows.scenario {
+	case "duplicate-username":
+		values[0] = int64(1)
+	case "duplicate-email":
+		values[1] = int64(1)
+	case "duplicate-both":
+		values[0], values[1] = int64(1), int64(1)
+	}
+	return nil
 }
 
 func (*testRows) Columns() []string {
@@ -169,7 +207,7 @@ func TestUserStore(t *testing.T) {
 	})
 
 	t.Run("duplicate", func(t *testing.T) {
-		err := newTestUserStore(t, "duplicate").Create(ctx, &identity.User{Username: "alice"})
+		err := newTestUserStore(t, "duplicate").Create(ctx, &identity.User{Username: "alice", Email: "alice@example.test"})
 		if !errors.Is(err, identity.ErrUserAlreadyExists) {
 			t.Fatalf("Create error = %v, want user already exists", err)
 		}
@@ -201,6 +239,42 @@ func TestUserStore(t *testing.T) {
 		_, err := newTestUserStore(t, "missing").FindUserByName(ctx, "missing")
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			t.Fatalf("lookup error = %v, want record not found", err)
+		}
+	})
+}
+
+func TestCreateClassifiesDuplicateUser(t *testing.T) {
+	ctx := context.WithValue(context.Background(), requestContextKey{}, "request")
+	for _, tc := range []struct {
+		scenario string
+		want     error
+		notWant  error
+	}{
+		{"duplicate-username", identity.ErrUsernameExists, identity.ErrEmailExists},
+		{"duplicate-email", identity.ErrEmailExists, identity.ErrUsernameExists},
+		{"duplicate-both", identity.ErrEmailExists, identity.ErrUsernameExists},
+		{"duplicate", identity.ErrUserAlreadyExists, identity.ErrUsernameExists},
+	} {
+		t.Run(tc.scenario, func(t *testing.T) {
+			err := newTestUserStore(t, tc.scenario).Create(ctx, &identity.User{Username: "alice", Email: "alice@example.test"})
+			if !errors.Is(err, tc.want) || !errors.Is(err, identity.ErrUserAlreadyExists) || errors.Is(err, tc.notWant) {
+				t.Fatalf("Create error = %v, want %v and generic duplicate", err, tc.want)
+			}
+		})
+	}
+	t.Run("classification query failure", func(t *testing.T) {
+		err := newTestUserStore(t, "duplicate-query-error").Create(ctx, &identity.User{Username: "alice", Email: "alice@example.test"})
+		if !errors.Is(err, errTestDatabase) || errors.Is(err, identity.ErrUserAlreadyExists) {
+			t.Fatalf("classification failure was misreported as a user conflict: %v", err)
+		}
+	})
+	t.Run("classification cancellation retains cause", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		ctx = context.WithValue(ctx, cancelContextKey{}, cancel)
+		err := newTestUserStore(t, "duplicate-query-cancel").Create(ctx, &identity.User{Username: "alice", Email: "alice@example.test"})
+		if !errors.Is(err, context.Canceled) || !errors.Is(err, errTestDatabase) || errors.Is(err, identity.ErrUserAlreadyExists) {
+			t.Fatalf("classification cancellation lost its cause or became a user conflict: %v", err)
 		}
 	})
 }
