@@ -63,7 +63,10 @@ func (s *UserStore) classifyUserConflict(ctx context.Context, user *identity.Use
 func (s *UserStore) FindUserByName(ctx context.Context, username string) (*identity.User, error) {
 	var user identity.User
 	if err := s.db.WithContext(ctx).Where("username = ?", username).First(&user).Error; err != nil {
-		return nil, fmt.Errorf("find user by username: %w", err)
+		return nil, fmt.Errorf(
+			"find user by username: %w",
+			mapUserLookupError(err),
+		)
 	}
 	return &user, nil
 }
@@ -71,7 +74,10 @@ func (s *UserStore) FindUserByName(ctx context.Context, username string) (*ident
 func (s *UserStore) FindUserByEmail(ctx context.Context, email string) (*identity.User, error) {
 	var user identity.User
 	if err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
-		return nil, fmt.Errorf("find user by email: %w", err)
+		return nil, fmt.Errorf(
+			"find user by email: %w",
+			mapUserLookupError(err),
+		)
 	}
 	return &user, nil
 }
@@ -79,7 +85,16 @@ func (s *UserStore) FindUserByEmail(ctx context.Context, email string) (*identit
 func (s *UserStore) FindUserByID(ctx context.Context, id int64) (*identity.User, error) {
 	var user identity.User
 	if err := s.db.WithContext(ctx).Where("id = ?", id).First(&user).Error; err != nil {
-		return nil, fmt.Errorf("find user by id: %w", err)
+		return nil, fmt.Errorf(
+			"find user by userID: %w",
+			mapUserLookupError(err),
+		)
 	}
 	return &user, nil
+}
+func mapUserLookupError(err error) error {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return errors.Join(identity.ErrUserNotFound, err)
+	}
+	return err
 }

@@ -61,7 +61,7 @@ func TestNativeGitHTTP(t *testing.T) {
 			service = ReceivePack
 		}
 		// The fixture is the trusted caller. Production routes must check PAT and ACL.
-		backend.Serve(w, r, Invocation{RepositoryID: 100, Service: service, Discovery: r.Method == http.MethodGet, UserID: 1})
+		backend.Serve(w, r, Invocation{RepositoryID: "100", Service: service, Discovery: r.Method == http.MethodGet, UserID: 1})
 	}))
 	server.Config.ErrorLog = log.New(io.Discard, "", 0)
 	server.Start()
@@ -183,7 +183,7 @@ func TestHTTP2UnknownLength(t *testing.T) {
 		if r.ProtoMajor != 2 {
 			t.Error("HTTP/2 was not negotiated")
 		}
-		backend.Serve(w, r, Invocation{RepositoryID: 100, Service: UploadPack})
+		backend.Serve(w, r, Invocation{RepositoryID: "100", Service: UploadPack})
 	}))
 	server.EnableHTTP2 = true
 	server.StartTLS()

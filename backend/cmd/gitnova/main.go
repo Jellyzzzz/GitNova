@@ -17,12 +17,14 @@ import (
 	"time"
 
 	"github.com/Jellyzzzz/GitNova/backend/internal/database"
+	"github.com/Jellyzzzz/GitNova/backend/internal/gitstorage"
 	"github.com/Jellyzzzz/GitNova/backend/internal/gittransport"
 	"github.com/Jellyzzzz/GitNova/backend/internal/httpapi"
 	"github.com/Jellyzzzz/GitNova/backend/internal/identity"
 	"github.com/Jellyzzzz/GitNova/backend/internal/mailer"
 	mysqlstore "github.com/Jellyzzzz/GitNova/backend/internal/persistence/mysql"
 	redisstore "github.com/Jellyzzzz/GitNova/backend/internal/persistence/redis"
+	"github.com/Jellyzzzz/GitNova/backend/internal/repository"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -118,17 +120,57 @@ func run() error {
 			return fmt.Errorf("invalid GITNOVA_COOKIE_SECURE: %w", err)
 		}
 	}
+	repositoryStore := mysqlstore.NewRepositoryStore(db)
+
+	repositoryGit, err := gitstorage.NewLocal(repoRoot, "git")
+	if err != nil {
+		return err
+	}
+
+	repositoryService := repository.NewService(
+		repositoryStore,
+		repositoryGit,
+	)
 
 	userStore := mysqlstore.NewUserStore(db)
+
 	tokenStore := redisstore.NewRegistrationStore(rdb)
-	registerService := identity.NewRegisterService(userStore, tokenStore, mailSender)
+	registerService := identity.NewRegisterService(
+		userStore,
+		tokenStore,
+		mailSender,
+	)
+
+	sessionStore := redisstore.NewSessionStore(rdb)
+	loginService := identity.NewLoginService(
+		userStore,
+		sessionStore,
+	)
 
 	mux := http.NewServeMux()
-	mux.Handle("/api/", httpapi.NewRouter(registerService, secureCookie))
+
+	apiRouter := httpapi.NewRouter(
+		registerService,
+		secureCookie,
+	)
+
+	httpapi.MountLoginRoutes(
+		apiRouter,
+		loginService,
+		secureCookie,
+	)
+	httpapi.MountRepositoryRoutes(
+		apiRouter,
+		repositoryService,
+		loginService,
+		secureCookie,
+	)
+
+	mux.Handle("/api/", apiRouter)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("ok\n"))
 	})
-	mux.Handle("/git/100.git/", transport.ReadOnlyRepository(100))
+	mux.Handle("/git/100.git/", transport.ReadOnlyRepository("100"))
 
 	addr := os.Getenv("GITNOVA_ADDR")
 	if addr == "" {

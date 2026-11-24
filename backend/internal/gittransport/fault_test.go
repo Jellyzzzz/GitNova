@@ -51,7 +51,7 @@ func TestInvalidCGIResponses(t *testing.T) {
 func TestTrustedInvocationAndEnvironment(t *testing.T) {
 	backend, _ := scriptBackend(t, "printf 'Content-Type: text/plain\r\n\r\n'\nprintf '%s|%s|%s|%s' \"$REMOTE_USER\" \"$GIT_PROTOCOL\" \"$HTTP_AUTHORIZATION\" \"$HTTP_COOKIE\"", nil)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		backend.Serve(w, r, Invocation{RepositoryID: 100, Service: UploadPack, Discovery: true, UserID: 42})
+		backend.Serve(w, r, Invocation{RepositoryID: "100", Service: UploadPack, Discovery: true, UserID: 42})
 	}))
 	defer server.Close()
 	request, _ := http.NewRequest(http.MethodGet, server.URL+"/not-a-filesystem-path", nil)
@@ -163,7 +163,7 @@ func TestBurstAdmissionAndRecovery(t *testing.T) {
 func TestRejectAnonymousWriteAndEscapingRepository(t *testing.T) {
 	backend, repository := scriptBackend(t, "printf 'Content-Type: text/plain\r\n\r\nok'", nil)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		backend.Serve(w, r, Invocation{RepositoryID: 100, Service: ReceivePack, Discovery: true})
+		backend.Serve(w, r, Invocation{RepositoryID: "100", Service: ReceivePack, Discovery: true})
 	}))
 	response, err := server.Client().Get(server.URL + "/git/100.git/info/refs?service=git-receive-pack")
 	if err != nil {
@@ -179,7 +179,7 @@ func TestRejectAnonymousWriteAndEscapingRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	request, _ := http.NewRequest(http.MethodGet, "http://local/git/101.git/info/refs", nil)
-	_, status, err := backend.validate(request, Invocation{RepositoryID: 101, Service: UploadPack, Discovery: true})
+	_, status, err := backend.validate(request, Invocation{RepositoryID: "101", Service: UploadPack, Discovery: true})
 	if err == nil || status != 404 {
 		t.Fatal("repository symlink escape was accepted")
 	}

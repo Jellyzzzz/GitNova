@@ -58,11 +58,11 @@ func TestReadOnlyGitEndpoints(t *testing.T) {
 			called := false
 
 			h := &transportHandler{
-				repositoryID: 100,
+				repositoryID: "100",
 				backend: executorFunc(
 					func(w http.ResponseWriter, r *http.Request, invocation Invocation) {
 						called = true
-						if invocation.RepositoryID != 100 || invocation.Service != UploadPack || invocation.UserID != 0 {
+						if invocation.RepositoryID != "100" || invocation.Service != UploadPack || invocation.UserID != 0 {
 							t.Fatal("untrusted invocation")
 						}
 						w.WriteHeader(http.StatusNoContent)

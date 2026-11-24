@@ -11,17 +11,17 @@ type executor interface {
 
 type transportHandler struct {
 	backend      executor
-	repositoryID int64
+	repositoryID string
 }
 
 // ReadOnlyRepository exposes one explicitly public repository. Private reads and
 // writes must resolve credentials and ACL before calling Serve.
-func (b *Backend) ReadOnlyRepository(repositoryID int64) http.Handler {
+func (b *Backend) ReadOnlyRepository(repositoryID string) http.Handler {
 	return &transportHandler{backend: b, repositoryID: repositoryID}
 }
 
 func (h *transportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	prefix := fmt.Sprintf("/git/%d.git", h.repositoryID)
+	prefix := fmt.Sprintf("/git/%s.git", h.repositoryID)
 	discovery := r.Method == http.MethodGet &&
 		r.URL.Path == prefix+"/info/refs" && r.URL.Query().Get("service") == "git-upload-pack"
 	transfer := r.Method == http.MethodPost && r.URL.Path == prefix+"/git-upload-pack"

@@ -56,7 +56,7 @@ func scriptBackend(t *testing.T, script string, change func(*Config)) (*Backend,
 func backendServer(t *testing.T, backend *Backend) *httptest.Server {
 	t.Helper()
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		backend.Serve(w, r, Invocation{RepositoryID: 100, Service: UploadPack, Discovery: r.Method == http.MethodGet})
+		backend.Serve(w, r, Invocation{RepositoryID: "100", Service: UploadPack, Discovery: r.Method == http.MethodGet})
 	}))
 	server.Config.ErrorLog = log.New(io.Discard, "", 0)
 	server.Start()

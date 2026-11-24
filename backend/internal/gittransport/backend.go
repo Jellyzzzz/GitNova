@@ -26,7 +26,7 @@ const (
 // Invocation is a server-side decision made after authentication and repository
 // authorization. Never bind these fields directly from a client request.
 type Invocation struct {
-	RepositoryID int64
+	RepositoryID string
 	Service      Service
 	Discovery    bool
 	UserID       int64
@@ -123,6 +123,20 @@ func New(config Config) (*Backend, error) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	return &Backend{config: config, slots: make(chan struct{}, config.MaxConcurrent),
 		ctx: ctx, cancel: cancel, done: make(chan struct{})}, nil
+}
+
+// Decimal IDs are accepted only to preserve the existing 100.git test fixture.
+// Real repositories are generated as lowercase UUIDv7 by repository.Service.
+func validTransportRepositoryID(id string) bool {
+	if id == "" || len(id) > 64 {
+		return false
+	}
+	for _, ch := range id {
+		if !(ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'f' || ch == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 // Shutdown stops admission, cancels active RPCs, and waits for their I/O and
@@ -227,7 +241,7 @@ func (b *Backend) Serve(w http.ResponseWriter, r *http.Request, invocation Invoc
 }
 
 func (b *Backend) validate(r *http.Request, invocation Invocation) (string, int, error) {
-	if invocation.RepositoryID <= 0 || invocation.UserID < 0 ||
+	if !validTransportRepositoryID(invocation.RepositoryID) || invocation.UserID < 0 ||
 		(invocation.Service != UploadPack && invocation.Service != ReceivePack) {
 		return "", http.StatusBadRequest, errors.New("invalid Git invocation")
 	}
@@ -261,7 +275,7 @@ func (b *Backend) validate(r *http.Request, invocation Invocation) (string, int,
 	if len(protocol) > 1024 || strings.ContainsAny(protocol, "\r\n\x00") {
 		return "", http.StatusBadRequest, errors.New("invalid Git protocol header")
 	}
-	path := filepath.Join(b.config.RepositoryRoot, strconv.FormatInt(invocation.RepositoryID, 10)+".git")
+	path := filepath.Join(b.config.RepositoryRoot, invocation.RepositoryID+".git")
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil || resolved != path {
 		return "", http.StatusNotFound, errors.New("repository unavailable")
@@ -274,7 +288,7 @@ func (b *Backend) validate(r *http.Request, invocation Invocation) (string, int,
 }
 
 func (b *Backend) environment(r *http.Request, invocation Invocation) []string {
-	name := strconv.FormatInt(invocation.RepositoryID, 10) + ".git"
+	name := invocation.RepositoryID + ".git"
 	path, query := "/"+name+"/git-"+string(invocation.Service), ""
 	if invocation.Discovery {
 		path = "/" + name + "/info/refs"
